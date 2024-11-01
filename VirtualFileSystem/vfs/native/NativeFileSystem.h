@@ -23,8 +23,6 @@ public:
     virtual bool isDir(const std::string& dirPath) const override;
 
     virtual bool createDir(const std::string& dirPath) override;
-
-protected:
 };
 
 NS_VFS_END

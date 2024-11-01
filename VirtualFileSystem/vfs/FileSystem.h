@@ -5,10 +5,21 @@
 
 NS_VFS_BEGIN
 
+enum FileFlags: uint8_t
+{
+	// file type
+	File = 0x01,
+	Dir = 0x02,
+
+	// op permissions
+	Read = 0x08,
+	Write = 0x04,
+};
+
 struct FileInfo
 {
 	std::string filePath;
-	bool isDir;
+	uint8_t flags;
 };
 
 class FileSystem
@@ -18,6 +29,7 @@ public:
 	FileSystem(const std::string& archiveLocation, const std::string& mntpoint)
 		: m_archiveLocation(convertDirPath(archiveLocation))
 		, m_mntpoint(convertDirPath(mntpoint))
+		, m_readonly(false)
 	{
 	}
 
@@ -43,9 +55,12 @@ public:
 
 	const std::string& mntpoint() { return m_mntpoint; }
 
-	virtual bool isReadonly() const { return false; }
+	bool isReadonly() const { return m_readonly; }
+
+	void setReadonly(bool value) { m_readonly = value; }
 
 protected:
+	bool m_readonly;
 	std::string m_archiveLocation;
 	std::string m_mntpoint;
 };

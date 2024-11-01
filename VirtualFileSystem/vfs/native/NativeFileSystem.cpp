@@ -18,12 +18,21 @@ void NativeFileSystem::enumerate(const std::string& dir, const std::function<boo
 	if (!fs::exists(dir) || !fs::is_directory(dir))
 		return;
 
+	uint8_t defaultFlgs = FileFlags::Read;
+	if (!isReadonly())
+		defaultFlgs |= FileFlags::Write;
+
 	FileInfo info;
 	for (const auto& entry : fs::directory_iterator(dir))
 	{
 		auto filePath = entry.path().string().substr(m_archiveLocation.size());
 
-		info.isDir = entry.is_directory();
+		info.flags = defaultFlgs;
+		if (entry.is_directory())
+			info.flags |= FileFlags::Dir;
+		else
+			info.flags |= FileFlags::File;
+
 		info.filePath = m_mntpoint + filePath;
 		if (call(info))
 			break;
@@ -32,8 +41,8 @@ void NativeFileSystem::enumerate(const std::string& dir, const std::function<boo
 
 std::unique_ptr<FileStream> NativeFileSystem::openFileStream(const std::string& filePath, FileStream::Mode mode)
 {
-	NativeFileStream fs;
-	return fs.open(filePath, mode) ? std::make_unique<NativeFileStream>(std::move(fs)) : nullptr;
+	auto fs = std::make_unique<NativeFileStream>();
+	return fs->open(filePath, mode) ? std::move(fs) : nullptr;
 }
 
 bool NativeFileSystem::removeFile(const std::string& filePath)

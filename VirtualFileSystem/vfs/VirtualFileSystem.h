@@ -33,7 +33,7 @@ public:
 private:
 
 	std::vector<FileSystem*> m_fileSystems;
-	mutable std::mutex m_mutex;
+	std::mutex m_mutex;
 };
 
 NS_VFS_END

@@ -10,7 +10,9 @@ MemoryFileStream::MemoryFileStream()
 {}
 
 MemoryFileStream::~MemoryFileStream()
-{}
+{
+	close();
+}
 
 bool MemoryFileStream::open(std::string path, FileStream::Mode mode)
 {
@@ -19,11 +21,18 @@ bool MemoryFileStream::open(std::string path, FileStream::Mode mode)
 
 bool MemoryFileStream::open(std::shared_ptr<MemoryData> data, FileStream::Mode mode)
 {
-	if (data == nullptr)
-		return false;
+	if (mode != FileStream::Mode::READ)
+	{
+		if (data->isWriting())
+			return false;
+		
+		data->getWriteLock();
+	}
+
 	m_offset = 0;
 	m_data = data;
 	m_mode = mode;
+
 
 	if (mode == FileStream::Mode::APPEND)
 		seek(0, FileStream::SeekOrigin::END);
@@ -33,6 +42,10 @@ bool MemoryFileStream::open(std::shared_ptr<MemoryData> data, FileStream::Mode m
 
 void MemoryFileStream::close()
 {
+	if (m_data && m_mode != FileStream::Mode::READ)
+	{
+		m_data->releaseWriteLock();
+	}
 	m_offset = 0;
 	m_data = nullptr;
 }

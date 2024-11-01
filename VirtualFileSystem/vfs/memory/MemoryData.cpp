@@ -1,5 +1,16 @@
 #include "MemoryData.h"
 
+#undef LIKELY
+#undef UNLIKELY
+
+#if defined(__GNUC__) && __GNUC__ >= 4
+#    define LIKELY(x) (__builtin_expect((x), 1))
+#    define UNLIKELY(x) (__builtin_expect((x), 0))
+#else
+#    define LIKELY(x) (x)
+#    define UNLIKELY(x) (x)
+#endif
+
 NS_VFS_BEGIN
 
 MemoryData::MemoryData()
@@ -32,8 +43,19 @@ uint64_t MemoryData::read(uint8_t* data, uint64_t len, uint64_t offset)
 	if (len == 0)
 		return 0;
 
-	std::lock_guard<std::mutex> lock(m_mutex);
+	if (UNLIKELY(m_writing.load(std::memory_order_relaxed)))
+	{
+		std::lock_guard<std::mutex> lock(m_mutex);
+		return read_impl(data, len, offset);
+	}
+	else
+	{
+		return read_impl(data, len, offset);
+	}
+}
 
+uint64_t MemoryData::read_impl(uint8_t* data, uint64_t len, uint64_t offset)
+{
 	if (offset >= m_data.size())
 		return 0;
 
@@ -48,8 +70,25 @@ uint64_t MemoryData::read(uint8_t* data, uint64_t len, uint64_t offset)
 
 uint64_t MemoryData::len()
 {
-	std::lock_guard<std::mutex> lock(m_mutex);
-	return static_cast<uint64_t>(m_data.size());
+	if (UNLIKELY(m_writing.load(std::memory_order_relaxed)))
+	{
+		std::lock_guard<std::mutex> lock(m_mutex);
+		return static_cast<uint64_t>(m_data.size());
+	}
+	else
+	{
+		return static_cast<uint64_t>(m_data.size());
+	}
+}
+
+void MemoryData::getWriteLock()
+{
+	m_writing.store(true, std::memory_order_relaxed);
+}
+
+void MemoryData::releaseWriteLock()
+{
+	m_writing.store(false, std::memory_order_relaxed);
 }
 
 NS_VFS_END

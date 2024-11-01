@@ -59,6 +59,9 @@ std::unique_ptr<FileStream> VirtualFileSystem::openFileStream(const std::string&
 			auto fullFilePath = it->basePath() + filePath.substr(it->mntpoint().size());
 			if (it->isFile(fullFilePath))
 			{
+				if (mode != FileStream::Mode::READ && it->isReadonly())
+					return nullptr;
+
 				return it->openFileStream(fullFilePath, mode);
 			}
 
@@ -116,8 +119,8 @@ void VirtualFileSystem::enumerate(const std::string& dir, const std::function<bo
 			else
 			{
 				FileInfo info;
-				info.filePath = getFirstPart(mntpoint.substr(filePath.size()));
-				info.isDir = true;
+				info.filePath = filePath + getFirstPart(mntpoint.substr(filePath.size()));
+				info.flags = FileFlags::Dir | FileFlags::Read;
 				if (pathSet.count(info.filePath) == 0)
 				{
 					pathSet.insert(info.filePath);
