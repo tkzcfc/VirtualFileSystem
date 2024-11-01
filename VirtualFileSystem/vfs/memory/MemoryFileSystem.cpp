@@ -18,19 +18,44 @@ MemoryFileSystem::~MemoryFileSystem()
 
 void MemoryFileSystem::enumerate(const std::string& dir, const std::function<bool(const FileInfo&)>& call)
 {
-	std::lock_guard<std::mutex> lock(m_dirMutex);
-	if (m_dirs.count(dir) == 0)
-		return;
-
 	FileInfo info;
-	for (const auto& entry : fs::directory_iterator(dir))
 	{
-		auto filePath = entry.path().string().substr(m_archiveLocation.size());
+		std::lock_guard<std::mutex> lock(m_dirMutex);
+		if (m_dirs.count(dir) == 0)
+			return;
 
-		info.isDir = entry.is_directory();
-		info.filePath = m_mntpoint + filePath;
-		if (call(info))
-			break;
+		for (auto& it : m_dirs)
+		{
+			if (it.size() > dir.size())
+			{
+				auto p1 = it.substr(dir.size());
+				if (p1.find('/') == p1.size() - 1)
+				{
+					info.isDir = true;
+					info.filePath = m_mntpoint + p1.substr(0, p1.size() - 1);
+					if (call(info))
+						break;
+				}
+			}
+		}
+	}
+
+	{
+		std::lock_guard<std::mutex> lock(m_fileMutex);
+		for (auto& it : m_files)
+		{
+			if (it.first.starts_with(dir))
+			{
+				auto p1 = it.first.substr(dir.size());
+				if (!p1.empty() && p1.find("/") == std::string::npos)
+				{
+					info.isDir = true;
+					info.filePath = m_mntpoint + "/" + p1;
+					if (call(info))
+						break;
+				}
+			}
+		}
 	}
 }
 
@@ -48,7 +73,7 @@ std::unique_ptr<FileStream> MemoryFileSystem::openFileStream(const std::string& 
 	if (mode == FileStream::Mode::READ)
 		return nullptr;
 
-	auto dirName = getFileDir(filePath) = "/";
+	auto dirName = getFileDir(filePath) + "/";
 	if (!isDir(dirName))
 	{
 		return nullptr;

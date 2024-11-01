@@ -54,13 +54,12 @@ bool NativeFileSystem::isDir(const std::string& dirPath) const
 bool NativeFileSystem::createDir(const std::string& dirPath)
 {
 	try {
-		// 使用 create_directories 创建目录及其父目录
 		if (fs::create_directories(dirPath)) {
-			std::cout << "createDir: " << dirPath << std::endl;
+			//std::cout << "createDir: " << dirPath << std::endl;
 			return true;
 		}
 		else {
-			std::cout << "Directory already exists: " << dirPath << std::endl;
+			//std::cout << "Directory already exists: " << dirPath << std::endl;
 			return false;
 		}
 	}

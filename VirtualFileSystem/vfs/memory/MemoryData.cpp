@@ -4,7 +4,7 @@ NS_VFS_BEGIN
 
 MemoryData::MemoryData()
 {
-	m_data.reserve(4096);
+	m_data.reserve(8192);
 }
 
 MemoryData::~MemoryData()

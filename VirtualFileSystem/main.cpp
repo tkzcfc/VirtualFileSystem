@@ -108,59 +108,59 @@ void writeFile(VirtualFileSystem& virtualFileSystem, const std::string& fileName
 //}
 
 
-void nativeFileSystemTest()
+template <class T>
+void readWriteTest()
 {
 	auto data = readFileToVector("./test-data/template.zip");
 
 	VirtualFileSystem virtualFileSystem;
-	virtualFileSystem.mount(new NativeFileSystem("D:/misc/VirtualFileSystem/VirtualFileSystem/test-data/dlc1", "/root"));
-	virtualFileSystem.mount(new NativeFileSystem("D:/misc/VirtualFileSystem/VirtualFileSystem/test-data/dlc2", "/root/"));
+	virtualFileSystem.mount(new T("./test-data/dlc1", "/root"));
+
+	virtualFileSystem.createDir("/root/dir1_sub/cdef//../def/./aaa"); // /root/dir1_sub/def/aaa/
 
 	virtualFileSystem.removeFile("/root/dir1_sub/write_1.zip");
 	writeFile(virtualFileSystem, "/root/dir1_sub/write_1.zip", data);
 	readFile(virtualFileSystem, "/root/dir1_sub/write_1.zip", false);
+	assert(virtualFileSystem.removeFile("/root/dir1_sub/write_1.zip") == true);
 
-	//virtualFileSystem.enumerate("/root", [](const FileInfo& fileInfo) -> bool {
-	//	std::cout << fileInfo.filePath << "     " << fileInfo.isDir << "\n";
-	//return false;
-	//	});
+	virtualFileSystem.enumerate("/root/dir1_sub", [](const FileInfo& fileInfo) -> bool {
+		std::cout << fileInfo.filePath << "     " << fileInfo.isDir << "\n";
+		return false;
+	});
 
-	//readFile(virtualFileSystem, "/check.txt", true);
-	//readFile(virtualFileSystem, "/root/../check.txt", true);
-	//readFile(virtualFileSystem, "/root/file.txt", true);
-	//readFile(virtualFileSystem, "/root/check_png.py", false);
 }
 
-void memoryFileSystemTest()
+void mixTest()
 {
 	auto data = readFileToVector("./test-data/template.zip");
 
 	VirtualFileSystem virtualFileSystem;
+	virtualFileSystem.mount(new NativeFileSystem("./test-data/dlc1", "/root"));
 	virtualFileSystem.mount(new MemoryFileSystem("", "/root"));
-	virtualFileSystem.mount(new MemoryFileSystem("", "/root/"));
+	virtualFileSystem.mount(new MemoryFileSystem("", "/"));
+	virtualFileSystem.mount(new NativeFileSystem("./test-data/dlc2", "/root"));
 
-	auto bb1 = virtualFileSystem.createDir("/root/");
-	auto bb2 = virtualFileSystem.createDir("/root/dir1_sub/cdef//../def/./aaa"); // /root/dir1_sub/def/aaa/
+	std::vector<uint8_t> bin = { 0xee, 0x21, 0xe2 };
 
-	virtualFileSystem.removeFile("/root/dir1_sub/write_1.zip");
-	writeFile(virtualFileSystem, "/root/dir1_sub/write_1.zip", data);
-	readFile(virtualFileSystem, "/root/dir1_sub/write_1.zip", false);
-
-	//virtualFileSystem.enumerate("/root", [](const FileInfo& fileInfo) -> bool {
-	//	std::cout << fileInfo.filePath << "     " << fileInfo.isDir << "\n";
-	//return false;
-	//	});
-
+	virtualFileSystem.createDir("/mem");
+	writeFile(virtualFileSystem, "/aaaaaaaaaaaaaaaa.txt", bin);
+	writeFile(virtualFileSystem, "/bbbbbbbbbbbbbb.txt", bin);
+	writeFile(virtualFileSystem, "/ccccccccccccccc.txt", bin);
+	writeFile(virtualFileSystem, "/xzcxz/ddddddddd.txt", bin);
+	virtualFileSystem.enumerate("/", [](const FileInfo& fileInfo) -> bool {
+		std::cout << fileInfo.filePath << "     " << fileInfo.isDir << "\n";
+	return false;
+		});
 	//readFile(virtualFileSystem, "/check.txt", true);
 	//readFile(virtualFileSystem, "/root/../check.txt", true);
 	//readFile(virtualFileSystem, "/root/file.txt", true);
 	//readFile(virtualFileSystem, "/root/check_png.py", false);
 }
-
 
 int main()
 {
-	//nativeFileSystemTest();
-	memoryFileSystemTest();
+	//readWriteTest<NativeFileSystem>();
+	//readWriteTest<MemoryFileSystem>();
+	mixTest();
 	return 0;
 }
