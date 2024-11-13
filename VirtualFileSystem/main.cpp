@@ -1,4 +1,4 @@
-#define _CRT_SECURE_NO_WARNINGS
+ï»¿#define _CRT_SECURE_NO_WARNINGS
 
 #include <iostream>
 #include "vfs/VirtualFileSystem.h"
@@ -16,7 +16,7 @@ USING_NS_VFS;
 std::vector<uint8_t> readFileToVector(const std::string& filename) {
 	std::ifstream file(filename, std::ios::binary);
 	if (!file) {
-		std::cerr << "ÎÞ·¨´ò¿ªÎÄ¼þ: " << filename << std::endl;
+		std::cerr << "Unable to open file: " << filename << std::endl;
 		return {};
 	}
 
@@ -28,7 +28,7 @@ std::vector<uint8_t> readFileToVector(const std::string& filename) {
 	buffer.resize(size);
 
 	if (!file.read(reinterpret_cast<char*>(buffer.data()), size)) {
-		std::cerr << "¶ÁÈ¡ÎÄ¼þÊ§°Ü: " << filename << std::endl;
+		std::cerr << "Failed to read file: " << filename << std::endl;
 		return {};
 	}
 
@@ -107,15 +107,15 @@ bool writeFile(VirtualFileSystem& virtualFileSystem, const std::string& fileName
 
 //void simplifyPath_Test()
 //{
-//	std::cout << simplifyPath("aaa/bbb/ccc/../e/../../test.txt") << std::endl; // Êä³ö: /aaa/test.txt
-//	std::cout << simplifyPath("/aaa/bbb/ccc/../e/../////../test.txt") << std::endl; // Êä³ö: /aaa/test.txt
-//	std::cout << simplifyPath("/aaa/bbb/ccc/d/e/../../test.txt") << std::endl; // Êä³ö: /aaa/bbb/ccc/test.txt
-//	std::cout << simplifyPath("/a/b/ccccc/d/eeee/../") << std::endl;    // Êä³ö: /a/b/ccccc/d
-//	std::cout << simplifyPath("/a/b/cccc/ddddd/e/./") << std::endl;     // Êä³ö: /a/b/cccc/ddddd/e/
-//	std::cout << simplifyPath("/./") << std::endl;               // Êä³ö: /
-//	std::cout << simplifyPath("/././././././test.txt") << std::endl;               // Êä³ö: /test.txt
-//	std::cout << simplifyPath("/../") << std::endl;             // Êä³ö: (¿Õ×Ö·û´®)
-//	std::cout << simplifyPath("/a/b/c/d/e/../../../../../../") << std::endl; // Êä³ö: (¿Õ×Ö·û´®)
+//	std::cout << simplifyPath("aaa/bbb/ccc/../e/../../test.txt") << std::endl; // è¾“å‡º: /aaa/test.txt
+//	std::cout << simplifyPath("/aaa/bbb/ccc/../e/../////../test.txt") << std::endl; // è¾“å‡º: /aaa/test.txt
+//	std::cout << simplifyPath("/aaa/bbb/ccc/d/e/../../test.txt") << std::endl; // è¾“å‡º: /aaa/bbb/ccc/test.txt
+//	std::cout << simplifyPath("/a/b/ccccc/d/eeee/../") << std::endl;    // è¾“å‡º: /a/b/ccccc/d
+//	std::cout << simplifyPath("/a/b/cccc/ddddd/e/./") << std::endl;     // è¾“å‡º: /a/b/cccc/ddddd/e/
+//	std::cout << simplifyPath("/./") << std::endl;               // è¾“å‡º: /
+//	std::cout << simplifyPath("/././././././test.txt") << std::endl;               // è¾“å‡º: /test.txt
+//	std::cout << simplifyPath("/../") << std::endl;             // è¾“å‡º: (ç©ºå­—ç¬¦ä¸²)
+//	std::cout << simplifyPath("/a/b/c/d/e/../../../../../../") << std::endl; // è¾“å‡º: (ç©ºå­—ç¬¦ä¸²)
 //}
 
 
@@ -222,7 +222,7 @@ int main()
 	assert(virtualFileSystem.isDir("/root/lobby/login///") == true);
 	enumerateFiles(virtualFileSystem, "/root/lobby/");
 
-	readFile(virtualFileSystem, "/root/lobby/login/Plist.png", false);
+	readFile(virtualFileSystem, "/root/lobby/global/imgs/login.png", false);
 
 	return 0;
 }
