@@ -172,6 +172,19 @@ void readWriteTest(bool isMemoryFileSystem)
 	enumerateFiles(virtualFileSystem, "/root/dir1_sub");
 }
 
+void packTest()
+{
+	VirtualFileSystem virtualFileSystem;
+	assert(virtualFileSystem.mount(new PackFileSystem("./test-data/test.pak", "/root")) == true);
+
+	assert(virtualFileSystem.isFile("/root/packroot/packfile1.txt") == true);
+	assert(virtualFileSystem.isDir("/root/packroot/packdir1///") == true);
+	enumerateFiles(virtualFileSystem, "/root/packroot/");
+
+	readFile(virtualFileSystem, "/root/packroot/packdir1/pack_img.jpg", false);
+	readFile(virtualFileSystem, "/root/packroot/packdir1/pack_empty_file.data", false);
+}
+
 void mixTest()
 {
 	VirtualFileSystem virtualFileSystem;
@@ -180,8 +193,12 @@ void mixTest()
 	virtualFileSystem.mount(new MemoryFileSystem("", "/"));
 	virtualFileSystem.mount(new NativeFileSystem("./test-data/dlc2", "/root"));
 	virtualFileSystem.mount(new NativeFileSystem("./test-data/dlc2", "/root/vfs/vvv"));
+	virtualFileSystem.mount(new PackFileSystem("./test-data/test.pak", "/root"));
 
 	std::vector<uint8_t> bin = { 'H', 'E', 'L', 'L', 'O', '^', 'v', '^'};
+
+	assert(virtualFileSystem.isFile("/root/packroot/packfile1.txt") == true);
+	assert(virtualFileSystem.isDir("/root/packroot/packdir1///") == true);
 
 	assert(virtualFileSystem.createDir("/mem"));
 	assert(writeFile(virtualFileSystem, "/aaaaaaaaaaaaaaaa.txt", bin));
@@ -213,16 +230,8 @@ int main()
 {
 	//readWriteTest<NativeFileSystem>(false);
 	//readWriteTest<MemoryFileSystem>(true);
-	//mixTest();
-
-	VirtualFileSystem virtualFileSystem;
-	virtualFileSystem.mount(new PackFileSystem("C:\\Users\\Administrator\\Music\\test.pak", "/root"));
-
-	assert(virtualFileSystem.isFile("/root/lobby/login/Plist.png") == true);
-	assert(virtualFileSystem.isDir("/root/lobby/login///") == true);
-	enumerateFiles(virtualFileSystem, "/root/lobby/");
-
-	readFile(virtualFileSystem, "/root/lobby/global/imgs/login.png", false);
+	//packTest();
+	mixTest();
 
 	return 0;
 }
