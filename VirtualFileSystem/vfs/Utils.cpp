@@ -3,48 +3,6 @@
 
 NS_VFS_BEGIN
 
-std::string convertPathFormatToUnixStyle(const std::string& path)
-{
-	std::string ret{ path };
-	std::replace(ret.begin(), ret.end(), '\\', '/');
-	return ret;
-}
-
-void formatDirPath(std::string& path)
-{
-	if (!path.empty() && path.back() != '/')
-		path.push_back('/');
-}
-
-std::string convertDirPath(const std::string& path)
-{
-	auto outPath = convertPathFormatToUnixStyle(path);
-	formatDirPath(outPath);
-	return outPath;
-}
-
-std::string getFirstPart(const std::string& path) 
-{
-	size_t pos = path.find('/');
-	if (pos != std::string::npos) 
-	{
-		return path.substr(0, pos);
-
-	}
-	return path;
-}
-
-std::string getFileDir(const std::string& path)
-{
-    size_t pos = path.rfind('/');
-    if (pos != std::string::npos)
-    {
-        return path.substr(0, pos);
-
-    }
-    return path;
-}
-
 std::vector<std::string> splitString(const std::string& s, const std::string& delimiter)
 {
     size_t pos_start = 0, pos_end, delim_len = delimiter.length();

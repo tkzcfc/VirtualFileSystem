@@ -7,14 +7,21 @@ namespace fs = std::filesystem;
 NS_VFS_BEGIN
 
 NativeFileSystem::NativeFileSystem(const std::string& archiveLocation, const std::string& mntpoint)
-	: FileSystem(archiveLocation, mntpoint)
+	: FileSystem(convertDirPath(archiveLocation), mntpoint)
 {}
 
 NativeFileSystem::~NativeFileSystem()
 {}
 
-void NativeFileSystem::enumerate(const std::string& dir, const std::function<bool(const FileInfo&)>& call)
+bool NativeFileSystem::init()
+{ 
+	return !m_archiveLocation.empty() && !m_mntpoint.empty(); 
+}
+
+void NativeFileSystem::enumerate(const std::string& path, const std::function<bool(const FileInfo&)>& call)
 {
+	std::string dir = m_archiveLocation + path;
+
 	if (!fs::exists(dir) || !fs::is_directory(dir))
 		return;
 
@@ -42,26 +49,29 @@ void NativeFileSystem::enumerate(const std::string& dir, const std::function<boo
 std::unique_ptr<FileStream> NativeFileSystem::openFileStream(const std::string& filePath, FileStream::Mode mode)
 {
 	auto fs = std::make_unique<NativeFileStream>();
-	return fs->open(filePath, mode) ? std::move(fs) : nullptr;
+	return fs->open(m_archiveLocation + filePath, mode) ? std::move(fs) : nullptr;
 }
 
 bool NativeFileSystem::removeFile(const std::string& filePath)
 {
-	return fs::remove(filePath);
+	return fs::remove(m_archiveLocation + filePath);
 }
 
-bool NativeFileSystem::isFile(const std::string& filePath) const
+bool NativeFileSystem::isFile(const std::string& path) const
 {
+	std::string filePath = m_archiveLocation + path;
 	return fs::exists(filePath) && fs::is_regular_file(filePath);
 }
 
-bool NativeFileSystem::isDir(const std::string& dirPath) const
+bool NativeFileSystem::isDir(const std::string& dir) const
 {
+	std::string dirPath = m_archiveLocation + dir;
 	return fs::exists(dirPath) && fs::is_directory(dirPath);
 }
 
-bool NativeFileSystem::createDir(const std::string& dirPath)
+bool NativeFileSystem::createDir(const std::string& dir)
 {
+	std::string dirPath = m_archiveLocation + dir;
 	try {
 		if (fs::create_directories(dirPath)) {
 			//std::cout << "createDir: " << dirPath << std::endl;

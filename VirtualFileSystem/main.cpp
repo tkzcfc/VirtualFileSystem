@@ -4,6 +4,7 @@
 #include "vfs/VirtualFileSystem.h"
 #include "vfs/native/NativeFileSystem.h"
 #include "vfs/memory/MemoryFileSystem.h"
+#include "vfs/pack/PackFileSystem.h"
 
 #include "md5.h"
 #include <assert.h>
@@ -35,8 +36,9 @@ std::vector<uint8_t> readFileToVector(const std::string& filename) {
 }
 
 
-void readFile(VirtualFileSystem& virtualFileSystem, const std::string& fileName, bool printContent)
+bool readFile(VirtualFileSystem& virtualFileSystem, const std::string& fileName, bool printContent)
 {
+	bool ok = false;
 	printf("\n\n>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> %s <<<<<<<<<<<<<<<<<<<<<<<<<<< read begin\n", fileName.c_str());
 	auto stream = virtualFileSystem.openFileStream(fileName, FileStream::Mode::READ);
 	if (stream)
@@ -62,17 +64,22 @@ void readFile(VirtualFileSystem& virtualFileSystem, const std::string& fileName,
 		printf("file md5: %s\n", md5(str).c_str());
 		if(printContent)
 			printf("%s\n", str.c_str());
+
+		ok = true;
 	}
 	else
 	{
 		printf("no file: %s\n", fileName.c_str());
 	}
 	printf(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>> %s <<<<<<<<<<<<<<<<<<<<<<<<<<< read end\n\n", fileName.c_str());
+
+	return ok;
 }
 
 
-void writeFile(VirtualFileSystem& virtualFileSystem, const std::string& fileName, std::vector<uint8_t>& data)
+bool writeFile(VirtualFileSystem& virtualFileSystem, const std::string& fileName, std::vector<uint8_t>& data)
 {
+	bool ok = false;
 	printf("\n\n>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> %s <<<<<<<<<<<<<<<<<<<<<<<<<<< write begin\n", fileName.c_str());
 	auto stream = virtualFileSystem.openFileStream(fileName, FileStream::Mode::WRITE);
 	if (stream)
@@ -88,12 +95,14 @@ void writeFile(VirtualFileSystem& virtualFileSystem, const std::string& fileName
 
 			printf("stream size: %llu, stream tell: %llu\n", stream->size(), stream->tell());
 		}
+		ok = true;
 	}
 	else
 	{
 		printf("no file: %s\n", fileName.c_str());
 	}
 	printf(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>> %s <<<<<<<<<<<<<<<<<<<<<<<<<<< write end\n\n", fileName.c_str());
+	return ok;
 }
 
 //void simplifyPath_Test()
@@ -151,11 +160,13 @@ void readWriteTest(bool isMemoryFileSystem)
 	{
 		auto stream1 = virtualFileSystem.openFileStream("/root/dir1_sub/write_1.zip", FileStream::Mode::WRITE);
 		auto stream2 = virtualFileSystem.openFileStream("/root/dir1_sub/write_1.zip", FileStream::Mode::WRITE);
+		auto stream3 = virtualFileSystem.openFileStream("/root/dir1_sub/write_1.zip", FileStream::Mode::READ);
 		assert(stream1 != nullptr);
-		assert(stream2 == nullptr);
-		stream1->close();
-		auto stream3 = virtualFileSystem.openFileStream("/root/dir1_sub/write_1.zip", FileStream::Mode::WRITE);
+		assert(stream2 != nullptr);
 		assert(stream3 != nullptr);
+		stream1->close();
+		auto stream4 = virtualFileSystem.openFileStream("/root/dir1_sub/write_1.zip", FileStream::Mode::WRITE);
+		assert(stream4 != nullptr);
 	}
 
 	enumerateFiles(virtualFileSystem, "/root/dir1_sub");
@@ -163,8 +174,6 @@ void readWriteTest(bool isMemoryFileSystem)
 
 void mixTest()
 {
-	auto data = readFileToVector("./test-data/template.zip");
-
 	VirtualFileSystem virtualFileSystem;
 	virtualFileSystem.mount(new NativeFileSystem("./test-data/dlc1", "/root"));
 	virtualFileSystem.mount(new MemoryFileSystem("", "/root"));
@@ -174,36 +183,46 @@ void mixTest()
 
 	std::vector<uint8_t> bin = { 'H', 'E', 'L', 'L', 'O', '^', 'v', '^'};
 
-	virtualFileSystem.createDir("/mem");
-	writeFile(virtualFileSystem, "/aaaaaaaaaaaaaaaa.txt", bin);
-	writeFile(virtualFileSystem, "/bbbbbbbbbbbbbb.txt", bin);
-	writeFile(virtualFileSystem, "/ccccccccccccccc.txt", bin);
-	writeFile(virtualFileSystem, "/xzcxz/ddddddddd.txt", bin);
+	assert(virtualFileSystem.createDir("/mem"));
+	assert(writeFile(virtualFileSystem, "/aaaaaaaaaaaaaaaa.txt", bin));
+	assert(writeFile(virtualFileSystem, "/bbbbbbbbbbbbbb.txt", bin));
+	assert(writeFile(virtualFileSystem, "/ccccccccccccccc.txt", bin));
+	assert(writeFile(virtualFileSystem, "/xzcxz/ddddddddd.txt", bin) == false);
 
 	enumerateFiles(virtualFileSystem, "/");
 	enumerateFiles(virtualFileSystem, "/root/vfs");
-	writeFile(virtualFileSystem, "/root/vfs/ddddddddd.txt", bin);
+	assert(writeFile(virtualFileSystem, "/root/vfs/ddddddddd.txt", bin) == false);
 	enumerateFiles(virtualFileSystem, "/root/vfs/vvv");
 
 
 	virtualFileSystem.createDir("/root/mem/");
-	writeFile(virtualFileSystem, "/root/mem/aaaaaaaaaaaaaaaa.txt", bin);
-	writeFile(virtualFileSystem, "/root/mem_data.txt", bin);
+	assert(writeFile(virtualFileSystem, "/root/mem/aaaaaaaaaaaaaaaa.txt", bin));
+	assert(writeFile(virtualFileSystem, "/root/mem_data.txt", bin));
 
 	enumerateFiles(virtualFileSystem, "/root/");
 
-	readFile(virtualFileSystem, "/check.txt", true);
-	readFile(virtualFileSystem, "/root/../check.txt", true);
-	readFile(virtualFileSystem, "/root/file.txt", true);
-	readFile(virtualFileSystem, "/root/mem/aaaaaaaaaaaaaaaa.txt", true);
-	readFile(virtualFileSystem, "/root/mem_data.txt", true);
-	readFile(virtualFileSystem, "/root/check_png.py", false);
+	assert(readFile(virtualFileSystem, "/check.txt", true) == false);
+	assert(readFile(virtualFileSystem, "/root/../check.txt", true) == false);
+	assert(readFile(virtualFileSystem, "/root/file.txt", true) == true);
+	assert(readFile(virtualFileSystem, "/root/mem/aaaaaaaaaaaaaaaa.txt", true) == true);
+	assert(readFile(virtualFileSystem, "/root/mem_data.txt", true) == true);
+	assert(readFile(virtualFileSystem, "/root/check_png.py", false) == true);
 }
 
 int main()
 {
-	readWriteTest<NativeFileSystem>(false);
+	//readWriteTest<NativeFileSystem>(false);
 	//readWriteTest<MemoryFileSystem>(true);
 	//mixTest();
+
+	VirtualFileSystem virtualFileSystem;
+	virtualFileSystem.mount(new PackFileSystem("C:\\Users\\Administrator\\Music\\test.pak", "/root"));
+
+	assert(virtualFileSystem.isFile("/root/lobby/login/Plist.png") == true);
+	assert(virtualFileSystem.isDir("/root/lobby/login///") == true);
+	enumerateFiles(virtualFileSystem, "/root/lobby/");
+
+	readFile(virtualFileSystem, "/root/lobby/login/Plist.png", false);
+
 	return 0;
 }

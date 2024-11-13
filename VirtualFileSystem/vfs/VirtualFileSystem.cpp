@@ -21,10 +21,18 @@ VirtualFileSystem::~VirtualFileSystem()
 	m_fileSystems.clear();
 }
 
-void VirtualFileSystem::mount(FileSystem* fs)
+bool VirtualFileSystem::mount(FileSystem* fs)
 {
 	LOCL_FILE_SYSTEMS_LIST
-	m_fileSystems.push_back(fs);
+	if (fs->init())
+	{
+		m_fileSystems.push_back(fs);
+		return true;
+	}
+	else
+	{
+		delete fs;
+	}
 }
 
 void VirtualFileSystem::unmount(const std::string& archiveLocation)
@@ -56,7 +64,7 @@ std::unique_ptr<FileStream> VirtualFileSystem::openFileStream(const std::string&
 	{
 		if (filePath.starts_with(it->mntpoint()))
 		{
-			auto fullFilePath = it->basePath() + filePath.substr(it->mntpoint().size());
+			auto fullFilePath = filePath.substr(it->mntpoint().size());
 			if (it->isFile(fullFilePath))
 			{
 				if (mode != FileStream::Mode::READ && it->isReadonly())
@@ -77,7 +85,7 @@ std::unique_ptr<FileStream> VirtualFileSystem::openFileStream(const std::string&
 
 	for (auto it : fileSystems)
 	{
-		auto fullFilePath = it->basePath() + filePath.substr(it->mntpoint().size());
+		auto fullFilePath = filePath.substr(it->mntpoint().size());
 		auto pFs = it->openFileStream(fullFilePath, mode);
 		if (pFs)
 		{
@@ -103,7 +111,7 @@ void VirtualFileSystem::enumerate(const std::string& dir, const std::function<bo
 		{
 			if (mntpoint == filePath)
 			{
-				auto fullFilePath = it->basePath() + mntpoint.substr(filePath.size());
+				auto fullFilePath = mntpoint.substr(filePath.size());
 				it->enumerate(fullFilePath, [&call, &pathSet](const FileInfo& info) -> bool {
 					if (pathSet.count(info.filePath) == 0)
 					{
@@ -131,7 +139,7 @@ void VirtualFileSystem::enumerate(const std::string& dir, const std::function<bo
 		}
 		else if (filePath.starts_with(mntpoint))
 		{
-			auto fullFilePath = it->basePath() + filePath.substr(mntpoint.size());
+			auto fullFilePath = filePath.substr(mntpoint.size());
 			it->enumerate(fullFilePath, [&call, &pathSet](const FileInfo& info) -> bool {
 				if (pathSet.count(info.filePath) == 0)
 				{
@@ -159,7 +167,7 @@ bool VirtualFileSystem::removeFile(const std::string& path)
 	{
 		if (filePath.starts_with(it->mntpoint()))
 		{
-			auto fullFilePath = it->basePath() + filePath.substr(it->mntpoint().size());
+			auto fullFilePath = filePath.substr(it->mntpoint().size());
 			if (it->isFile(fullFilePath))
 			{
 				return it->removeFile(fullFilePath);
@@ -181,8 +189,7 @@ bool VirtualFileSystem::isFile(const std::string& path) const
 	{
 		if (filePath.starts_with(it->mntpoint()))
 		{
-			auto fullFilePath = it->basePath() + filePath.substr(it->mntpoint().size());
-			if (it->isFile(fullFilePath))
+			if (it->isFile(filePath.substr(it->mntpoint().size())))
 			{
 				return true;
 			}
@@ -205,8 +212,7 @@ bool VirtualFileSystem::isDir(const std::string& dir) const
 		{
 			if (mntpoint == filePath)
 			{
-				auto fullFilePath = it->basePath() + mntpoint.substr(filePath.size());
-				if (it->isDir(fullFilePath))
+				if (it->isDir(mntpoint.substr(filePath.size())))
 					return true;
 			}
 			else
@@ -216,8 +222,7 @@ bool VirtualFileSystem::isDir(const std::string& dir) const
 		}
 		else if (filePath.starts_with(mntpoint))
 		{
-			auto fullFilePath = it->basePath() + filePath.substr(mntpoint.size());
-			if (it->isDir(fullFilePath))
+			if (it->isDir(filePath.substr(mntpoint.size())))
 				return true;
 		}
 	}
@@ -238,13 +243,11 @@ bool VirtualFileSystem::createDir(const std::string& dir)
 
 			if (mntpoint.starts_with(filePath))
 			{
-				auto fullFilePath = it->basePath() + mntpoint.substr(filePath.size());
-				return it->createDir(fullFilePath);
+				return it->createDir(mntpoint.substr(filePath.size()));
 			}
 			else if (filePath.starts_with(mntpoint))
 			{
-				auto fullFilePath = it->basePath() + filePath.substr(mntpoint.size());
-				return it->createDir(fullFilePath);
+				return it->createDir(filePath.substr(mntpoint.size()));
 			}
 		}
 	}

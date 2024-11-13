@@ -8,7 +8,7 @@ namespace fs = std::filesystem;
 NS_VFS_BEGIN
 
 MemoryFileSystem::MemoryFileSystem(const std::string& archiveLocation, const std::string& mntpoint)
-	: FileSystem("/", mntpoint)
+	: FileSystem(archiveLocation, mntpoint)
 {
 	m_dirs.insert("/");
 }
@@ -16,8 +16,15 @@ MemoryFileSystem::MemoryFileSystem(const std::string& archiveLocation, const std
 MemoryFileSystem::~MemoryFileSystem()
 {}
 
-void MemoryFileSystem::enumerate(const std::string& dir, const std::function<bool(const FileInfo&)>& call)
+bool MemoryFileSystem::init()
 {
+	return true;
+}
+
+void MemoryFileSystem::enumerate(const std::string& path, const std::function<bool(const FileInfo&)>& call)
+{
+	std::string dir = "/" + path;
+
 	uint8_t defaultFlgs = FileFlags::Read;
 	if (!isReadonly())
 		defaultFlgs |= FileFlags::Write;
@@ -63,8 +70,10 @@ void MemoryFileSystem::enumerate(const std::string& dir, const std::function<boo
 	}
 }
 
-std::unique_ptr<FileStream> MemoryFileSystem::openFileStream(const std::string& filePath, FileStream::Mode mode)
-{ 
+std::unique_ptr<FileStream> MemoryFileSystem::openFileStream(const std::string& path, FileStream::Mode mode)
+{
+	std::string filePath = "/" + path;
+
 	std::lock_guard<std::mutex> lock(m_fileMutex);
 
 	auto it = m_files.find(filePath);
@@ -77,7 +86,11 @@ std::unique_ptr<FileStream> MemoryFileSystem::openFileStream(const std::string& 
 	if (mode == FileStream::Mode::READ)
 		return nullptr;
 
-	auto dirName = getFileDir(filePath) + "/";
+	auto dirName = getFileDir(path);
+	if (!dirName.empty())
+	{
+		dirName.push_back('/');
+	}
 	if (!isDir(dirName))
 	{
 		return nullptr;
@@ -90,9 +103,11 @@ std::unique_ptr<FileStream> MemoryFileSystem::openFileStream(const std::string& 
 	return fs->open(data, mode) ? std::move(fs) : nullptr;
 }
 
-bool MemoryFileSystem::removeFile(const std::string& filePath)
+bool MemoryFileSystem::removeFile(const std::string& path)
 {
+	std::string filePath = "/" + path;
 	std::lock_guard<std::mutex> lock(m_fileMutex);
+
 	auto it = m_files.find(filePath);
 	if (it == m_files.end())
 		return false;
@@ -107,20 +122,23 @@ bool MemoryFileSystem::removeFile(const std::string& filePath)
 	return false;
 }
 
-bool MemoryFileSystem::isFile(const std::string& filePath) const
+bool MemoryFileSystem::isFile(const std::string& path) const
 {
+	std::string filePath = "/" + path;
 	std::lock_guard<std::mutex> lock(m_fileMutex);
 	return m_files.find(filePath) != m_files.end();
 }
 
-bool MemoryFileSystem::isDir(const std::string& dirPath) const
+bool MemoryFileSystem::isDir(const std::string& dir) const
 {
+	std::string dirPath = "/" + dir;
 	std::lock_guard<std::mutex> lock(m_dirMutex);
 	return m_dirs.count(dirPath) > 0;
 }
 
-bool MemoryFileSystem::createDir(const std::string& dirPath)
+bool MemoryFileSystem::createDir(const std::string& dir)
 {
+	std::string dirPath = "/" + dir;
 	std::lock_guard<std::mutex> lock(m_dirMutex);
 
 	if (m_dirs.count(dirPath) > 0)

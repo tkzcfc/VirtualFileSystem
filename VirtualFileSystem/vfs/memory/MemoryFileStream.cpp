@@ -2,6 +2,9 @@
 
 #include "MemoryFileStream.h"
 
+// Allowing the same file to be opened by multiple writable streams
+#define ALLOW_MULTIPLE_WRITES 1
+
 NS_VFS_BEGIN
 
 MemoryFileStream::MemoryFileStream()
@@ -23,10 +26,12 @@ bool MemoryFileStream::open(std::shared_ptr<MemoryData> data, FileStream::Mode m
 {
 	if (mode != FileStream::Mode::READ)
 	{
-		if (data->isWriting())
+#if ALLOW_MULTIPLE_WRITES
+#else
+		if (data->wirteNum() > 0)
 			return false;
-		
-		data->getWriteLock();
+#endif
+		data->acquireWriteLock();
 	}
 
 	m_offset = 0;
@@ -55,13 +60,14 @@ uint64_t MemoryFileStream::seek(uint64_t offset, SeekOrigin origin)
 	if (m_data == nullptr)
 		return 0;
 
-	auto dataLen = m_data->len();
 	if (origin == SeekOrigin::CUR)
 	{
 		m_offset += offset;
 	}
 	else if (origin == SeekOrigin::END)
 	{
+		auto dataLen = m_data->len();
+
 		if (dataLen < offset)
 			return 0;
 

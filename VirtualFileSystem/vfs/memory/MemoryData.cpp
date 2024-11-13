@@ -1,4 +1,5 @@
 #include "MemoryData.h"
+#include <assert.h>
 
 #undef LIKELY
 #undef UNLIKELY
@@ -16,6 +17,7 @@ NS_VFS_BEGIN
 MemoryData::MemoryData()
 {
 	m_data.reserve(8192);
+	m_wirteNum.store(0, std::memory_order_relaxed);
 }
 
 MemoryData::~MemoryData()
@@ -43,7 +45,7 @@ uint64_t MemoryData::read(uint8_t* data, uint64_t len, uint64_t offset)
 	if (len == 0)
 		return 0;
 
-	if (UNLIKELY(m_writing.load(std::memory_order_relaxed)))
+	if (UNLIKELY(m_wirteNum.load(std::memory_order_relaxed) > 0))
 	{
 		std::lock_guard<std::mutex> lock(m_mutex);
 		return read_impl(data, len, offset);
@@ -70,7 +72,7 @@ uint64_t MemoryData::read_impl(uint8_t* data, uint64_t len, uint64_t offset)
 
 uint64_t MemoryData::len()
 {
-	if (UNLIKELY(m_writing.load(std::memory_order_relaxed)))
+	if (UNLIKELY(m_wirteNum.load(std::memory_order_relaxed) > 0))
 	{
 		std::lock_guard<std::mutex> lock(m_mutex);
 		return static_cast<uint64_t>(m_data.size());
@@ -81,14 +83,15 @@ uint64_t MemoryData::len()
 	}
 }
 
-void MemoryData::getWriteLock()
+void MemoryData::acquireWriteLock()
 {
-	m_writing.store(true, std::memory_order_relaxed);
+	m_wirteNum.store(wirteNum() + 1, std::memory_order_relaxed);
 }
 
 void MemoryData::releaseWriteLock()
 {
-	m_writing.store(false, std::memory_order_relaxed);
+	m_wirteNum.store(wirteNum() - 1, std::memory_order_relaxed);
+	assert(wirteNum() >= 0);
 }
 
 NS_VFS_END

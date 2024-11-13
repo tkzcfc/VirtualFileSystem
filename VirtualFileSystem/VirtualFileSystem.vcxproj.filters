@@ -22,6 +22,9 @@
     <Filter Include="vfs\memory">
       <UniqueIdentifier>{b7e21462-59f6-40c5-9237-e6f6828f42be}</UniqueIdentifier>
     </Filter>
+    <Filter Include="vfs\pack">
+      <UniqueIdentifier>{616f762a-8bc2-430a-bdbb-ed7b7715553a}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
@@ -50,6 +53,15 @@
     </ClCompile>
     <ClCompile Include="vfs\memory\MemoryData.cpp">
       <Filter>vfs\memory</Filter>
+    </ClCompile>
+    <ClCompile Include="vfs\pack\PackFileSystem.cpp">
+      <Filter>vfs\pack</Filter>
+    </ClCompile>
+    <ClCompile Include="vfs\pack\PackUtils.cpp">
+      <Filter>vfs\pack</Filter>
+    </ClCompile>
+    <ClCompile Include="vfs\pack\PackFileStream.cpp">
+      <Filter>vfs\pack</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -86,5 +98,19 @@
     <ClInclude Include="vfs\memory\MemoryData.h">
       <Filter>vfs\memory</Filter>
     </ClInclude>
+    <ClInclude Include="vfs\pack\PackFileSystem.h">
+      <Filter>vfs\pack</Filter>
+    </ClInclude>
+    <ClInclude Include="vfs\pack\PackUtils.h">
+      <Filter>vfs\pack</Filter>
+    </ClInclude>
+    <ClInclude Include="vfs\pack\PackFileStream.h">
+      <Filter>vfs\pack</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="vfs\Utils.inl">
+      <Filter>vfs</Filter>
+    </None>
   </ItemGroup>
 </Project>

@@ -15,6 +15,8 @@ public:
 
     virtual ~MemoryFileSystem();
 
+    virtual bool init() override;
+
     virtual void enumerate(const std::string& dir, const std::function<bool(const FileInfo&)>& call) override;
 
     virtual std::unique_ptr<FileStream> openFileStream(const std::string& filePath, FileStream::Mode mode) override;

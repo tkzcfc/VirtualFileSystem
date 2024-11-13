@@ -20,11 +20,11 @@ public:
 
     uint64_t len();
 
-    void getWriteLock();
+    void acquireWriteLock();
 
     void releaseWriteLock();
 
-    bool isWriting() { return m_writing.load(std::memory_order_relaxed); }
+    int wirteNum() { return m_wirteNum.load(std::memory_order_relaxed); }
 
 private:
 
@@ -33,7 +33,7 @@ private:
 protected:
     std::mutex m_mutex;
     std::vector<uint8_t> m_data;   
-    std::atomic<bool> m_writing;
+    std::atomic<int> m_wirteNum;
 };
 
 NS_VFS_END

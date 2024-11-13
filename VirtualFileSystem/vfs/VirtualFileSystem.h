@@ -14,7 +14,7 @@ public:
 
 	~VirtualFileSystem();
 
-	void mount(FileSystem* fs);
+	bool mount(FileSystem* fs);
 
 	void unmount(const std::string& archiveLocation);
 

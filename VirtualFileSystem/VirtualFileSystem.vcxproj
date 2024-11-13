@@ -136,6 +136,9 @@
     <ClCompile Include="vfs\memory\MemoryFileSystem.cpp" />
     <ClCompile Include="vfs\native\NativeFileStream.cpp" />
     <ClCompile Include="vfs\native\NativeFileSystem.cpp" />
+    <ClCompile Include="vfs\pack\PackFileStream.cpp" />
+    <ClCompile Include="vfs\pack\PackFileSystem.cpp" />
+    <ClCompile Include="vfs\pack\PackUtils.cpp" />
     <ClCompile Include="vfs\Utils.cpp" />
     <ClCompile Include="vfs\VirtualFileSystem.cpp" />
   </ItemGroup>
@@ -149,8 +152,14 @@
     <ClInclude Include="vfs\memory\MemoryFileSystem.h" />
     <ClInclude Include="vfs\native\NativeFileStream.h" />
     <ClInclude Include="vfs\native\NativeFileSystem.h" />
+    <ClInclude Include="vfs\pack\PackFileStream.h" />
+    <ClInclude Include="vfs\pack\PackFileSystem.h" />
+    <ClInclude Include="vfs\pack\PackUtils.h" />
     <ClInclude Include="vfs\Utils.h" />
     <ClInclude Include="vfs\VirtualFileSystem.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="vfs\Utils.inl" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

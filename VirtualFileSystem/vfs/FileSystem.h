@@ -27,7 +27,7 @@ class FileSystem
 public:
 
 	FileSystem(const std::string& archiveLocation, const std::string& mntpoint)
-		: m_archiveLocation(convertDirPath(archiveLocation))
+		: m_archiveLocation(archiveLocation)
 		, m_mntpoint(convertDirPath(mntpoint))
 		, m_readonly(false)
 	{
@@ -47,11 +47,9 @@ public:
 
 	virtual bool createDir(const std::string& dirPath) = 0;
 
-	virtual bool init() { return !m_archiveLocation.empty() && !m_mntpoint.empty(); }
+	virtual bool init() = 0;
 
 	const std::string& archiveLocation() { return m_archiveLocation; }
-
-	const std::string& basePath() { return m_archiveLocation; }
 
 	const std::string& mntpoint() { return m_mntpoint; }
 
