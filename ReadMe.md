@@ -4,5 +4,9 @@
 
 #### 2. 支持挂载内存
 
+[3.支持挂载pack文件]: https://github.com/tkzcfc/paktool
+
+
+
 #### 3.[支持挂载pack文件
 
