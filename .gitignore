@@ -4,3 +4,4 @@ VirtualFileSystem/x64/
 x64/
 VirtualFileSystem/test-data/dlc1/mem_data.txt
 VirtualFileSystem/test-data/dlc1/mem/aaaaaaaaaaaaaaaa.txt
+build/
