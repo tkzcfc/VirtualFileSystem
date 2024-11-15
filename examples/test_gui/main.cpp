@@ -20,6 +20,8 @@ VirtualFileSystem virtualFileSystem;
 
 void mountListWindow()
 {
+    ImGui::SetNextWindowPos(ImVec2(100, 100), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(400, 400), ImGuiCond_FirstUseEver);
     ImGui::Begin("mount list");
 
     static char pathBuf[1024] = { 0 };
@@ -133,6 +135,8 @@ bool readFile(VirtualFileSystem& virtualFileSystem, const std::string& fileName,
 
 void fileListWindow()
 {
+    ImGui::SetNextWindowPos(ImVec2(600, 100), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(400, 400), ImGuiCond_FirstUseEver);
     ImGui::Begin("file list");
 
     static std::string curDirPath = "/";
@@ -222,25 +226,6 @@ void fileListWindow()
                     return false;
                 });
 
-                //for (int row = 0; row < 20; row++)
-                //{
-                //    ImGui::TableNextRow();
-                //    for (int column = 0; column < 7; column++)
-                //    {
-                //        // Both TableNextColumn() and TableSetColumnIndex() return true when a column is visible or performing width measurement.
-                //        // Because here we know that:
-                //        // - A) all our columns are contributing the same to row height
-                //        // - B) column 0 is always visible,
-                //        // We only always submit this one column and can skip others.
-                //        // More advanced per-column clipping behaviors may benefit from polling the status flags via TableGetColumnFlags().
-                //        if (!ImGui::TableSetColumnIndex(column) && column > 0)
-                //            continue;
-                //        if (column == 0)
-                //            ImGui::Text("Line %d", row);
-                //        else
-                //            ImGui::Text("Hello world %d,%d", column, row);
-                //    }
-                //}
                 ImGui::EndTable();
             }
         }
@@ -259,7 +244,7 @@ void imguiDraw()
     mountListWindow();
     fileListWindow();
 
-    ImGui::ShowDemoWindow();
+    //ImGui::ShowDemoWindow();
 }
 
 int main()
