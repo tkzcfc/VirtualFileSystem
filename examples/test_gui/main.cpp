@@ -174,6 +174,55 @@ void fileListWindow()
             }
         }
 
+        if (ImGui::BeginPopupContextItem("new_popup"))
+        {
+            static char buf[1024] = { 0 };
+            ImGui::InputText("name", buf, sizeof(buf));
+
+            if (ImGui::Button("new file"))
+            {
+                auto fileName = curDirPath + "/" + buf;
+                if (virtualFileSystem.isFile(fileName))
+                {
+                    printf("the file %s already exists\n", fileName.c_str());
+                }
+                else
+                {
+                    auto fs = virtualFileSystem.openFileStream(fileName, FileStream::Mode::WRITE);
+                    if (fs)
+                    {
+                        std::string text = "My path is: " + fileName;
+                        fs->write(text.data(), text.length());
+                        printf("create file(%s) success\n", fileName.c_str());
+                    }
+                    else
+                    {
+                        printf("create file(%s) failed\n", fileName.c_str());
+                    }
+                }
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("new dir"))
+            {
+                auto dirName = curDirPath + "/" + buf;
+                if (virtualFileSystem.isDir(dirName))
+                {
+                    printf("the dir %s already exists\n", dirName.c_str());
+                }
+                else
+                {
+                    printf("create dir(%s) %s\n", dirName.c_str(), virtualFileSystem.createDir(dirName) ? "success" : "failed");
+                }
+            }
+
+            ImGui::EndPopup();
+        }
+
+        ImGui::Separator();
+        if (ImGui::Button("new"))
+        {
+            ImGui::OpenPopup("new_popup");
+        }
         ImGui::Separator();
 
         if (ImGui::BeginChild("file list", ImVec2(0, 0), true))
