@@ -24,20 +24,23 @@
 	assert(virtualFileSystem.isDir("/root/packroot/packdir1///") == true);
 
 	assert(virtualFileSystem.createDir("/mem"));
-	assert(writeFile(virtualFileSystem, "/aaaaaaaaaaaaaaaa.txt", bin));
-	assert(writeFile(virtualFileSystem, "/bbbbbbbbbbbbbb.txt", bin));
-	assert(writeFile(virtualFileSystem, "/ccccccccccccccc.txt", bin));
+	assert(writeFile(virtualFileSystem, "/aaaaaaaaaaaaaaaa.txt", bin) == true);
+	assert(writeFile(virtualFileSystem, "/mem/bbbbbbbbbbbbbb.txt", bin) == true);
 	assert(writeFile(virtualFileSystem, "/xzcxz/ddddddddd.txt", bin) == false);
 
 	enumerateFiles(virtualFileSystem, "/");
 	enumerateFiles(virtualFileSystem, "/root/vfs");
-	assert(writeFile(virtualFileSystem, "/root/vfs/ddddddddd.txt", bin) == false);
+	assert(writeFile(virtualFileSystem, "/root/vfs/vvv/file.txt", bin) == true);
+	assert(readFile(virtualFileSystem, "/root/vfs/vvv/../check.txt", false) == false);
 	enumerateFiles(virtualFileSystem, "/root/vfs/vvv");
 
 
 	virtualFileSystem.createDir("/root/mem/");
-	assert(writeFile(virtualFileSystem, "/root/mem/aaaaaaaaaaaaaaaa.txt", bin));
-	assert(writeFile(virtualFileSystem, "/root/mem_data.txt", bin));
+	assert(writeFile(virtualFileSystem, "/root/mem/aaaaaaaaaaaaaaaa.txt", bin) == true);
+	assert(writeFile(virtualFileSystem, "/root/file_in_dict1.txt", bin) == true);
+	assert(readFile(virtualFileSystem, "/root/file_in_dict1.txt", true) == true);
+	assert(virtualFileSystem.removeFile("/root/file_in_dict1.txt") == true);
+	assert(virtualFileSystem.isFile("/root/file_in_dict1.txt") == false);
 
 	enumerateFiles(virtualFileSystem, "/root/");
 
@@ -45,7 +48,6 @@
 	assert(readFile(virtualFileSystem, "/root/../check.txt", true) == false);
 	assert(readFile(virtualFileSystem, "/root/file.txt", true) == true);
 	assert(readFile(virtualFileSystem, "/root/mem/aaaaaaaaaaaaaaaa.txt", true) == true);
-	assert(readFile(virtualFileSystem, "/root/mem_data.txt", true) == true);
 	assert(readFile(virtualFileSystem, "/root/check_png.py", false) == true);
 
 ```
