@@ -16,19 +16,27 @@ public:
 
 	bool mount(FileSystem* fs);
 
-	void unmount(const std::string& archiveLocation);
+	void unmount(FileSystem* fs);
 
-	std::unique_ptr<FileStream> openFileStream(const std::string& filePath, FileStream::Mode mode);
+	std::vector<FileSystem*> getFileSystems() const;
 
-	void enumerate(const std::string& dir, const std::function<bool(const FileInfo& info)>& call);
+	std::unique_ptr<FileStream> openFileStream(const std::string_view& filePath, FileStream::Mode mode) const;
 
-	bool removeFile(const std::string& filePath);
+	void enumerate(const std::string_view& dir, const std::function<bool(const FileInfo& info)>& call) const;
 
-	bool isFile(const std::string& filePath) const;
+	bool removeFile(const std::string_view& filePath) const;
 
-	bool isDir(const std::string& dirPath) const;
+	bool isFile(const std::string_view& filePath) const;
 
-	bool createDir(const std::string& dirPath);
+	bool isDir(const std::string_view& dirPath) const;
+
+	bool createDir(const std::string_view& dirPath) const;
+
+	bool copyFile(const std::string_view& srcFile, const std::string_view& dstFile) const;
+
+private:
+
+	bool isDir(FileSystem* fileSystem, const std::string_view& dirPath) const;
 
 private:
 

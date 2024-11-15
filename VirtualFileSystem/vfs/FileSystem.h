@@ -22,11 +22,18 @@ struct FileInfo
 	uint8_t flags;
 };
 
+enum FileSystemType : uint8_t
+{
+	Native,
+	Memory,
+	PackFile
+};
+
 class FileSystem
 {
 public:
 
-	FileSystem(const std::string& archiveLocation, const std::string& mntpoint)
+	FileSystem(const std::string_view& archiveLocation, const std::string_view& mntpoint)
 		: m_archiveLocation(archiveLocation)
 		, m_mntpoint(convertDirPath(mntpoint))
 		, m_readonly(false)
@@ -35,19 +42,21 @@ public:
 
 	virtual ~FileSystem() {}
 
-	virtual void enumerate(const std::string& dir, const std::function<bool(const FileInfo& info)>& call) = 0;
+	virtual void enumerate(const std::string_view& dir, const std::function<bool(const FileInfo& info)>& call) = 0;
 
-	virtual std::unique_ptr<FileStream> openFileStream(const std::string& filePath, FileStream::Mode mode) = 0;
+	virtual std::unique_ptr<FileStream> openFileStream(const std::string_view& filePath, FileStream::Mode mode) = 0;
 
-    virtual bool removeFile(const std::string& filePath) = 0;
+    virtual bool removeFile(const std::string_view& filePath) = 0;
 
-    virtual bool isFile(const std::string& filePath) const = 0;
+    virtual bool isFile(const std::string_view& filePath) const = 0;
 
-    virtual bool isDir(const std::string& dirPath) const = 0;
+    virtual bool isDir(const std::string_view& dirPath) const = 0;
 
-	virtual bool createDir(const std::string& dirPath) = 0;
+	virtual bool createDir(const std::string_view& dirPath) = 0;
 
 	virtual bool init() = 0;
+
+	virtual const std::string_view& basePath() const = 0;
 
 	const std::string& archiveLocation() { return m_archiveLocation; }
 
@@ -57,8 +66,11 @@ public:
 
 	void setReadonly(bool value) { m_readonly = value; }
 
+	FileSystemType getFileSystemType() { return m_fileSystemType; }
+
 protected:
 	bool m_readonly;
+	FileSystemType m_fileSystemType;
 	std::string m_archiveLocation;
 	std::string m_mntpoint;
 };

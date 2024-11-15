@@ -23,25 +23,27 @@ class PackFileSystem : public FileSystem
 {
 public:
 
-    PackFileSystem(const std::string& archiveLocation, const std::string& mntpoint);
+    PackFileSystem(const std::string_view& archiveLocation, const std::string_view& mntpoint);
 
     virtual ~PackFileSystem();
 
     virtual bool init() override;
 
-    virtual void enumerate(const std::string& dir, const std::function<bool(const FileInfo&)>& call) override;
+    virtual void enumerate(const std::string_view& dir, const std::function<bool(const FileInfo&)>& call) override;
 
-    virtual std::unique_ptr<FileStream> openFileStream(const std::string& filePath, FileStream::Mode mode) override;
+    virtual std::unique_ptr<FileStream> openFileStream(const std::string_view& filePath, FileStream::Mode mode) override;
 
-    virtual bool removeFile(const std::string& filePath) override;
+    virtual bool removeFile(const std::string_view& filePath) override;
 
-    virtual bool isFile(const std::string& filePath) const override;
+    virtual bool isFile(const std::string_view& filePath) const override;
 
-    virtual bool isDir(const std::string& dirPath) const override;
+    virtual bool isDir(const std::string_view& dirPath) const override;
 
-    virtual bool createDir(const std::string& dirPath) override;
+    virtual bool createDir(const std::string_view& dirPath) override;
 
     bool isReadonly() const { return true; }
+
+    virtual const std::string_view& basePath() const override;
 
 private:
     std::unordered_map<std::string, PackFileInfo> m_packFiles;

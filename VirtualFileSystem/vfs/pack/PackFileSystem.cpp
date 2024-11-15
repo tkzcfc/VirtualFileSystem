@@ -9,10 +9,11 @@ NS_VFS_BEGIN
 
 static const char signature[] = { 'P', 'A', 'C', 'K' };
 
-PackFileSystem::PackFileSystem(const std::string& archiveLocation, const std::string& mntpoint)
+PackFileSystem::PackFileSystem(const std::string_view& archiveLocation, const std::string_view& mntpoint)
 	: FileSystem(archiveLocation, mntpoint)
     , m_dataSecret(0)
 {
+    m_fileSystemType = FileSystemType::PackFile;
     setReadonly(true);
 }
 
@@ -158,29 +159,31 @@ bool PackFileSystem::init()
     return true;
 }
 
-void PackFileSystem::enumerate(const std::string& dir, const std::function<bool(const FileInfo&)>& call)
+void PackFileSystem::enumerate(const std::string_view& dir, const std::function<bool(const FileInfo&)>& call)
 {
     if (m_packFiles.empty())
         return;
+
+    std::string dirPath(dir);
 
     std::set<std::string> fileSet;
     FileInfo info;
     for (auto it = m_packFiles.begin(); it != m_packFiles.end(); ++it)
     {
-        if (dir.size() < it->first.size() && it->first.starts_with(dir))
+        if (dirPath.size() < it->first.size() && it->first.starts_with(dirPath))
         {
-            auto s = it->first.substr(dir.size());
+            auto s = it->first.substr(dirPath.size());
             auto p = s.find("/");
             if (p == std::string::npos)
             {
                 info.flags = FileFlags::Read | FileFlags::File;
-                info.filePath = m_mntpoint + dir + s;
+                info.filePath = m_mntpoint + dirPath + s;
                 if (call(info))
                     break;
             }
             else
             {
-                auto name = m_mntpoint + dir + s.substr(0, p);
+                auto name = m_mntpoint + dirPath + s.substr(0, p);
                 if (fileSet.count(name) == 0)
                 {
                     info.flags = FileFlags::Read | FileFlags::Dir;
@@ -195,12 +198,12 @@ void PackFileSystem::enumerate(const std::string& dir, const std::function<bool(
     }
 }
 
-std::unique_ptr<FileStream> PackFileSystem::openFileStream(const std::string& filePath, FileStream::Mode mode)
+std::unique_ptr<FileStream> PackFileSystem::openFileStream(const std::string_view& filePath, FileStream::Mode mode)
 {
     if (mode != FileStream::Mode::READ)
         return nullptr;
 
-    auto it = m_packFiles.find(filePath);
+    auto it = m_packFiles.find(std::string(filePath));
     if (it == m_packFiles.end())
     {
         return nullptr;
@@ -210,17 +213,17 @@ std::unique_ptr<FileStream> PackFileSystem::openFileStream(const std::string& fi
     return fs->open(m_archiveLocation, it->second, m_dataSecret) ? std::move(fs) : nullptr;
 }
 
-bool PackFileSystem::removeFile(const std::string& filePath)
+bool PackFileSystem::removeFile(const std::string_view& filePath)
 {
 	return false;
 }
 
-bool PackFileSystem::isFile(const std::string& filePath) const
+bool PackFileSystem::isFile(const std::string_view& filePath) const
 {
-	return m_packFiles.count(filePath);
+	return m_packFiles.count(std::string(filePath));
 }
 
-bool PackFileSystem::isDir(const std::string& dirPath) const
+bool PackFileSystem::isDir(const std::string_view& dirPath) const
 {
     for (auto it = m_packFiles.begin(); it != m_packFiles.end(); ++it)
     {
@@ -232,9 +235,15 @@ bool PackFileSystem::isDir(const std::string& dirPath) const
 	return false;
 }
 
-bool PackFileSystem::createDir(const std::string& dirPath)
+bool PackFileSystem::createDir(const std::string_view& dirPath)
 {
 	return false;
+}
+
+const std::string_view& PackFileSystem::basePath() const
+{
+    static const std::string_view basePath("");
+    return basePath;
 }
 
 NS_VFS_END

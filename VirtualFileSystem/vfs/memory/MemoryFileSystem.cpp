@@ -7,9 +7,10 @@ namespace fs = std::filesystem;
 
 NS_VFS_BEGIN
 
-MemoryFileSystem::MemoryFileSystem(const std::string& archiveLocation, const std::string& mntpoint)
+MemoryFileSystem::MemoryFileSystem(const std::string_view& archiveLocation, const std::string_view& mntpoint)
 	: FileSystem(archiveLocation, mntpoint)
 {
+	m_fileSystemType = FileSystemType::Memory;
 	m_dirs.insert("/");
 }
 
@@ -21,10 +22,8 @@ bool MemoryFileSystem::init()
 	return true;
 }
 
-void MemoryFileSystem::enumerate(const std::string& path, const std::function<bool(const FileInfo&)>& call)
+void MemoryFileSystem::enumerate(const std::string_view& dir, const std::function<bool(const FileInfo&)>& call)
 {
-	std::string dir = "/" + path;
-
 	uint8_t defaultFlgs = FileFlags::Read;
 	if (!isReadonly())
 		defaultFlgs |= FileFlags::Write;
@@ -32,7 +31,7 @@ void MemoryFileSystem::enumerate(const std::string& path, const std::function<bo
 	FileInfo info;
 	{
 		std::lock_guard<std::mutex> lock(m_dirMutex);
-		if (m_dirs.count(dir) == 0)
+		if (m_dirs.count(std::string(dir)) == 0)
 			return;
 
 		for (auto& it : m_dirs)
@@ -70,13 +69,11 @@ void MemoryFileSystem::enumerate(const std::string& path, const std::function<bo
 	}
 }
 
-std::unique_ptr<FileStream> MemoryFileSystem::openFileStream(const std::string& path, FileStream::Mode mode)
+std::unique_ptr<FileStream> MemoryFileSystem::openFileStream(const std::string_view& filePath, FileStream::Mode mode)
 {
-	std::string filePath = "/" + path;
-
 	std::lock_guard<std::mutex> lock(m_fileMutex);
 
-	auto it = m_files.find(filePath);
+	auto it = m_files.find(std::string(filePath));
 	if (it != m_files.end())
 	{
 		auto fs = std::make_unique<MemoryFileStream>();
@@ -86,11 +83,8 @@ std::unique_ptr<FileStream> MemoryFileSystem::openFileStream(const std::string& 
 	if (mode == FileStream::Mode::READ)
 		return nullptr;
 
-	auto dirName = getFileDir(path);
-	if (!dirName.empty())
-	{
-		dirName.push_back('/');
-	}
+	
+	auto dirName(getFileDir(filePath));
 	if (!isDir(dirName))
 	{
 		return nullptr;
@@ -103,12 +97,11 @@ std::unique_ptr<FileStream> MemoryFileSystem::openFileStream(const std::string& 
 	return fs->open(data, mode) ? std::move(fs) : nullptr;
 }
 
-bool MemoryFileSystem::removeFile(const std::string& path)
+bool MemoryFileSystem::removeFile(const std::string_view& filePath)
 {
-	std::string filePath = "/" + path;
 	std::lock_guard<std::mutex> lock(m_fileMutex);
 
-	auto it = m_files.find(filePath);
+	auto it = m_files.find(std::string(filePath));
 	if (it == m_files.end())
 		return false;
 
@@ -122,26 +115,23 @@ bool MemoryFileSystem::removeFile(const std::string& path)
 	return false;
 }
 
-bool MemoryFileSystem::isFile(const std::string& path) const
+bool MemoryFileSystem::isFile(const std::string_view& filePath) const
 {
-	std::string filePath = "/" + path;
 	std::lock_guard<std::mutex> lock(m_fileMutex);
-	return m_files.find(filePath) != m_files.end();
+	return m_files.find(std::string(filePath)) != m_files.end();
 }
 
-bool MemoryFileSystem::isDir(const std::string& dir) const
+bool MemoryFileSystem::isDir(const std::string_view& dirPath) const
 {
-	std::string dirPath = "/" + dir;
 	std::lock_guard<std::mutex> lock(m_dirMutex);
-	return m_dirs.count(dirPath) > 0;
+	return m_dirs.count(std::string(dirPath)) > 0;
 }
 
-bool MemoryFileSystem::createDir(const std::string& dir)
+bool MemoryFileSystem::createDir(const std::string_view& dirPath)
 {
-	std::string dirPath = "/" + dir;
 	std::lock_guard<std::mutex> lock(m_dirMutex);
 
-	if (m_dirs.count(dirPath) > 0)
+	if (m_dirs.count(std::string(dirPath)) > 0)
 		return false;
 
 	std::string path = "/";
@@ -158,7 +148,7 @@ bool MemoryFileSystem::createDir(const std::string& dir)
 				path += part;
 				path += "/";
 
-				if (m_dirs.count(dirPath) == 0)
+				if (m_dirs.count(path) == 0)
 				{
 					m_dirs.insert(path);
 				}
@@ -167,6 +157,12 @@ bool MemoryFileSystem::createDir(const std::string& dir)
 	}
 
 	return true;
+}
+
+const std::string_view& MemoryFileSystem::basePath() const
+{
+	static const std::string_view basePath("/");
+	return basePath;
 }
 
 NS_VFS_END

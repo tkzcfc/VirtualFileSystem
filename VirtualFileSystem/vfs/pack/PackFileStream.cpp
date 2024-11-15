@@ -18,12 +18,12 @@ PackFileStream::~PackFileStream()
 	close();
 }
 
-bool PackFileStream::open(std::string path, FileStream::Mode mode)
+bool PackFileStream::open(std::string_view path, FileStream::Mode mode)
 {
 	return false;
 }
 
-bool PackFileStream::open(std::string path, const PackFileInfo& fileInfo, uint32_t dataSecret)
+bool PackFileStream::open(std::string_view path, const PackFileInfo& fileInfo, uint32_t dataSecret)
 {
 	if (fileInfo.length <= 0)
 	{

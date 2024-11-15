@@ -17,7 +17,7 @@ MemoryFileStream::~MemoryFileStream()
 	close();
 }
 
-bool MemoryFileStream::open(std::string path, FileStream::Mode mode)
+bool MemoryFileStream::open(std::string_view path, FileStream::Mode mode)
 {
 	return false;
 }

@@ -7,7 +7,7 @@ namespace fs = std::filesystem;
 
 NS_VFS_BEGIN
 
-bool NativeFileStream::open(std::string path, FileStream::Mode mode)
+bool NativeFileStream::open(std::string_view path, FileStream::Mode mode)
 {
 	std::ios_base::openmode open_mode = std::fstream::binary;
 	if (mode == Mode::READ)
@@ -29,7 +29,7 @@ bool NativeFileStream::open(std::string path, FileStream::Mode mode)
 		open_mode |= std::fstream::out;
 		open_mode |= std::fstream::app;
 	}
-	m_fs.open(path.c_str(), open_mode);
+	m_fs.open(path, open_mode);
 	return m_fs.is_open();
 }
 

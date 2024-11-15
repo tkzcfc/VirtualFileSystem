@@ -25,7 +25,7 @@ public:
 
     virtual ~FileStream() = default;
 
-    virtual bool open(std::string path, FileStream::Mode mode) = 0;
+    virtual bool open(std::string_view path, FileStream::Mode mode) = 0;
 
     virtual void close() = 0;
 

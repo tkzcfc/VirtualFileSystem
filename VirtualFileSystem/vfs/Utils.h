@@ -4,19 +4,19 @@
 
 NS_VFS_BEGIN
 
-inline std::string convertPathFormatToUnixStyle(const std::string& path);
+inline std::string convertPathFormatToUnixStyle(const std::string_view& path);
 
 inline void formatDirPath(std::string& path);
 
-inline std::string convertDirPath(const std::string& path);
+inline std::string convertDirPath(const std::string_view& path);
 
-inline std::string getFirstPart(const std::string& path);
+inline std::string_view getFirstPart(const std::string_view& path);
 
-inline std::string getFileDir(const std::string& path);
+inline std::string_view getFileDir(const std::string_view& path);
 
-std::vector<std::string> splitString(const std::string& s, const std::string& delimiter);
+std::vector<std::string_view> splitString(const std::string_view& s, const std::string_view& delimiter);
 
-std::string simplifyPath(const std::string& path);
+std::string simplifyPath(const std::string_view& path);
 
 NS_VFS_END
 

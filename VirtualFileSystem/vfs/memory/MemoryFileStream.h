@@ -13,7 +13,7 @@ public:
 
     virtual ~MemoryFileStream();
 
-    virtual bool open(std::string path, FileStream::Mode mode) override;
+    virtual bool open(std::string_view path, FileStream::Mode mode) override;
 
     bool open(std::shared_ptr<MemoryData> data, FileStream::Mode mode);
 

@@ -3,13 +3,13 @@
 
 NS_VFS_BEGIN
 
-std::vector<std::string> splitString(const std::string& s, const std::string& delimiter)
+std::vector<std::string_view> splitString(const std::string_view& s, const std::string_view& delimiter)
 {
     size_t pos_start = 0, pos_end, delim_len = delimiter.length();
-    std::string token;
-    std::vector<std::string> res;
+    std::string_view token;
+    std::vector<std::string_view> res;
 
-    while ((pos_end = s.find(delimiter, pos_start)) != std::string::npos) {
+    while ((pos_end = s.find(delimiter, pos_start)) != std::string_view::npos) {
         token = s.substr(pos_start, pos_end - pos_start);
         pos_start = pos_end + delim_len;
         res.push_back(token);
@@ -19,7 +19,7 @@ std::vector<std::string> splitString(const std::string& s, const std::string& de
     return res;
 }
 
-std::string simplifyPath(const std::string& path) 
+std::string simplifyPath(const std::string_view& path)
 {
     if (path.empty())
         return "";
@@ -52,7 +52,7 @@ std::string simplifyPath(const std::string& path)
                 parts[parts.size() - 1].append("/");
             }
 
-            currentPart.clear();
+            currentPart = "";
         }
         else 
         {

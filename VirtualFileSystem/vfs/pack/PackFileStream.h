@@ -13,9 +13,9 @@ public:
 
     virtual ~PackFileStream();
 
-    virtual bool open(std::string path, FileStream::Mode mode) override;
+    virtual bool open(std::string_view path, FileStream::Mode mode) override;
 
-    bool open(std::string path, const PackFileInfo& fileInfo, uint32_t dataSecret);
+    bool open(std::string_view path, const PackFileInfo& fileInfo, uint32_t dataSecret);
 
     virtual void close() override;
 

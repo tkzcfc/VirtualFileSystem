@@ -9,7 +9,7 @@ class NativeFileStream : public FileStream
 {
 public:
 
-    virtual bool open(std::string path, FileStream::Mode mode) override;
+    virtual bool open(std::string_view path, FileStream::Mode mode) override;
 
     virtual void close() override;
 
