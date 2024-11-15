@@ -104,7 +104,9 @@ std::unique_ptr<FileStream> VirtualFileSystem::openFileStream(const std::string&
 
 void VirtualFileSystem::enumerate(const std::string& dir, const std::function<bool(const FileInfo& info)>& call) const
 {
-	auto filePath = simplifyPath(convertDirPath(dir));
+	auto dirPath = simplifyPath(convertDirPath(dir));
+	if (dirPath.empty() || dirPath.back() != '/')
+		return;
 
 	LOCL_FILE_SYSTEMS_LIST;
 	std::set<std::string> pathSet;
@@ -113,11 +115,11 @@ void VirtualFileSystem::enumerate(const std::string& dir, const std::function<bo
 	{
 		auto& mntpoint = it->mntpoint();
 
-		if (mntpoint.starts_with(filePath))
+		if (mntpoint.starts_with(dirPath))
 		{
-			if (mntpoint == filePath)
+			if (mntpoint == dirPath)
 			{
-				std::string fullFilePath = it->basePath() + mntpoint.substr(filePath.size());
+				std::string fullFilePath = it->basePath() + mntpoint.substr(dirPath.size());
 				it->enumerate(fullFilePath, [&call, &pathSet](const FileInfo& info) -> bool {
 					if (pathSet.count(info.filePath) == 0)
 					{
@@ -133,7 +135,7 @@ void VirtualFileSystem::enumerate(const std::string& dir, const std::function<bo
 			else
 			{
 				FileInfo info;
-				info.filePath = filePath + std::string(getFirstPart(mntpoint.substr(filePath.size())));
+				info.filePath = dirPath + std::string(getFirstPart(mntpoint.substr(dirPath.size())));
 
 				if(!it->isReadonly() && info.filePath == mntpoint.substr(0, mntpoint.size() - 1))
 					info.flags = FileFlags::Dir | FileFlags::Read | FileFlags::Write;
@@ -148,9 +150,9 @@ void VirtualFileSystem::enumerate(const std::string& dir, const std::function<bo
 				}
 			}
 		}
-		else if (filePath.starts_with(mntpoint))
+		else if (dirPath.starts_with(mntpoint))
 		{
-			std::string fullFilePath = it->basePath() + filePath.substr(mntpoint.size());
+			std::string fullFilePath = it->basePath() + dirPath.substr(mntpoint.size());
 			it->enumerate(fullFilePath, [&call, &pathSet](const FileInfo& info) -> bool {
 				if (pathSet.count(info.filePath) == 0)
 				{
@@ -215,6 +217,8 @@ bool VirtualFileSystem::isFile(const std::string& path) const
 bool VirtualFileSystem::isDir(const std::string& dir) const
 {
 	auto dirPath = simplifyPath(convertDirPath(dir));
+	if (dirPath.empty() || dirPath.back() != '/')
+		return false;
 
 	LOCL_FILE_SYSTEMS_LIST;
 
@@ -255,7 +259,9 @@ bool VirtualFileSystem::isDir(FileSystem* fileSystem, const std::string& dirPath
 
 bool VirtualFileSystem::createDir(const std::string& dir) const
 {
-	auto filePath = simplifyPath(convertDirPath(dir));
+	auto dirPath = simplifyPath(convertDirPath(dir));
+	if (dirPath.empty() || dirPath.back() != '/')
+		return false;
 
 	LOCL_FILE_SYSTEMS_LIST;
 
@@ -265,14 +271,14 @@ bool VirtualFileSystem::createDir(const std::string& dir) const
 		{
 			auto& mntpoint = it->mntpoint();
 
-			if (mntpoint.starts_with(filePath))
+			if (mntpoint.starts_with(dirPath))
 			{
-				std::string fullFilePath = it->basePath()+ mntpoint.substr(filePath.size());
+				std::string fullFilePath = it->basePath()+ mntpoint.substr(dirPath.size());
 				return it->createDir(fullFilePath);
 			}
-			else if (filePath.starts_with(mntpoint))
+			else if (dirPath.starts_with(mntpoint))
 			{
-				std::string fullFilePath = it->basePath() + filePath.substr(mntpoint.size());
+				std::string fullFilePath = it->basePath() + dirPath.substr(mntpoint.size());
 				return it->createDir(fullFilePath);
 			}
 		}

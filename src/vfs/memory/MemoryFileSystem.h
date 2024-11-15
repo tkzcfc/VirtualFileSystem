@@ -32,10 +32,10 @@ public:
     virtual const std::string& basePath() const override;
 
 protected:
-    mutable std::mutex m_dirMutex;
+    mutable std::recursive_mutex m_dirMutex;
     std::set<std::string> m_dirs;
 
-    mutable std::mutex m_fileMutex;
+    mutable std::recursive_mutex m_fileMutex;
     std::unordered_map<std::string, std::shared_ptr<MemoryData>> m_files;
 };
 

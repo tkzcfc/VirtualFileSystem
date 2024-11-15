@@ -30,7 +30,7 @@ void MemoryFileSystem::enumerate(const std::string& dir, const std::function<boo
 
 	FileInfo info;
 	{
-		std::lock_guard<std::mutex> lock(m_dirMutex);
+		std::lock_guard<std::recursive_mutex> lock(m_dirMutex);
 		if (m_dirs.count(dir) == 0)
 			return;
 
@@ -51,7 +51,7 @@ void MemoryFileSystem::enumerate(const std::string& dir, const std::function<boo
 	}
 
 	{
-		std::lock_guard<std::mutex> lock(m_fileMutex);
+		std::lock_guard<std::recursive_mutex> lock(m_fileMutex);
 		for (auto& it : m_files)
 		{
 			if (it.first.starts_with(dir))
@@ -71,7 +71,7 @@ void MemoryFileSystem::enumerate(const std::string& dir, const std::function<boo
 
 std::unique_ptr<FileStream> MemoryFileSystem::openFileStream(const std::string& filePath, FileStream::Mode mode)
 {
-	std::lock_guard<std::mutex> lock(m_fileMutex);
+	std::lock_guard<std::recursive_mutex> lock(m_fileMutex);
 
 	auto it = m_files.find(filePath);
 	if (it != m_files.end())
@@ -99,7 +99,7 @@ std::unique_ptr<FileStream> MemoryFileSystem::openFileStream(const std::string& 
 
 bool MemoryFileSystem::removeFile(const std::string& filePath)
 {
-	std::lock_guard<std::mutex> lock(m_fileMutex);
+	std::lock_guard<std::recursive_mutex> lock(m_fileMutex);
 
 	auto it = m_files.find(filePath);
 	if (it == m_files.end())
@@ -117,19 +117,19 @@ bool MemoryFileSystem::removeFile(const std::string& filePath)
 
 bool MemoryFileSystem::isFile(const std::string& filePath) const
 {
-	std::lock_guard<std::mutex> lock(m_fileMutex);
+	std::lock_guard<std::recursive_mutex> lock(m_fileMutex);
 	return m_files.find(filePath) != m_files.end();
 }
 
 bool MemoryFileSystem::isDir(const std::string& dirPath) const
 {
-	std::lock_guard<std::mutex> lock(m_dirMutex);
+	std::lock_guard<std::recursive_mutex> lock(m_dirMutex);
 	return m_dirs.count(dirPath) > 0;
 }
 
 bool MemoryFileSystem::createDir(const std::string& dirPath)
 {
-	std::lock_guard<std::mutex> lock(m_dirMutex);
+	std::lock_guard<std::recursive_mutex> lock(m_dirMutex);
 
 	if (m_dirs.count(dirPath) > 0)
 		return false;

@@ -141,14 +141,14 @@ void fileListWindow()
 
     static std::string curDirPath = "/";
 
+
     if (virtualFileSystem.isDir(curDirPath))
     {
         if (ImGui::Button("/"))
             curDirPath = "/";
         if (!curDirPath.empty() && curDirPath != "/")
         {
-            std::vector<std::string> parts = splitString(curDirPath, "/");
-            if (parts.size() > 0) parts.erase(parts.begin());
+            std::vector<std::string> parts = splitString(curDirPath.substr(1, curDirPath.size() - 2), "/");
 
             if(!parts.empty())
                 ImGui::SameLine();
@@ -165,6 +165,7 @@ void fileListWindow()
                         curDirPath += parts[j];
                         curDirPath += "/";
                     }
+                    curDirPath = convertDirPath(curDirPath);
                 }
 
                 if (i != parts.size() - 1)
@@ -181,7 +182,8 @@ void fileListWindow()
 
             if (ImGui::Button("new file"))
             {
-                auto fileName = curDirPath + "/" + buf;
+                ImGui::CloseCurrentPopup();
+                auto fileName = curDirPath + buf;
                 if (virtualFileSystem.isFile(fileName))
                 {
                     printf("the file %s already exists\n", fileName.c_str());
@@ -204,7 +206,8 @@ void fileListWindow()
             ImGui::SameLine();
             if (ImGui::Button("new dir"))
             {
-                auto dirName = curDirPath + "/" + buf;
+                ImGui::CloseCurrentPopup();
+                auto dirName = curDirPath + buf;
                 if (virtualFileSystem.isDir(dirName))
                 {
                     printf("the dir %s already exists\n", dirName.c_str());
@@ -264,7 +267,10 @@ void fileListWindow()
                     if (ImGui::Button(fileInfo.filePath.c_str()))
                     {
                         if (fileInfo.flags & FileFlags::Dir)
+                        {
                             curDirPath = fileInfo.filePath;
+                            curDirPath = convertDirPath(curDirPath);
+                        }
                         else
                         {
                             bool showContent = fileInfo.filePath.ends_with(".txt") || fileInfo.filePath.ends_with(".py");
