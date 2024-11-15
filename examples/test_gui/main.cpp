@@ -20,7 +20,7 @@ VirtualFileSystem virtualFileSystem;
 
 void mountListWindow()
 {
-    ImGui::SetNextWindowPos(ImVec2(100, 100), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(50, 50), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(400, 400), ImGuiCond_FirstUseEver);
     ImGui::Begin("mount list");
 
@@ -135,8 +135,8 @@ bool readFile(VirtualFileSystem& virtualFileSystem, const std::string& fileName,
 
 void fileListWindow()
 {
-    ImGui::SetNextWindowPos(ImVec2(600, 100), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(400, 400), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(50, 400), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(800, 400), ImGuiCond_FirstUseEver);
     ImGui::Begin("file list");
 
     static std::string curDirPath = "/";
