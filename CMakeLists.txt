@@ -17,6 +17,17 @@ file(GLOB_RECURSE VFS_SOURCES
 add_library(${lib_name} STATIC ${VFS_SOURCES})
 target_include_directories(${lib_name} PUBLIC ${CMAKE_CURRENT_LIST_DIR}/src/)
 
+find_package(ZLIB QUIET)
+if(ZLIB_FOUND)
+    message(STATUS "Found ZLIB: ${ZLIB_INCLUDE_DIRS}")
+    message(STATUS "ZLIB libraries: ${ZLIB_LIBRARIES}")
+    add_definitions(-DVFS_HAS_ZLIB)
+    target_include_directories(${lib_name} PRIVATE ${ZLIB_INCLUDE_DIRS})
+    target_link_libraries(${lib_name} PRIVATE ZLIB::ZLIB)
+else()
+    message(STATUS "ZLIB not found!")
+endif()
+
 if (VFS_BUILD_EXAMPLES)
     add_subdirectory(examples)
 endif()
