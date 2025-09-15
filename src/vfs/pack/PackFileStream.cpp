@@ -146,8 +146,7 @@ uint64_t PackFileStream::write(const void* buf, uint64_t size)
 
 uint64_t PackFileStream::tell()
 {
-	if (m_offset >= m_realDataLen)
-		return uint64_t(-1);
+	assert(m_offset <= m_realDataLen);
 	return m_offset;
 }
 
