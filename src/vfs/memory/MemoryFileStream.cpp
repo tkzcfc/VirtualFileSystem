@@ -103,8 +103,7 @@ uint64_t MemoryFileStream::write(const void* buf, uint64_t size)
 
 uint64_t MemoryFileStream::tell()
 {
-	if (m_offset >= m_data->len())
-		return uint64_t(-1);
+	assert(m_offset <= m_data->len());
 	return m_offset;
 }
 
