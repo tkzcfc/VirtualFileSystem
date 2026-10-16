@@ -1,6 +1,6 @@
 # `.vfs` 归档格式规范（v1）
 
-本文描述 `src/vfs/archive` 实际读写的二进制格式。设计依据见 `design/vfs-format-draft.md` 与 `design/final-decisions.md`（后者优先）。
+本文是 `.vfs` 归档的二进制格式规范，读写实现位于 `src/vfs/archive`（常量与字段偏移定义在 `ArchiveFormat.h`）。
 
 ## 1. 总体约定
 
