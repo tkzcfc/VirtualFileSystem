@@ -84,7 +84,8 @@ TEST_SUITE("concurrency")
 		// 一个线程不停地挂载、卸载
 		std::thread mounter([&]()
 		{
-			for (int i = 0; i < 300; ++i)
+			// 至少 300 轮；如果读线程还没来得及读到（调度原因，Wine/慢机器上常见），继续挂载直到读到一些流
+			for (int i = 0; i < 300 || (streamsRead.load() < 20 && i < 200000); ++i)
 			{
 				MountId id = fs.mount("/dlc", backend, MountOptions{i % 5, 0});
 				std::this_thread::yield();

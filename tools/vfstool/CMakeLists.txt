@@ -13,4 +13,8 @@ vfs_set_warnings(vfstool_core)
 
 add_executable(vfstool ${CMAKE_CURRENT_LIST_DIR}/main.cpp)
 target_link_libraries(vfstool PRIVATE vfstool_core vfs_3rd_cli11)
+if(WIN32)
+    # CommandLineToArgvW 位于 shell32
+    target_link_libraries(vfstool PRIVATE shell32)
+endif()
 vfs_set_warnings(vfstool)

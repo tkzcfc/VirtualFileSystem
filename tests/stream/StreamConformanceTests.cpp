@@ -18,7 +18,6 @@ namespace
 // 直接使用 NativeFileStream
 struct NativeFx
 {
-	static constexpr const char* NAME = "NativeFileStream";
 	test::TempDir dir;
 
 	std::string file() const { return dir.sub("目录/file.bin"); }
@@ -46,7 +45,6 @@ struct NativeFx
 // 直接使用 MemoryBackend
 struct MemoryFx
 {
-	static constexpr const char* NAME = "MemoryBackend";
 	std::shared_ptr<MemoryBackend> backend = MemoryBackend::create();
 
 	void prepare(const std::vector<uint8_t>& content) { REQUIRE(backend->addFile("目录/file.bin", content) == Error::OK); }
@@ -70,7 +68,6 @@ struct MemoryFx
 // 经过 VirtualFileSystem（TrackedFileStream 包装）的本机目录
 struct VfsNativeFx
 {
-	static constexpr const char* NAME = "VFS+native";
 	test::TempDir dir;
 	VirtualFileSystem fs;
 
@@ -97,7 +94,6 @@ struct VfsNativeFx
 // 经过 VirtualFileSystem 的内存后端
 struct VfsMemoryFx
 {
-	static constexpr const char* NAME = "VFS+memory";
 	VirtualFileSystem fs;
 	std::shared_ptr<MemoryBackend> backend;
 
@@ -124,7 +120,6 @@ struct VfsMemoryFx
 // 单文件挂载（mountFile）
 struct SingleFileFx
 {
-	static constexpr const char* NAME = "VFS+single-file";
 	test::TempDir dir;
 	VirtualFileSystem fs;
 
@@ -142,7 +137,6 @@ struct SingleFileFx
 template <bool Encrypt, bool Compress, bool InMemory, bool ViaVfs>
 struct ArchiveFx
 {
-	static constexpr const char* NAME = "archive";
 	test::TempDir dir;
 	std::shared_ptr<ArchiveBackend> backend;
 	VirtualFileSystem fs;

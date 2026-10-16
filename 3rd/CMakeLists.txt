@@ -18,4 +18,7 @@ target_include_directories(vfs_3rd_doctest INTERFACE ${CMAKE_CURRENT_LIST_DIR}/d
 
 # CLI11：只给 vfstool 用
 add_library(vfs_3rd_cli11 INTERFACE)
-target_include_directories(vfs_3rd_cli11 INTERFACE ${CMAKE_CURRENT_LIST_DIR}/CLI11)
+target_include_directories(vfs_3rd_cli11 SYSTEM INTERFACE ${CMAKE_CURRENT_LIST_DIR}/CLI11)
+# 不使用 <codecvt>：std::wstring_convert 在 C++17 起已废弃，libc++ 会报 -Wdeprecated-declarations。
+# vfstool 自己在 Windows 上用 Win32 API 取得 UTF-8 参数，不调用 CLI11 的 narrow/widen
+target_compile_definitions(vfs_3rd_cli11 INTERFACE CLI11_HAS_CODECVT=0)

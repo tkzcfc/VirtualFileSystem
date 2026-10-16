@@ -96,6 +96,12 @@ foreach(rel "scripts/main.lua" "images/noise.bin" "中文目录/配置.json")
 endforeach()
 run(cat_missing 2 cat "${A1}" "no/such/file")
 
+# 参数文件：UTF-8 带 BOM、含中文路径（Windows 上验证参数不经过 ANSI 代码页）
+string(ASCII 239 187 191 BOM)
+file(WRITE "${WORK_DIR}/cat_args.txt" "${BOM}cat \"${A1}\" \"中文目录/配置.json\"\n")
+run(cat_response_file 0 "@${WORK_DIR}/cat_args.txt")
+expect_same_file("${WORK_DIR}/cat_response_file.out" "${SOURCE_DIR}/中文目录/配置.json")
+
 # 4. unpack：目录树与源目录完全一致
 run(unpack 0 unpack "${A1}" -o "${WORK_DIR}/unpacked")
 expect_same_tree("${SOURCE_DIR}" "${WORK_DIR}/unpacked")
@@ -105,6 +111,9 @@ run(unpack_force 0 unpack "${A1}" -o "${WORK_DIR}/unpacked" --force)
 # 5. extract
 run(extract 0 extract "${A1}" "scripts" -o "${WORK_DIR}/extracted")
 expect_same_file("${WORK_DIR}/extracted/scripts/lib/util.lua" "${SOURCE_DIR}/scripts/lib/util.lua")
+# 输出到中文目录（UTF-8 → 本机路径转换）
+run(extract_cn 0 extract "${A1}" "中文目录/配置.json" -o "${WORK_DIR}/提取结果")
+expect_same_file("${WORK_DIR}/提取结果/中文目录/配置.json" "${SOURCE_DIR}/中文目录/配置.json")
 
 # 6. verify
 run(verify 0 verify "${A1}")

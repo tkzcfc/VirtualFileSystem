@@ -9,6 +9,7 @@
 #    include <fcntl.h>
 #    include <io.h>
 #    include <windows.h>
+#    include <shellapi.h>
 #endif
 
 USING_NS_VFS;
@@ -17,12 +18,82 @@ using namespace vfs::tool;
 namespace
 {
 
-// 展开 @args.txt：文件中的参数按空白分隔，支持双引号（vfs-format F21）
-bool expandResponseFiles(int argc, char** argv, std::vector<std::string>& out)
+#if defined(_WIN32)
+// UTF-16 → UTF-8（只在 Windows 上用 Win32 API 转换，不依赖已废弃的 std::wstring_convert）
+std::string wideToUtf8(const wchar_t* wide)
 {
-	for (int i = 0; i < argc; ++i)
+	int len = ::WideCharToMultiByte(CP_UTF8, 0, wide, -1, nullptr, 0, nullptr, nullptr);
+	if (len <= 1)
+		return std::string();
+	std::string out(static_cast<size_t>(len), '\0');
+	::WideCharToMultiByte(CP_UTF8, 0, wide, -1, out.data(), len, nullptr, nullptr);
+	out.pop_back();   // 去掉结尾的 '\0'
+	return out;
+}
+
+/**
+ * 控制台输出代码页守卫：切到 UTF-8，退出时恢复。
+ * 控制台代码页是父进程（cmd/PowerShell）共享的，不恢复会影响用户之后的命令。
+ */
+class ConsoleCodePageGuard
+{
+public:
+	ConsoleCodePageGuard()
+		: m_oldOutputCP(::GetConsoleOutputCP())
 	{
-		std::string arg = argv[i];
+		::SetConsoleOutputCP(CP_UTF8);
+	}
+
+	~ConsoleCodePageGuard()
+	{
+		if (m_oldOutputCP != 0)
+			::SetConsoleOutputCP(m_oldOutputCP);
+	}
+
+	ConsoleCodePageGuard(const ConsoleCodePageGuard&) = delete;
+
+	ConsoleCodePageGuard& operator=(const ConsoleCodePageGuard&) = delete;
+
+private:
+	UINT m_oldOutputCP;
+};
+#endif
+
+/**
+ * 取得 UTF-8 编码的命令行参数。
+ * Windows 上 main 的 argv 是 ANSI 代码页（例如 GBK），中文路径会变成乱码，
+ * 所以改用 GetCommandLineW + CommandLineToArgvW 取 UTF-16 原文再转成 UTF-8；
+ * 其他平台的 argv 本身就是 UTF-8（按系统 locale，现代系统均为 UTF-8），原样使用。
+ */
+std::vector<std::string> utf8Arguments(int argc, char** argv)
+{
+	std::vector<std::string> args;
+#if defined(_WIN32)
+	int wargc = 0;
+	LPWSTR* wargv = ::CommandLineToArgvW(::GetCommandLineW(), &wargc);
+	if (wargv)
+	{
+		args.reserve(static_cast<size_t>(wargc));
+		for (int i = 0; i < wargc; ++i)
+			args.push_back(wideToUtf8(wargv[i]));
+		::LocalFree(wargv);
+		return args;
+	}
+	// 极少数情况下失败：退回 ANSI argv
+#endif
+	args.reserve(static_cast<size_t>(argc));
+	for (int i = 0; i < argc; ++i)
+		args.emplace_back(argv[i]);
+	return args;
+}
+
+// 展开 @args.txt：文件中的参数按空白分隔，支持双引号（vfs-format F21）。
+// 参数文件按 UTF-8 解释，允许带 UTF-8 BOM（Windows 记事本默认会加）
+bool expandResponseFiles(const std::vector<std::string>& in, std::vector<std::string>& out)
+{
+	for (size_t i = 0; i < in.size(); ++i)
+	{
+		const std::string& arg = in[i];
 		if (i == 0 || arg.size() < 2 || arg[0] != '@')
 		{
 			out.push_back(arg);
@@ -39,6 +110,8 @@ bool expandResponseFiles(int argc, char** argv, std::vector<std::string>& out)
 		int n = 0;
 		while ((n = fs.read(buf, sizeof(buf))) > 0)
 			content.append(buf, static_cast<size_t>(n));
+		if (content.size() >= 3 && content.compare(0, 3, "\xEF\xBB\xBF") == 0)
+			content.erase(0, 3);
 		std::string cur;
 		bool inQuote = false;
 		bool has = false;
@@ -96,12 +169,12 @@ void addKeyOptions(CLI::App* cmd, KeySource& key)
 int main(int argc, char** argv)
 {
 #if defined(_WIN32)
-	// 中文输出与 cat 的二进制输出
-	SetConsoleOutputCP(CP_UTF8);
+	// 控制台按 UTF-8 显示中文输出（退出时恢复原代码页）
+	ConsoleCodePageGuard codePageGuard;
 #endif
 
 	std::vector<std::string> args;
-	if (!expandResponseFiles(argc, argv, args))
+	if (!expandResponseFiles(utf8Arguments(argc, argv), args))
 		return static_cast<int>(ExitCode::USAGE);
 	std::vector<char*> argvExpanded;
 	for (auto& a : args)
@@ -109,6 +182,9 @@ int main(int argc, char** argv)
 
 	CLI::App app{"vfstool：.vfs 归档工具（打包、解包、查看、校验）"};
 	app.require_subcommand(1);
+	// CLI11 在 Windows 上默认把 "/x" 当作 Windows 风格选项，会把以 '/' 开头的路径误当成选项。
+	// 各平台统一只用 "-x/--xxx"（必须在添加子命令之前设置，子命令会继承）
+	app.allow_windows_style_options(false);
 	app.set_version_flag("--version", "vfstool 2.0.0（.vfs 格式版本 1）");
 
 	// ---------------- pack

@@ -15,7 +15,8 @@ add_executable(vfs_tests
     concurrency/ConcurrencyTests.cpp
 )
 target_include_directories(vfs_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(vfs_tests PRIVATE vfs vfstool_core vfs_3rd_doctest)
+# vfs 通过 vfstool_core 的 PUBLIC 依赖传递进来，不重复链接（否则 Apple ld 会警告 duplicate libraries）
+target_link_libraries(vfs_tests PRIVATE vfstool_core vfs_3rd_doctest)
 vfs_set_warnings(vfs_tests)
 
 find_package(Threads REQUIRED)
