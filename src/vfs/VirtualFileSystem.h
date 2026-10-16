@@ -206,7 +206,8 @@ public:
 	Error writeFile(std::string_view path, std::string_view data) const;
 
 	/**
-	 * 原子保存：写 path.tmp 再 rename。
+	 * 原子保存：先写同目录下唯一命名的临时文件（path.vfs-N.tmp），再 rename 为 path。
+	 * 失败时删除临时文件；并发写同一路径时最终内容是某一次完整写入。
 	 */
 	Error writeFileAtomic(std::string_view path, const void* data, size_t size) const;
 

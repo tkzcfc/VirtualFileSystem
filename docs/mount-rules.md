@@ -90,7 +90,7 @@ MountId mount(mountPoint, backend, MountOptions{priority, flags});
 - 改名后，源路径下层的同名文件可能重新可见（同 §7）。
 - `moveFile(from, to)`：先尝试 `rename`；跨挂载时对**文件**退化为复制加删除（不保证原子性）；目录跨挂载移动返回 `CROSS_DEVICE`。
 - `copyFile(from, to)`：读取可见项，按 §5 写入目标路径。`from` 与 `to` 相同时：可见项可写则什么都不做（不会把文件截断为空）；可见项在只读层则复制到写入层，相当于显式 copy-up；是目录返回 `IS_DIR`。
-- `writeFileAtomic(path, data, size)`：先写 `path.tmp` 再改名为 `path`；临时文件与目标落在不同层时退化为直接写入。
+- `writeFileAtomic(path, data, size)`：先写同目录下唯一命名的临时文件 `path.vfs-N.tmp`（N 为进程内递增序号，并发写同一路径互不干扰），再改名为 `path`；写入失败时删除临时文件；临时文件与目标落在不同层时退化为直接写入。
 
 ## 10. 卸载与替换
 

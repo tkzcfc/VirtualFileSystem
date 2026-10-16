@@ -11,6 +11,19 @@ namespace
 
 constexpr size_t COPY_BUFFER_SIZE = 64 * 1024;
 
+// 进程内唯一的临时文件名：并发的 copy-up / writeFileAtomic 针对同一路径时不会共用同一个临时文件
+std::string uniqueTempName(std::string_view base, const char* tag)
+{
+	static std::atomic<uint64_t> s_counter{0};
+	std::string name(base);
+	name += '.';
+	name += tag;
+	name += '-';
+	name += std::to_string(s_counter.fetch_add(1, std::memory_order_relaxed));
+	name += ".tmp";
+	return name;
+}
+
 /**
  * VFS 返回给调用方的流包装：
  * - 持有后端的 shared_ptr，保证惰性卸载后后端仍然存活；
@@ -1179,10 +1192,15 @@ Error VirtualFileSystem::writeFile(std::string_view path, std::string_view data)
 
 Error VirtualFileSystem::writeFileAtomic(std::string_view path, const void* data, size_t size) const
 {
-	std::string tmp = std::string(path) + ".tmp";
+	// 每次调用使用不同的临时文件：并发写同一路径时互不干扰
+	std::string tmp = uniqueTempName(path, "vfs");
 	Error e = writeFile(tmp, data, size);
 	if (e != Error::OK)
+	{
+		// 写到一半失败也不留下临时文件
+		removeFile(tmp);
 		return e;
+	}
 	e = rename(tmp, path);
 	if (e == Error::CROSS_DEVICE || e == Error::UNSUPPORTED)
 	{

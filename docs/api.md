@@ -123,7 +123,7 @@ Error readFile(path, std::vector<uint8_t>& out) const;
 Error readFile(path, std::string& out) const;
 Error writeFile(path, const void* data, size_t size) const;   // WRITE 模式：创建或截断
 Error writeFile(path, std::string_view data) const;
-Error writeFileAtomic(path, const void* data, size_t size) const;   // 写 path.tmp 后 rename
+Error writeFileAtomic(path, const void* data, size_t size) const;   // 写 path.vfs-N.tmp 后 rename，失败时删除临时文件
 ```
 
 - 读模式取可见项；写模式按 [写入目标规则](mount-rules.md#5-写入目标) 选择层，必要时 copy-up。
