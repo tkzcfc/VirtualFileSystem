@@ -423,7 +423,11 @@ Error ArchiveWriter::write(IFileStream& out, ArchiveWriteStats* stats)
 		}
 		entry.offset = pos;
 
-		if (storedData)
+		if (entry.storedSize == 0)
+		{
+			// 空文件：没有数据要写（内存中的空 vector 的 data() 可能是 nullptr）
+		}
+		else if (storedData)
 		{
 			// 内存中的数据：按块复制、加密、写入（不修改原数据）
 			uint64_t done = 0;

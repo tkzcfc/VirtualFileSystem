@@ -19,19 +19,19 @@ class VFS_DLL ArchiveBackend : public IBackend
 public:
 
 	/**
-	 * 打开本机归档文件。
+	 * 打开本机归档文件（命名为 create 而非 open，避免与 IBackend::open 重载混淆）。
 	 * @param nativePath 归档路径（UTF-8）
 	 * @param options    读取选项（索引密钥、起始偏移）
 	 * @param err        可选的错误输出，见 ArchiveReader::open
 	 */
-	static std::shared_ptr<ArchiveBackend> open(std::string_view nativePath, const ArchiveOptions& options = {},
-												Error* err = nullptr);
+	static std::shared_ptr<ArchiveBackend> create(std::string_view nativePath, const ArchiveOptions& options = {},
+												  Error* err = nullptr);
 
 	/**
 	 * 从任意来源打开归档（例如内存，决策 #26）。
 	 */
-	static std::shared_ptr<ArchiveBackend> open(std::shared_ptr<IArchiveSource> source,
-												const ArchiveOptions& options = {}, Error* err = nullptr);
+	static std::shared_ptr<ArchiveBackend> create(std::shared_ptr<IArchiveSource> source,
+												  const ArchiveOptions& options = {}, Error* err = nullptr);
 
 	explicit ArchiveBackend(std::shared_ptr<const ArchiveIndex> index);
 

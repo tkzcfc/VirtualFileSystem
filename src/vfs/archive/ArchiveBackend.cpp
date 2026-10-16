@@ -4,14 +4,14 @@
 
 NS_VFS_BEGIN
 
-std::shared_ptr<ArchiveBackend> ArchiveBackend::open(std::string_view nativePath, const ArchiveOptions& options,
-													 Error* err)
+std::shared_ptr<ArchiveBackend> ArchiveBackend::create(std::string_view nativePath, const ArchiveOptions& options,
+													   Error* err)
 {
-	return open(std::make_shared<FileArchiveSource>(std::string(nativePath)), options, err);
+	return create(std::make_shared<FileArchiveSource>(std::string(nativePath)), options, err);
 }
 
-std::shared_ptr<ArchiveBackend> ArchiveBackend::open(std::shared_ptr<IArchiveSource> source,
-													 const ArchiveOptions& options, Error* err)
+std::shared_ptr<ArchiveBackend> ArchiveBackend::create(std::shared_ptr<IArchiveSource> source,
+													   const ArchiveOptions& options, Error* err)
 {
 	auto index = ArchiveReader::open(std::move(source), options, err);
 	if (!index)

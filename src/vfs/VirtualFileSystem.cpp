@@ -228,7 +228,7 @@ MountId VirtualFileSystem::mountMemory(std::string_view mountPoint, const MountO
 MountId VirtualFileSystem::mountArchive(std::string_view mountPoint, std::string_view nativePath,
 										const ArchiveOptions& archiveOptions, const MountOptions& options, Error* err)
 {
-	auto backend = ArchiveBackend::open(nativePath, archiveOptions, err);
+	auto backend = ArchiveBackend::create(nativePath, archiveOptions, err);
 	if (!backend)
 		return 0;
 	return mount(mountPoint, std::move(backend), options, err);
