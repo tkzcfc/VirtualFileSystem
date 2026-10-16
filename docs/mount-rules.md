@@ -56,7 +56,7 @@ MountId mount(mountPoint, backend, MountOptions{priority, flags});
 ### 修改只读层中的文件（文件 copy-up）
 
 - `WRITE`（截断）：直接在写入层新建文件，遮蔽下层，不复制旧内容。
-- `APPEND`、`OVERLAPPED`：先把下层文件完整复制到写入层（先写临时文件再改名，失败不会留下半个文件），再打开副本。大文件 copy-up 有相应的复制开销。
+- `APPEND`、`OVERLAPPED`：先把下层文件完整复制到写入层（先写唯一命名的临时文件 `path.vfs-copyup-N.tmp` 再改名，失败不会留下半个文件），再打开副本。copy-up 在 VFS 内串行执行，并发追加同一个只读层文件时只复制一次，各线程的追加内容都会保留。大文件 copy-up 有相应的复制开销。
 
 ## 6. 创建目录
 

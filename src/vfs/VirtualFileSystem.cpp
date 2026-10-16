@@ -458,7 +458,7 @@ Error VirtualFileSystem::copyUp(const Layer& src, const Layer& dst)
 	// 支持 rename 的后端：先写临时文件再 rename，保证中途失败不会留下半个文件
 	const bool atomic = (dst.mount->backend->capabilities() & BackendCaps::Rename) != 0;
 	std::string target(dst.rel);
-	std::string tmp = atomic ? target + ".vfs-copyup.tmp" : target;
+	std::string tmp = atomic ? uniqueTempName(target, "vfs-copyup") : target;
 	auto out = dst.mount->backend->open(tmp, IFileStream::Mode::WRITE, &e);
 	if (!out)
 		return e;
@@ -753,9 +753,16 @@ std::unique_ptr<IFileStream> VirtualFileSystem::openFileStream(std::string_view 
 		// APPEND/OVERLAPPED 修改只读层中的文件时，先把下层内容完整复制到写入层
 		if (found && (mode == IFileStream::Mode::APPEND || mode == IFileStream::Mode::OVERLAPPED))
 		{
-			e = copyUp(layers[visible], dst);
-			if (e != Error::OK)
-				return failStream(err, e);
+			// 串行化 copy-up：多个线程同时追加同一个只读层文件时，只有第一个复制，
+			// 其余线程在锁内看到写入层已有副本后直接打开它，不会互相覆盖对方的追加内容
+			std::lock_guard<std::mutex> lock(m_copyUpMutex);
+			Stat copied;
+			if (dst.mount->backend->stat(dst.rel, copied) != Error::OK || copied.type != FileType::FILE)
+			{
+				e = copyUp(layers[visible], dst);
+				if (e != Error::OK)
+					return failStream(err, e);
+			}
 		}
 	}
 

@@ -251,6 +251,7 @@ private:
 private:
 	mutable std::mutex m_mutex;                    // 只保护 m_table 指针的读取与交换
 	std::mutex m_modifyMutex;                      // 串行化挂载表的修改（复制在 m_mutex 之外进行）
+	mutable std::mutex m_copyUpMutex;              // 串行化 copy-up，避免并发追加同一文件时互相覆盖
 	std::shared_ptr<const MountTable> m_table;     // 当前快照
 	std::atomic<MountId> m_nextId;                 // 下一个挂载 ID
 	mutable std::atomic<uint64_t> m_generation;    // 变更计数
