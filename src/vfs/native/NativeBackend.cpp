@@ -299,6 +299,34 @@ Error NativeBackend::rename(std::string_view from, std::string_view to)
 	if (err != Error::OK)
 		return err;
 	std::error_code ec;
+#ifdef _WIN32
+	// MoveFileExW 不能用目录替换已有目录，也不能用文件替换目录。这里按 POSIX rename(2) 的语义预先处理：
+	// 目录 -> 空目录：先删除目标（非原子，但结果与 POSIX 一致）；目录 -> 非空目录：NOT_EMPTY；
+	// 目录 -> 文件：NOT_DIR；文件 -> 目录：IS_DIR
+	{
+		stdfs::path pf = native::toFsPath(fullFrom), pt = native::toFsPath(fullTo);
+		stdfs::file_status sf = stdfs::status(pf, ec), stt = stdfs::status(pt, ec);
+		ec.clear();
+		if (stdfs::exists(sf) && stdfs::exists(stt) && !stdfs::equivalent(pf, pt, ec))
+		{
+			ec.clear();
+			bool fromDir = stdfs::is_directory(sf), toDir = stdfs::is_directory(stt);
+			if (fromDir && !toDir)
+				return Error::NOT_DIR;
+			if (!fromDir && toDir)
+				return Error::IS_DIR;
+			if (fromDir && toDir)
+			{
+				if (!stdfs::is_empty(pt, ec))
+					return ec ? native::errorFromCode(ec) : Error::NOT_EMPTY;
+				stdfs::remove(pt, ec);
+				if (ec)
+					return native::errorFromCode(ec);
+			}
+		}
+		ec.clear();
+	}
+#endif
 	// std::filesystem::rename 在 POSIX 上是 rename(2)，Windows 上是 MoveFileExW(REPLACE_EXISTING)，都是原子的
 	stdfs::rename(native::toFsPath(fullFrom), native::toFsPath(fullTo), ec);
 	return native::errorFromCode(ec);
