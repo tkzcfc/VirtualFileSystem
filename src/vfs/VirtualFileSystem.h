@@ -179,7 +179,8 @@ public:
 	Error removeFile(std::string_view path) const;
 
 	/**
-	 * 改名：仅当源和目标落在同一个挂载上时成功；跨挂载返回 CROSS_DEVICE；源在只读层返回 READ_ONLY。
+	 * 改名：仅当源和目标落在同一个挂载上时成功；跨挂载返回 CROSS_DEVICE；源在只读层返回 READ_ONLY；
+	 * 源目录由多个层合并而成时同样返回 READ_ONLY（与 removeDir 一致）。
 	 */
 	Error rename(std::string_view from, std::string_view to) const;
 

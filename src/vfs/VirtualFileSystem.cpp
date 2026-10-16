@@ -987,6 +987,18 @@ Error VirtualFileSystem::rename(std::string_view rawFrom, std::string_view rawTo
 	const Layer& src = fromLayers[fromVisible];
 	if (!src.mount->writable())
 		return Error::READ_ONLY;
+	// 目录由多个层合并而成时，只能移动写入层中的那一部分，其余层的内容会留在原处；
+	// 与 removeDir 的规则一致，直接拒绝
+	if (fromStat.type == FileType::DIR)
+	{
+		for (size_t i = 0; i < fromLayers.size(); ++i)
+		{
+			Stat s;
+			if (static_cast<int>(i) != fromVisible && fromLayers[i].mount->backend->stat(fromLayers[i].rel, s) == Error::OK &&
+				s.type == FileType::DIR)
+				return Error::READ_ONLY;
+		}
+	}
 	// 不能把目录移到它自己的子树里
 	if (fromStat.type == FileType::DIR && Path::isStrictAncestor(from, to))
 		return Error::INVALID_PATH;
