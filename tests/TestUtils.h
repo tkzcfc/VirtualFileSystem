@@ -125,6 +125,11 @@ bool nativeCaseSensitive();
 bool nativeReplaceOpenFile();
 
 /**
+ * 当前线程最近一次本机操作的原始错误码，形如 " (os=2)"；没有时为空串。用于失败详情
+ */
+std::string osErrorSuffix();
+
+/**
  * 线程安全的错误码直方图：并发测试记录每种返回码出现的次数，失败时整体打印，方便跨平台诊断。
  */
 class ErrorHistogram
@@ -191,7 +196,7 @@ public:
 	void expectOk(vfs::Error err, const std::string& what)
 	{
 		if (err != vfs::Error::OK)
-			add(what + " -> " + vfs::errorName(err));
+			add(what + " -> " + vfs::errorName(err) + osErrorSuffix());
 	}
 
 	// 内容不一致时记录长度与开头

@@ -68,7 +68,8 @@ MountId mount(mountPoint, backend, MountOptions{priority, flags});
 ## 6. 创建目录
 
 - `createDir(P)`：P 已存在（无论是目录还是文件）→ `EXISTS`；父目录必须在合并视图中存在，否则 `NOT_FOUND`；父路径是文件 → `NOT_DIR`。目录创建在按 §5 选出的写入层中，只存在于只读层的中间目录会自动复制到写入层。
-- `createDirs(P)`：`mkdir -p` 语义，已存在的目录不算错误；路径中某一段是文件 → `NOT_DIR`。
+- `createDirs(P)`：`mkdir -p` 语义，已存在的目录（包括其他线程并发创建的）不算错误；路径中某一段是文件 → `NOT_DIR`，最后一段是文件 → `EXISTS`。其他线程在中途删掉了上级目录时从头重试（最多 16 次），持续被删除才返回 `NOT_FOUND`。
+- 并发创建、删除同一组目录时，本机后端只报告上面列出的错误码：父目录正被删除时各系统给出的 errno 不同（Linux `ENOENT`，macOS 可能是其他值），`mkdir` 失败后会重新确认父目录，已不存在则报告 `NOT_FOUND`。
 - 在虚拟目录下创建、且没有覆盖它的可写层 → `READ_ONLY`。
 
 ## 7. 删除文件
@@ -96,7 +97,7 @@ MountId mount(mountPoint, backend, MountOptions{priority, flags});
 - 错误：源不存在 → `NOT_FOUND`；源或目标是挂载点或其祖先 → `BUSY`；源在只读层 → `READ_ONLY`；源目录由多个层合并而成（其他层也有同名目录）→ `READ_ONLY`（与 §8 的 `removeDir` 一致，否则只有写入层中的部分会被移走）；把目录移到自己的子树里 → `INVALID_PATH`；文件改名到已有目录 → `IS_DIR`；目录改名到已有文件 → `NOT_DIR`；源和目标落在不同挂载 → `CROSS_DEVICE`；后端不支持 rename → `UNSUPPORTED`。`from` 与 `to` 相同时直接成功。
 - 改名后，源路径下层的同名文件可能重新可见（同 §7）。
 - 本机后端在 Windows 上按 `rename(2)` 的语义实现：文件覆盖文件先用 `MoveFileExW(MOVEFILE_REPLACE_EXISTING)`，目标正被其他句柄打开而失败时改用 POSIX 语义的 `FileRenameInfoEx`（同样要求 Windows 10 1709+ 的 NTFS），这样可以替换打开中的文件，旧句柄继续读到旧内容。不支持 POSIX 语义时，目标被打开期间替换返回 `PERMISSION_DENIED`（`writeFileAtomic` 同理）。目录覆盖空目录在 Windows 上分两步（先删目标再改名），不是原子的。
-- 并发竞争时报告与 POSIX 一致的错误码：源被其他线程移走或删除 → `NOT_FOUND`（而不是 Windows 返回的 `ACCESS_DENIED`）；目标是非空目录 → `NOT_EMPTY`（macOS/BSD 的 `rename`/`rmdir` 在这种情况下返回 `EEXIST`，同样映射为 `NOT_EMPTY`）。Windows 上杀毒软件、索引服务短暂占用文件造成的 `ACCESS_DENIED`/`SHARING_VIOLATION` 会在约 63ms 内有限重试；真正没有权限时也只多花这么多时间。
+- 并发竞争时报告与原子 `rename(2)` 一致的错误码（Windows 上的预检查观察到的冲突会重新执行确认，避免把竞争中的瞬时状态报告成 `NOT_EMPTY`/`NOT_DIR`/`IS_DIR`）：源被其他线程移走或删除 → `NOT_FOUND`（而不是 Windows 返回的 `ACCESS_DENIED`）；目标是非空目录 → `NOT_EMPTY`（macOS/BSD 的 `rename`/`rmdir` 在这种情况下返回 `EEXIST`，同样映射为 `NOT_EMPTY`）。Windows 上杀毒软件、索引服务短暂占用文件造成的 `ACCESS_DENIED`/`SHARING_VIOLATION` 会有限重试（`ACCESS_DENIED` 约 63ms；`SHARING_VIOLATION`/`LOCK_VIOLATION` 一定由其他句柄造成，最多约 255ms）；真正没有权限时只多花约 63ms。
 - `moveFile(from, to)`：先尝试 `rename`；跨挂载时对**文件**退化为复制加删除（不保证原子性）；目录跨挂载移动返回 `CROSS_DEVICE`。
 - `copyFile(from, to)`：读取可见项，按 §5 写入目标路径。`from` 与 `to` 相同时：可见项可写则什么都不做（不会把文件截断为空）；可见项在只读层则复制到写入层，相当于显式 copy-up；是目录返回 `IS_DIR`。
 - `writeFileAtomic(path, data, size)`：先写同目录下唯一命名的临时文件 `path.vfs-N.tmp`（N 为进程内递增序号，并发写同一路径互不干扰），再改名为 `path`；写入失败时删除临时文件；临时文件与目标落在不同层时退化为直接写入。

@@ -201,7 +201,7 @@ TEST_SUITE("stress")
 				if (err == Error::OK)
 					++moved;
 				else if (err != Error::NOT_FOUND)
-					failures.add("rename " + from + " -> " + to + ": " + errorName(err));
+					failures.add("rename " + from + " -> " + to + ": " + errorName(err) + test::osErrorSuffix());
 			}
 		});
 		INFO("rename 返回码: " << codes.str());
@@ -238,7 +238,7 @@ TEST_SUITE("stress")
 				Error err = e.fs.rename("/s/rd/n" + std::to_string(rng() % 3), "/s/rd/n" + std::to_string(rng() % 3));
 				codes.add(err);
 				if (err != Error::OK && err != Error::NOT_FOUND)
-					failures.add(std::string("rename: ") + errorName(err));
+					failures.add(std::string("rename: ") + errorName(err) + test::osErrorSuffix());
 			}
 		});
 		auto names = test::listNames(e.fs, "/s/rd");
@@ -258,11 +258,12 @@ TEST_SUITE("stress")
 		test::FailureLog failures;
 		// 每种操作单独统计返回码，失败时整体打印
 		test::ErrorHistogram createDirsCodes, createDirCodes, removeDirCodes, removeTreeCodes;
-		auto expect = [&](test::ErrorHistogram& h, Error err, Error a, Error b, Error c)
+		// 失败详情包含操作、路径、错误码和原始 OS 错误码（errno / GetLastError）
+		auto expect = [&](test::ErrorHistogram& h, const std::string& what, Error err, Error a, Error b, Error c)
 		{
 			h.add(err);
 			if (err != a && err != b && err != c)
-				failures.add(std::string("意外返回码 ") + errorName(err));
+				failures.add("意外返回码 " + what + " -> " + errorName(err) + test::osErrorSuffix());
 		};
 		runThreads(THREADS, [&](int t)
 		{
@@ -273,17 +274,22 @@ TEST_SUITE("stress")
 				switch (rng() % 4)
 				{
 				case 0:
-					// createDirs：中间目录被并发删掉时可能 NOT_FOUND；已存在（并发创建）算成功
-					expect(createDirsCodes, e.fs.createDirs(d), Error::OK, Error::NOT_FOUND, Error::EXISTS);
+					// createDirs：已存在（包括并发创建）算成功；中间目录被并发删掉时会从头重试，
+					// 只有持续被删除超过重试上限才返回 NOT_FOUND（见 mount-rules.md §6）。这里没有文件，不会 EXISTS
+					expect(createDirsCodes, "createDirs " + d, e.fs.createDirs(d), Error::OK, Error::NOT_FOUND,
+						   Error::OK);
 					break;
 				case 1:
-					expect(createDirCodes, e.fs.createDir(d), Error::OK, Error::NOT_FOUND, Error::EXISTS);
+					expect(createDirCodes, "createDir " + d, e.fs.createDir(d), Error::OK, Error::NOT_FOUND,
+						   Error::EXISTS);
 					break;
 				case 2:
-					expect(removeDirCodes, e.fs.removeDir(d), Error::OK, Error::NOT_FOUND, Error::NOT_EMPTY);
+					expect(removeDirCodes, "removeDir " + d, e.fs.removeDir(d), Error::OK, Error::NOT_FOUND,
+						   Error::NOT_EMPTY);
 					break;
 				default:
-					expect(removeTreeCodes, e.fs.removeDir(d.substr(0, d.rfind('/')), true), Error::OK,
+					expect(removeTreeCodes, "removeDir(递归) " + d.substr(0, d.rfind('/')),
+						   e.fs.removeDir(d.substr(0, d.rfind('/')), true), Error::OK,
 						   Error::NOT_FOUND, Error::NOT_EMPTY);
 					break;
 				}

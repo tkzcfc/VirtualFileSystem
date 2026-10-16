@@ -206,6 +206,12 @@ bool nativeReplaceOpenFile()
 	return s_value;
 }
 
+std::string osErrorSuffix()
+{
+	const int e = vfs::native::lastOsError();
+	return e ? " (os=" + std::to_string(e) + ")" : std::string();
+}
+
 bool slowEnabled()
 {
 	const char* v = std::getenv("VFS_TEST_SLOW");
