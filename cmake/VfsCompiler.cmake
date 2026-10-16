@@ -20,3 +20,12 @@ function(vfs_set_warnings target)
         endif()
     endif()
 endfunction()
+
+set(VFS_CMAKE_DIR ${CMAKE_CURRENT_LIST_DIR})
+
+# 给可执行文件嵌入 longPathAware 清单（只对 MSVC；MSVC 链接器会把 .manifest 源文件合并进默认清单）
+function(vfs_add_long_path_manifest target)
+    if(MSVC)
+        target_sources(${target} PRIVATE ${VFS_CMAKE_DIR}/longpath.manifest)
+    endif()
+endfunction()

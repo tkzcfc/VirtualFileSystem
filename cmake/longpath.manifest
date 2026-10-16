@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!-- 声明支持长路径：系统开启 LongPathsEnabled 时，不带 \\?\ 前缀的 Win32 调用也能超过 MAX_PATH。
+     VFS 自己的本机路径转换已经会加 \\?\ 前缀，这个清单只是让程序里其他代码（第三方库、标准库）同样受益。 -->
+<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+  <application xmlns="urn:schemas-microsoft-com:asm.v3">
+    <windowsSettings xmlns:ws2="http://schemas.microsoft.com/SMI/2016/WindowsSettings">
+      <ws2:longPathAware>true</ws2:longPathAware>
+    </windowsSettings>
+  </application>
+</assembly>
