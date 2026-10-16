@@ -387,6 +387,10 @@ std::shared_ptr<const ArchiveIndex> ArchiveReader::open(std::shared_ptr<IArchive
 		if (entry.compression == CompressionType::LZ4 &&
 			(entry.size > Compression::lz4MaxInputSize() || entry.storedSize > Compression::lz4MaxInputSize()))
 			return fail(Error::CORRUPTED);
+		// LZ4 block 的压缩比不超过约 255:1。声称的原始大小超过这个上限必然是伪造的，
+		// 必须在这里拒绝，否则打开时会按 size 预先分配巨量内存
+		if (entry.compression == CompressionType::LZ4 && entry.size > entry.storedSize * 255 + 64)
+			return fail(Error::CORRUPTED);
 	}
 
 	index->baseOffset = base;

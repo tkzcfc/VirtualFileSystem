@@ -74,7 +74,7 @@
 | 56 | u64 | reserved | 0 |
 | 64 | u8[32] | key | XOR 密钥，前 keyLength 字节有效，其余为 0 |
 
-校验规则（读取端把每个字段都当作不可信输入）：type/cipher/compression 取值合法；`[nameOffset, nameOffset+nameLength)` 在 StringPool 内；路径已规范化；条目严格升序；文件数据范围 `[offset, offset+storedSize)` 落在数据区内；未压缩时 `storedSize == size`；压缩时 `size` 不超过 LZ4 上限；同一路径不能既是文件又是目录的祖先。不同条目的数据范围**允许重叠**（去重共享）。
+校验规则（读取端把每个字段都当作不可信输入）：type/cipher/compression 取值合法；`[nameOffset, nameOffset+nameLength)` 在 StringPool 内；路径已规范化；条目严格升序；文件数据范围 `[offset, offset+storedSize)` 落在数据区内；未压缩时 `storedSize == size`；压缩时 `size` 不超过 LZ4 上限，且 `size ≤ storedSize × 255 + 64`（LZ4 block 的最大压缩比约 255:1，超出即为伪造，在分配内存之前拒绝）；同一路径不能既是文件又是目录的祖先。不同条目的数据范围**允许重叠**（去重共享）。
 
 ### 4.2 StringPool
 
