@@ -189,7 +189,8 @@ public:
 	Error moveFile(std::string_view from, std::string_view to) const;
 
 	/**
-	 * 复制文件（目标按 WRITE 模式打开，会截断）。
+	 * 复制文件（目标按 WRITE 模式打开，会截断）。复制到自身时：可见项可写则什么都不做，
+	 * 可见项在只读层则复制到写入层（相当于显式 copy-up）。
 	 */
 	Error copyFile(std::string_view from, std::string_view to) const;
 

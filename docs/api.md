@@ -139,7 +139,7 @@ Error removeDir(path, bool recursive = false) const;
 Error removeFile(path) const;
 Error rename(from, to) const;                     // 同一挂载内原子改名
 Error moveFile(from, to) const;                   // 跨挂载时文件退化为复制 + 删除
-Error copyFile(from, to) const;
+Error copyFile(from, to) const;                   // 复制到自身：可写时不做任何事，只读层时等于 copy-up
 ```
 
 各操作的落点与错误码见 [挂载规则](mount-rules.md) §6–§9。

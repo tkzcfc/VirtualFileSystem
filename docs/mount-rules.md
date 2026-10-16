@@ -89,7 +89,7 @@ MountId mount(mountPoint, backend, MountOptions{priority, flags});
 - 错误：源不存在 → `NOT_FOUND`；源或目标是挂载点或其祖先 → `BUSY`；源在只读层 → `READ_ONLY`；把目录移到自己的子树里 → `INVALID_PATH`；文件改名到已有目录 → `IS_DIR`；目录改名到已有文件 → `NOT_DIR`；源和目标落在不同挂载 → `CROSS_DEVICE`；后端不支持 rename → `UNSUPPORTED`。`from` 与 `to` 相同时直接成功。
 - 改名后，源路径下层的同名文件可能重新可见（同 §7）。
 - `moveFile(from, to)`：先尝试 `rename`；跨挂载时对**文件**退化为复制加删除（不保证原子性）；目录跨挂载移动返回 `CROSS_DEVICE`。
-- `copyFile(from, to)`：读取可见项，按 §5 写入目标路径。
+- `copyFile(from, to)`：读取可见项，按 §5 写入目标路径。`from` 与 `to` 相同时：可见项可写则什么都不做（不会把文件截断为空）；可见项在只读层则复制到写入层，相当于显式 copy-up；是目录返回 `IS_DIR`。
 - `writeFileAtomic(path, data, size)`：先写 `path.tmp` 再改名为 `path`；临时文件与目标落在不同层时退化为直接写入。
 
 ## 10. 卸载与替换

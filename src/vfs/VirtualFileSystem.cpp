@@ -1062,6 +1062,23 @@ Error VirtualFileSystem::moveFile(std::string_view from, std::string_view to) co
 Error VirtualFileSystem::copyFile(std::string_view from, std::string_view to) const
 {
 	Error e = Error::OK;
+	{
+		// 复制到自身：可见项可写时什么都不做（否则以 WRITE 打开目标会先截断源文件）；
+		// 可见项在只读层时照常复制，相当于显式 copy-up
+		auto table = snapshot();
+		std::string nf, nt;
+		if (normalize(*table, from, nf) == Error::OK && normalize(*table, to, nt) == Error::OK && nf == nt)
+		{
+			Stat st;
+			e = stat(nf, st);
+			if (e != Error::OK)
+				return e;
+			if (st.type == FileType::DIR)
+				return Error::IS_DIR;
+			if (st.writable)
+				return Error::OK;
+		}
+	}
 	auto in = openFileStream(from, IFileStream::Mode::READ, &e);
 	if (!in)
 		return e;
