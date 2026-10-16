@@ -208,7 +208,7 @@ int runPack(const PackOptions& options, std::ostream& out, std::ostream& err)
 	out << "已打包 " << options.outputPath << "\n"
 		<< "  文件: " << stats.fileCount << "，空目录: " << stats.dirCount << "，去重: " << stats.dedupCount
 		<< "，XOR 加密: " << stats.encryptedCount << "，LZ4 压缩: " << stats.compressedCount << "\n"
-		<< "  原始大小: " << stats.totalSize << " 字节，数据区: " << stats.storedSize
+		<< "  原始大小: " << stats.totalSize << " 字节，存储数据（不含对齐填充）: " << stats.storedSize
 		<< " 字节，归档: " << stats.archiveSize << " 字节\n";
 	return static_cast<int>(ExitCode::OK);
 }

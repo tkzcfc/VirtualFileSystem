@@ -1,6 +1,6 @@
 # vfstool 端到端测试（cmake -P 脚本，跨平台，不依赖 shell）
 # 参数：VFSTOOL（可执行文件）、SOURCE_DIR（测试数据目录）、WORK_DIR（临时工作目录）
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.16)
 
 foreach(var VFSTOOL SOURCE_DIR WORK_DIR)
     if(NOT DEFINED ${var})
