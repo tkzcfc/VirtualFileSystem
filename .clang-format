@@ -1,0 +1,10 @@
+BasedOnStyle: Microsoft
+BreakBeforeBraces: Allman
+UseTab: ForIndentation
+IndentWidth: 4
+TabWidth: 4
+ColumnLimit: 120
+PointerAlignment: Left
+BreakConstructorInitializers: BeforeComma
+AccessModifierOffset: -4
+SortIncludes: false

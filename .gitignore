@@ -1,7 +1,9 @@
 .vs/
-VirtualFileSystem/test-data/dlc1/dir1_sub/write_1.zip
-VirtualFileSystem/x64/
+.vscode/
+.idea/
 x64/
-VirtualFileSystem/test-data/dlc1/mem_data.txt
-VirtualFileSystem/test-data/dlc1/mem/aaaaaaaaaaaaaaaa.txt
 build/
+build-*/
+out/
+cmake-build-*/
+*.vfs.tmp
