@@ -52,7 +52,7 @@ NativeFileStream  NativeFileStream  MemoryFileStream  ArchiveFileStream / Memory
 
 | 后端 | 能力 | 说明 |
 |---|---|---|
-| `NativeBackend` | 读、写、rename、resize | 本机目录。路径段额外拒绝 `:`、结尾的 `.`/空格和 Windows 保留名，保证各平台行为一致；可选只读、禁止跟随逃出根目录的符号链接、核对真实文件名大小写（不一致时输出警告）、自动创建根目录。不做缓存，外部修改立即可见 |
+| `NativeBackend` | 读、写、rename、resize | 本机目录。路径段额外拒绝 `:`、结尾的 `.`/空格和 Windows 保留名，保证各平台行为一致；可选只读、禁止跟随逃出根目录的符号链接、核对真实文件名大小写（`strictCase` 警告 / `exactCase` 强制按字节匹配）、自动创建根目录。不做缓存，外部修改立即可见。修改操作（mkdir/rmdir/unlink/rename/列目录）在 `NativeUtils` 中直接用系统调用实现（POSIX 系统调用 / Win32），不经过 `std::filesystem`，以便精确映射错误码、支持 Windows 长路径与 POSIX 语义 |
 | `SingleFileBackend` | 读、写、resize | 把一个本机文件挂到虚拟路径上（类似文件 bind mount）；挂载点下的任何子路径都返回 `NOT_DIR` |
 | `MemoryBackend` | 读、写、rename、resize | 内存目录树。删除打开中的文件采用 unlink 语义：名字立即消失，已打开的流继续持有数据。`addFile` 可在只读模式下预填数据 |
 | `ArchiveBackend` | 读 | `.vfs` 归档。索引 `ArchiveIndex` 解析后不可变，由后端和所有流共享 |
@@ -63,7 +63,7 @@ NativeFileStream  NativeFileStream  MemoryFileStream  ArchiveFileStream / Memory
 
 | 实现 | 来源 | 说明 |
 |---|---|---|
-| `NativeFileStream` | 本机文件 | POSIX 上用 `open/lseek/read/write`，Windows 上用 `CreateFileW`（UTF-8 转 UTF-16，长路径自动加 `\\?\` 前缀，带 `FILE_SHARE_DELETE` 以允许打开期间删除或替换文件）。拒绝打开目录 |
+| `NativeFileStream` | 本机文件 | POSIX 上用 `open/lseek/read/write`，Windows 上用 `CreateFileW`（UTF-8 转 UTF-16，长路径自动加 `\\?\` 前缀，共享方式读、写、删除全开以允许打开期间删除或替换文件；`APPEND` 用 OVERLAPPED 偏移 `0xFFFFFFFF` 原子追加；短暂的共享冲突有限重试）。拒绝打开目录 |
 | `MemoryFileStream` | 内存缓冲区 | 内存后端的文件，以及归档中 LZ4 压缩的文件（打开时整体解压） |
 | `ArchiveFileStream` | 归档中未压缩的文件 | 每个流持有一个独立的来源句柄，按偏移读取；XOR 文件按文件内偏移即时解密；顺序读时省去多余的 seek |
 

@@ -8,6 +8,11 @@
 - 入口统一规范化：`\` 视为 `/`；合并重复的 `/`；去掉 `.`；按字面消解 `..`，**越过根目录返回 `INVALID_PATH`**；结尾的 `/` 被忽略。规范形式为 `/a/b`，根为 `/`。不带前导 `/` 的路径按根目录下的路径处理（`a/b` 等同 `/a/b`）。
 - 含 NUL 或其他控制字符（`0x00-0x1F`、`0x7F`）的路径返回 `INVALID_PATH`。
 - 本机后端另外拒绝含 `:` 的名字、以 `.` 或空格结尾的名字，以及 Windows 保留名（`CON`、`PRN`、`AUX`、`NUL`、`COM1`-`COM9`、`LPT1`-`LPT9`，不区分大小写，带扩展名同样拒绝），在所有平台上一致返回 `INVALID_PATH`。
+- **大小写与本机文件系统**：内存后端、归档后端按字节匹配名字。本机后端默认把查找交给操作系统，所以结果随文件系统而定：Linux（ext4 等）区分大小写；Windows NTFS 和 macOS APFS/HFS+ 默认**不区分**大小写（保留原样），`/res/A.png` 能打开磁盘上的 `a.png`，写 `case.txt` 会覆盖已有的 `Case.txt`。这一差异同样适用于本机目录作为只读下层的情况（例如内存层在上、本机目录在下）。需要所有平台行为一致时，给本机层打开 `NativeOptions::exactCase`：
+  - 每级路径都与磁盘上的真实名字按字节比较，只差大小写（或 Unicode 规范化形式不同，如 macOS 上 NFC/NFD）的名字一律视为不存在：`stat`/`exists`/读取/列目录/删除/改名源返回 `NOT_FOUND`。
+  - 在不区分大小写的文件系统上，写入、`createDir` 或改名的目标与一个已有条目只差大小写时返回 `EXISTS`，而不是悄悄写到那个已有文件上（区分大小写的文件系统上它们本来就是不同的文件，正常创建）。只改大小写的改名（`a.txt` → `A.txt`）允许。
+  - 代价是每次访问对每一级路径多一次系统调用（Windows 上 `FindFirstFileExW`，macOS 上 `getattrlist`；Linux 上是一次 `lstat`）。默认关闭；`strictCase` 只在不一致时输出警告，不改变结果。
+  - 推荐：开发期在 Windows/macOS 上对资源目录打开 `exactCase`（或至少 `strictCase`），可以尽早发现发布到归档后才会暴露的大小写错误。
 - 别名在规范化之前按最长前缀替换：`addAlias("res://", "/res")` 之后，`res://img/a.png` 等同 `/res/img/a.png`。
 
 ## 2. 挂载与层栈
@@ -71,7 +76,7 @@ MountId mount(mountPoint, backend, MountOptions{priority, flags});
 - 只删除可见项。可见项在只读层 → `READ_ONLY`；是目录 → `IS_DIR`；不存在 → `NOT_FOUND`。
 - 删除可写层中的覆盖文件后，**下层的同名文件会重新可见**。这是有意的设计：删除覆盖即“恢复原版”。运行时不写任何 whiteout 标记，只读层中的文件无法被删除。
 - 单文件挂载的挂载点本身不能删除（`BUSY`）。
-- 打开中的文件被删除：内存后端采用 unlink 语义，流继续可用；本机后端遵循操作系统（Windows 上同样允许，因为流带 `FILE_SHARE_DELETE`）。
+- 打开中的文件被删除：内存后端采用 unlink 语义，流继续可用；本机后端遵循操作系统。Windows 上同样允许：流以 `FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE` 打开，删除使用 POSIX 语义（`FileDispositionInfoEx`，Windows 10 1709+ 的 NTFS），名字立即消失，已打开的流继续可用；不支持 POSIX 语义的文件系统（FAT/exFAT、部分网络盘、Wine）退回传统删除，名字在最后一个句柄关闭后才消失，期间在同一位置创建同名文件会失败。
 
 ## 8. 删除目录
 
@@ -90,6 +95,8 @@ MountId mount(mountPoint, backend, MountOptions{priority, flags});
 - `rename(from, to)`：**源的可见项和目标都落在同一个可写挂载上**时，调用该后端的原生 rename（原子）。目标已存在且所在层可写时，目标落在那一层；否则按 §5 选择写入层，目标的父目录必须存在。目标已存在时的覆盖行为由后端按 POSIX 规则处理（文件覆盖文件，目录覆盖空目录）。
 - 错误：源不存在 → `NOT_FOUND`；源或目标是挂载点或其祖先 → `BUSY`；源在只读层 → `READ_ONLY`；源目录由多个层合并而成（其他层也有同名目录）→ `READ_ONLY`（与 §8 的 `removeDir` 一致，否则只有写入层中的部分会被移走）；把目录移到自己的子树里 → `INVALID_PATH`；文件改名到已有目录 → `IS_DIR`；目录改名到已有文件 → `NOT_DIR`；源和目标落在不同挂载 → `CROSS_DEVICE`；后端不支持 rename → `UNSUPPORTED`。`from` 与 `to` 相同时直接成功。
 - 改名后，源路径下层的同名文件可能重新可见（同 §7）。
+- 本机后端在 Windows 上按 `rename(2)` 的语义实现：文件覆盖文件先用 `MoveFileExW(MOVEFILE_REPLACE_EXISTING)`，目标正被其他句柄打开而失败时改用 POSIX 语义的 `FileRenameInfoEx`（同样要求 Windows 10 1709+ 的 NTFS），这样可以替换打开中的文件，旧句柄继续读到旧内容。不支持 POSIX 语义时，目标被打开期间替换返回 `PERMISSION_DENIED`（`writeFileAtomic` 同理）。目录覆盖空目录在 Windows 上分两步（先删目标再改名），不是原子的。
+- 并发竞争时报告与 POSIX 一致的错误码：源被其他线程移走或删除 → `NOT_FOUND`（而不是 Windows 返回的 `ACCESS_DENIED`）；目标是非空目录 → `NOT_EMPTY`（macOS/BSD 的 `rename`/`rmdir` 在这种情况下返回 `EEXIST`，同样映射为 `NOT_EMPTY`）。Windows 上杀毒软件、索引服务短暂占用文件造成的 `ACCESS_DENIED`/`SHARING_VIOLATION` 会在约 63ms 内有限重试；真正没有权限时也只多花这么多时间。
 - `moveFile(from, to)`：先尝试 `rename`；跨挂载时对**文件**退化为复制加删除（不保证原子性）；目录跨挂载移动返回 `CROSS_DEVICE`。
 - `copyFile(from, to)`：读取可见项，按 §5 写入目标路径。`from` 与 `to` 相同时：可见项可写则什么都不做（不会把文件截断为空）；可见项在只读层则复制到写入层，相当于显式 copy-up；是目录返回 `IS_DIR`。
 - `writeFileAtomic(path, data, size)`：先写同目录下唯一命名的临时文件 `path.vfs-N.tmp`（N 为进程内递增序号，并发写同一路径互不干扰），再改名为 `path`；写入失败时删除临时文件；临时文件与目标落在不同层时退化为直接写入。

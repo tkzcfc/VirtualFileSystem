@@ -102,6 +102,8 @@ VFS_TEST_SCALE=5 ./build/tests/vfs_tests     # 压力与随机测试的轮数放
 ./build/tests/vfs_tests --test-suite=stress  # 只跑某个 suite（doctest 的其他参数同样可用）
 ```
 
+与平台能力有关的用例在运行时探测，而不是按操作系统写死：临时目录所在文件系统是否区分大小写（Windows/macOS 默认不区分，相关用例改为检查文档规定的不区分行为）、能否替换正被打开的文件（Windows 需要 NTFS 上的 POSIX rename 语义；不支持时用例放宽并输出一条 `MESSAGE`）。并发用例在失败时打印每种操作的错误码分布和前几条失败详情。在 Linux 上可以用 MinGW 交叉编译后通过 Wine 运行全部测试（Wine 不支持 POSIX rename 语义，会看到上述 `MESSAGE`）。
+
 ### 性能基准
 
 ```bash

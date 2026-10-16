@@ -61,7 +61,8 @@ struct NativeOptions
 {
 	bool readOnly = false;        // 所有写操作返回 READ_ONLY
 	bool followSymlinks = true;   // false：解析后逃出根目录的路径一律拒绝（PERMISSION_DENIED）
-	bool strictCase = false;      // true：核对真实文件名的大小写，不一致时输出警告
+	bool strictCase = false;      // true：核对真实文件名的大小写，不一致时输出警告（结果不变）
+	bool exactCase = false;       // true：按字节匹配名字，大小写不敏感的文件系统上只差大小写视为不存在（见 mount-rules.md §1）
 	bool createRoot = false;      // 根目录不存在时自动创建（mkdir -p）
 };
 
@@ -76,6 +77,12 @@ struct ArchiveOptions
 	int64_t baseOffset = -1;         // 归档起点；-1 自动（偏移 0 处的 magic，否则看文件末尾的 footer）
 };
 ```
+
+本机后端的平台说明：
+
+- **Windows 长路径**：UTF-8 路径转 UTF-16 时，长度达到 `MAX_PATH - 12`（`CreateDirectoryW` 的限制）就转换为绝对路径并加 `\\?\` 前缀（UNC 路径为 `\\?\UNC\server\share\...`），所有本机操作（打开、stat、列目录、mkdir、删除、改名）都走同一个转换，不依赖系统的 `LongPathsEnabled` 设置。仓库里的可执行文件（MSVC）另外嵌入了 `longPathAware` 清单（`cmake/longpath.manifest`，CMake 函数 `vfs_add_long_path_manifest`）。
+- **Windows 共享与替换**：本机流以三种共享方式全开打开；删除、改名覆盖优先用 POSIX 语义，打开中的文件可以被删除或替换（详见 mount-rules.md §7、§9）。追加写（`APPEND`）用“写到文件末尾”的原子写，多个流并发追加不会互相覆盖。
+- **大小写**：默认随文件系统，`exactCase` 可以强制按字节匹配（mount-rules.md §1）。
 
 后端也可以单独创建再交给 `mount()`：
 
