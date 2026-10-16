@@ -1,7 +1,7 @@
 // 本文件：编译期开关。可以在编译命令行或 CMake 中覆盖这些宏。
 #pragma once
 
-// 为 1 时，vfs::IFileStream 直接使用 axmol 的 ax::IFileStream（移植进 axmol 时使用）
+// 为 1 时，vfs::IFileStream 直接使用 axmol 的 ax::IFileStream（接入 axmol 时使用）
 #ifndef VFS_WITH_AXMOL
 #    define VFS_WITH_AXMOL 0
 #endif

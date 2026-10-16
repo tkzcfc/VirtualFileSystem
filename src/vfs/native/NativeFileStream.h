@@ -1,4 +1,4 @@
-// 本文件：本机文件流，移植自 axmol `FileStream` 的 lowio 实现。
+// 本文件：本机文件流，参照 axmol `FileStream` 的 lowio 实现。
 // POSIX 上使用 open/lseek64/read/write；Windows 上使用 CreateFileW 系列（UTF-8 转 UTF-16）。
 #pragma once
 

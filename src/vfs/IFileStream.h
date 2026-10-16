@@ -1,6 +1,6 @@
 // 本文件：流接口 IFileStream。
-// 与 axmol 的 `core/platform/IFileStream.h` 逐字一致（签名、枚举顺序、返回值约定都相同），
-// 只是命名空间和导出宏不同，这样以后移植进 axmol 时一行不用改。
+// 与 axmol 引擎的 IFileStream 逐字一致（签名、枚举顺序、返回值约定都相同），只是命名空间和导出宏不同；
+// 定义 VFS_WITH_AXMOL 时直接使用引擎的定义，库内实现无需任何改动。
 //
 // 语义约定（所有内置实现一致）：
 //   READ       只读，文件必须存在
@@ -15,8 +15,13 @@
 
 #if VFS_WITH_AXMOL
 
-// 移植进 axmol 时直接复用引擎的接口
-#    include "platform/IFileStream.h"
+// 接入 axmol 时直接复用引擎的接口。
+// 较新的 axmol（dev 分支）头文件位于 axmol/platform/，2.x 位于 core/platform/（include 路径为 platform/）
+#    if __has_include("axmol/platform/IFileStream.h")
+#        include "axmol/platform/IFileStream.h"
+#    else
+#        include "platform/IFileStream.h"
+#    endif
 
 NS_VFS_BEGIN
 using IFileStream = ax::IFileStream;
