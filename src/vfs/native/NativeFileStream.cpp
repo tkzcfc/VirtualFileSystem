@@ -79,7 +79,7 @@ bool NativeFileStream::open(std::string_view path, IFileStream::Mode mode)
 {
 	close();
 
-	// 与 axmol 相同的模式表，只是共享模式多了 FILE_SHARE_DELETE
+	// 与 axmol 相同的模式表，只是共享模式多了 FILE_SHARE_DELETE：其他句柄可以删除、改名、替换这个文件（POSIX 行为）
 	static const DWORD shareMode = FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE;
 	DWORD access = GENERIC_READ | GENERIC_WRITE;
 	DWORD creation = OPEN_ALWAYS;
@@ -100,20 +100,31 @@ bool NativeFileStream::open(std::string_view path, IFileStream::Mode mode)
 	}
 
 	std::wstring wpath = native::toWidePath(path);
-	HANDLE h = ::CreateFileW(wpath.c_str(), access, shareMode, nullptr, creation, FILE_ATTRIBUTE_NORMAL, nullptr);
+	HANDLE h = INVALID_HANDLE_VALUE;
+	// 杀毒软件 / 索引服务可能短暂地以不共享的方式打开文件，“删除挂起”的同名文件也会让创建失败，做有限次重试。
+	// 打开目录返回的 ACCESS_DENIED 不是瞬时错误，不重试
+	DWORD code = native::retryTransient([&]() -> unsigned long
+	{
+		h = ::CreateFileW(wpath.c_str(), access, shareMode, nullptr, creation, FILE_ATTRIBUTE_NORMAL, nullptr);
+		if (h != INVALID_HANDLE_VALUE)
+			return ERROR_SUCCESS;
+		DWORD c = ::GetLastError();
+		if (c == ERROR_ACCESS_DENIED)
+		{
+			DWORD attr = ::GetFileAttributesW(wpath.c_str());
+			if (attr != INVALID_FILE_ATTRIBUTES && (attr & FILE_ATTRIBUTE_DIRECTORY))
+				return ERROR_DIRECTORY_NOT_SUPPORTED;
+		}
+		return c;
+	});
 	if (h == INVALID_HANDLE_VALUE)
 	{
-		DWORD code = ::GetLastError();
-		if (code == ERROR_FILE_NOT_FOUND || code == ERROR_PATH_NOT_FOUND)
+		if (code == ERROR_DIRECTORY_NOT_SUPPORTED)
+			errno = EISDIR;
+		else if (code == ERROR_PATH_NOT_FOUND)
 			errno = ENOENT;
-		else if (code == ERROR_ACCESS_DENIED)
-		{
-			// 打开目录时 Windows 返回 ACCESS_DENIED，这里区分一下
-			DWORD attr = ::GetFileAttributesW(wpath.c_str());
-			errno = (attr != INVALID_FILE_ATTRIBUTES && (attr & FILE_ATTRIBUTE_DIRECTORY)) ? EISDIR : EACCES;
-		}
 		else
-			errno = EIO;
+			errno = toErrno(native::errorFromWin32(code));
 		return false;
 	}
 	m_handle = h;
@@ -173,14 +184,20 @@ int NativeFileStream::write(const void* buf, unsigned int size) const
 	}
 	if (size > VFS_MAX_IO_CHUNK)
 		size = VFS_MAX_IO_CHUNK;
-	// Windows 没有 O_APPEND，按 axmol 的做法每次写前移到末尾
+	DWORD bytesWritten = 0;
 	if (m_append)
 	{
-		LARGE_INTEGER zero;
-		zero.QuadPart = 0;
-		::SetFilePointerEx(m_handle, zero, nullptr, FILE_END);
+		// Windows 没有 O_APPEND。“先 seek 到末尾再写”在多个句柄同时追加时会互相覆盖；
+		// OVERLAPPED 偏移全为 0xFFFFFFFF 表示“写到文件末尾”，由系统原子地完成，等价于 FILE_APPEND_DATA。
+		// 同步句柄上写完后文件指针位于写入数据之后
+		OVERLAPPED ov{};
+		ov.Offset = 0xFFFFFFFFu;
+		ov.OffsetHigh = 0xFFFFFFFFu;
+		if (::WriteFile(m_handle, buf, size, &bytesWritten, &ov))
+			return static_cast<int>(bytesWritten);
+		errno = EACCES;
+		return -1;
 	}
-	DWORD bytesWritten = 0;
 	if (::WriteFile(m_handle, buf, size, &bytesWritten, nullptr))
 		return static_cast<int>(bytesWritten);
 	errno = EACCES;

@@ -12,7 +12,9 @@ struct NativeOptions
 {
 	bool readOnly = false;        // 只读：所有写操作返回 READ_ONLY
 	bool followSymlinks = true;   // 为 false 时，解析后逃出根目录的路径一律拒绝
-	bool strictCase = false;      // 为 true 时核对真实文件名的大小写，不一致打警告
+	bool strictCase = false;      // 为 true 时核对真实文件名的大小写，不一致打警告（结果不变）
+	bool exactCase = false;       // 为 true 时强制按字节匹配名字：在大小写不敏感的文件系统（Windows、macOS 默认）上，
+	                              // 只差大小写的名字视为不存在，行为与 Linux 一致。每次查找对每一级多一次系统调用
 	bool createRoot = false;      // 根目录不存在时自动创建（mkdir -p）
 };
 
@@ -71,6 +73,11 @@ private:
 
 	// 相对路径转成本机绝对路径，并做路径段检查和 symlink 逃逸检查
 	Error toNative(std::string_view rel, std::string& out) const;
+
+	// 逐级核对 rel 与磁盘上的真实名字（strictCase / exactCase 使用）。
+	// 返回 NOT_FOUND：某一级父目录只差大小写（按字节匹配时父目录不存在）；
+	// 返回 OK 且 lastMismatch=true：最后一级存在一个只差大小写的条目；其余情况返回 OK
+	Error matchCase(std::string_view rel, bool& lastMismatch) const;
 
 	// strictCase 模式下核对大小写，只打警告不影响结果
 	void checkCase(std::string_view rel) const;

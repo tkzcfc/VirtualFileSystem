@@ -118,11 +118,13 @@ Error NativeBackend::toNative(std::string_view rel, std::string& out) const
 	return Error::OK;
 }
 
-void NativeBackend::checkCase(std::string_view rel) const
+Error NativeBackend::matchCase(std::string_view rel, bool& lastMismatch) const
 {
-	// 在大小写不敏感的文件系统上（Windows/macOS），"A.png" 能打开 "a.png"，发布到归档后就找不到了。
-	// 这里逐级列目录比对真实名字，开销较大，所以只在 strictCase 时执行。
+	lastMismatch = false;
 	std::string dir = m_root;
+	if (!dir.empty() && dir.back() == '/')
+		dir.pop_back();   // 根是 "/" 或 "C:/" 时 realName 会再补一个 '/'
+	std::string actual;
 	size_t start = 0;
 	while (start < rel.size())
 	{
@@ -130,26 +132,31 @@ void NativeBackend::checkCase(std::string_view rel) const
 		if (end == std::string_view::npos)
 			end = rel.size();
 		std::string_view seg = rel.substr(start, end - start);
-
-		bool exact = false;
-		std::error_code ec;
-		for (const auto& entry : stdfs::directory_iterator(native::toFsPath(dir), ec))
+		// 不存在或出错时不在这里判断，交给后续的实际操作报告
+		if (native::realName(dir, seg, actual) != Error::OK)
+			return Error::OK;
+		if (actual != seg)
 		{
-			if (native::fromFsPath(entry.path().filename()) == seg)
+			if (end == rel.size())
 			{
-				exact = true;
-				break;
+				lastMismatch = true;
+				return Error::OK;
 			}
-		}
-		if (!exact)
-		{
-			log(LogLevel::WARN, "vfs: 路径大小写与磁盘上的真实名字不一致: " + std::string(rel));
-			return;
+			return Error::NOT_FOUND;
 		}
 		dir.push_back('/');
 		dir.append(seg);
 		start = end + 1;
 	}
+	return Error::OK;
+}
+
+void NativeBackend::checkCase(std::string_view rel) const
+{
+	// 在大小写不敏感的文件系统上（Windows/macOS），"A.png" 能打开 "a.png"，发布到归档后就找不到了
+	bool last = false;
+	if (matchCase(rel, last) != Error::OK || last)
+		log(LogLevel::WARN, "vfs: 路径大小写与磁盘上的真实名字不一致: " + std::string(rel));
 }
 
 Error NativeBackend::stat(std::string_view rel, Stat& out) const
@@ -159,8 +166,18 @@ Error NativeBackend::stat(std::string_view rel, Stat& out) const
 	if (err != Error::OK)
 		return err;
 	err = native::statPath(full, out);
-	if (err == Error::OK && m_options.strictCase && !rel.empty())
-		checkCase(rel);
+	if (err == Error::OK && !rel.empty())
+	{
+		if (m_options.exactCase)
+		{
+			// 按字节匹配：任何一级只差大小写都视为不存在
+			bool last = false;
+			if (matchCase(rel, last) != Error::OK || last)
+				return Error::NOT_FOUND;
+		}
+		else if (m_options.strictCase)
+			checkCase(rel);
+	}
 	return err;
 }
 
@@ -173,6 +190,14 @@ std::unique_ptr<IFileStream> NativeBackend::open(std::string_view rel, IFileStre
 	}
 	std::string full;
 	Error e = toNative(rel, full);
+	if (e == Error::OK && m_options.exactCase)
+	{
+		// 读：只差大小写视为不存在；写：会落到那个只差大小写的已有文件上，返回 EXISTS 而不是悄悄覆盖它
+		bool last = false;
+		e = matchCase(rel, last);
+		if (e == Error::OK && last)
+			e = mode == IFileStream::Mode::READ ? Error::NOT_FOUND : Error::EXISTS;
+	}
 	if (e != Error::OK)
 	{
 		setError(err, e);
@@ -194,37 +219,20 @@ Error NativeBackend::list(std::string_view relDir, const std::function<bool(cons
 	Error err = toNative(relDir, full);
 	if (err != Error::OK)
 		return err;
-
-	Stat st;
-	err = native::statPath(full, st);
-	if (err != Error::OK)
-		return err;
-	if (st.type != FileType::DIR)
-		return Error::NOT_DIR;
-
-	std::error_code ec;
-	stdfs::directory_iterator it(native::toFsPath(full), ec);
-	if (ec)
-		return native::errorFromCode(ec);
+	if (m_options.exactCase && !relDir.empty())
+	{
+		bool last = false;
+		if (matchCase(relDir, last) != Error::OK || last)
+			return Error::NOT_FOUND;
+	}
 
 	DirEntry entry;
-	for (; it != stdfs::directory_iterator(); it.increment(ec))
+	return native::listDir(full, [&](const std::string& name, FileType type)
 	{
-		if (ec)
-			return native::errorFromCode(ec);
-		std::error_code ec2;
-		// is_directory/is_regular_file 会跟随 symlink；特殊文件（设备、管道）直接跳过
-		if (it->is_directory(ec2))
-			entry.type = FileType::DIR;
-		else if (it->is_regular_file(ec2))
-			entry.type = FileType::FILE;
-		else
-			continue;
-		entry.name = native::fromFsPath(it->path().filename());
-		if (!cb(entry))
-			break;
-	}
-	return Error::OK;
+		entry.name = name;
+		entry.type = type;
+		return cb(entry);
+	});
 }
 
 Error NativeBackend::createDir(std::string_view rel)
@@ -235,13 +243,16 @@ Error NativeBackend::createDir(std::string_view rel)
 	Error err = toNative(rel, full);
 	if (err != Error::OK)
 		return err;
-	std::error_code ec;
-	if (stdfs::create_directory(native::toFsPath(full), ec))
-		return Error::OK;
-	if (ec)
-		return native::errorFromCode(ec);
-	// create_directory 返回 false 且无错误：目标已经存在（可能是目录，也可能是文件）
-	return Error::EXISTS;
+	if (m_options.exactCase)
+	{
+		bool last = false;
+		err = matchCase(rel, last);
+		if (err != Error::OK)
+			return err;
+		if (last)
+			return Error::EXISTS;
+	}
+	return native::makeDir(full);
 }
 
 Error NativeBackend::removeDir(std::string_view rel)
@@ -255,15 +266,19 @@ Error NativeBackend::removeDir(std::string_view rel)
 	Error err = toNative(rel, full);
 	if (err != Error::OK)
 		return err;
+	if (m_options.exactCase)
+	{
+		bool last = false;
+		if (matchCase(rel, last) != Error::OK || last)
+			return Error::NOT_FOUND;
+	}
 	Stat st;
 	err = native::statPath(full, st);
 	if (err != Error::OK)
 		return err;
 	if (st.type != FileType::DIR)
 		return Error::NOT_DIR;
-	std::error_code ec;
-	stdfs::remove(native::toFsPath(full), ec);
-	return native::errorFromCode(ec);
+	return native::removeDirPath(full);
 }
 
 Error NativeBackend::removeFile(std::string_view rel)
@@ -274,15 +289,19 @@ Error NativeBackend::removeFile(std::string_view rel)
 	Error err = toNative(rel, full);
 	if (err != Error::OK)
 		return err;
+	if (m_options.exactCase)
+	{
+		bool last = false;
+		if (matchCase(rel, last) != Error::OK || last)
+			return Error::NOT_FOUND;
+	}
 	Stat st;
 	err = native::statPath(full, st);
 	if (err != Error::OK)
 		return err;
 	if (st.type == FileType::DIR)
 		return Error::IS_DIR;
-	std::error_code ec;
-	stdfs::remove(native::toFsPath(full), ec);
-	return native::errorFromCode(ec);
+	return native::removeFilePath(full);
 }
 
 Error NativeBackend::rename(std::string_view from, std::string_view to)
@@ -298,38 +317,35 @@ Error NativeBackend::rename(std::string_view from, std::string_view to)
 	err = toNative(to, fullTo);
 	if (err != Error::OK)
 		return err;
-	std::error_code ec;
-#ifdef _WIN32
-	// MoveFileExW 不能用目录替换已有目录，也不能用文件替换目录。这里按 POSIX rename(2) 的语义预先处理：
-	// 目录 -> 空目录：先删除目标（非原子，但结果与 POSIX 一致）；目录 -> 非空目录：NOT_EMPTY；
-	// 目录 -> 文件：NOT_DIR；文件 -> 目录：IS_DIR
+	if (m_options.exactCase)
 	{
-		stdfs::path pf = native::toFsPath(fullFrom), pt = native::toFsPath(fullTo);
-		stdfs::file_status sf = stdfs::status(pf, ec), stt = stdfs::status(pt, ec);
-		ec.clear();
-		if (stdfs::exists(sf) && stdfs::exists(stt) && !stdfs::equivalent(pf, pt, ec))
+		bool last = false;
+		if (matchCase(from, last) != Error::OK || last)
+			return Error::NOT_FOUND;
+		err = matchCase(to, last);
+		if (err != Error::OK)
+			return err;
+		// 目标只差大小写：如果就是源自身（同一目录、真实名字就是源的名字，即只改大小写）照常改名，
+		// 否则会覆盖另一个名字的文件，返回 EXISTS
+		if (last)
 		{
-			ec.clear();
-			bool fromDir = stdfs::is_directory(sf), toDir = stdfs::is_directory(stt);
-			if (fromDir && !toDir)
-				return Error::NOT_DIR;
-			if (!fromDir && toDir)
-				return Error::IS_DIR;
-			if (fromDir && toDir)
-			{
-				if (!stdfs::is_empty(pt, ec))
-					return ec ? native::errorFromCode(ec) : Error::NOT_EMPTY;
-				stdfs::remove(pt, ec);
-				if (ec)
-					return native::errorFromCode(ec);
-			}
+			const size_t fs = from.rfind('/'), ts = to.rfind('/');
+			std::string_view fromDir = fs == std::string_view::npos ? std::string_view() : from.substr(0, fs);
+			std::string_view toDir = ts == std::string_view::npos ? std::string_view() : to.substr(0, ts);
+			std::string_view fromName = from.substr(fs == std::string_view::npos ? 0 : fs + 1);
+			std::string_view toName = to.substr(ts == std::string_view::npos ? 0 : ts + 1);
+			std::string actual;
+			std::string parent = m_root;
+			if (!parent.empty() && parent.back() == '/')
+				parent.pop_back();
+			if (!toDir.empty())
+				parent.append("/").append(toDir);
+			if (fromDir != toDir || native::realName(parent, toName, actual) != Error::OK || actual != fromName)
+				return Error::EXISTS;
 		}
-		ec.clear();
 	}
-#endif
-	// std::filesystem::rename 在 POSIX 上是 rename(2)，Windows 上是 MoveFileExW(REPLACE_EXISTING)，都是原子的
-	stdfs::rename(native::toFsPath(fullFrom), native::toFsPath(fullTo), ec);
-	return native::errorFromCode(ec);
+	// POSIX 上是 rename(2)；Windows 上按 rename(2) 的语义实现（见 NativeUtils.h）
+	return native::renamePath(fullFrom, fullTo);
 }
 
 std::string NativeBackend::realPath(std::string_view rel) const

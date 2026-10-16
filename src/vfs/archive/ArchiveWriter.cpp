@@ -261,18 +261,17 @@ Error ArchiveWriter::write(std::string_view outPath, ArchiveWriteStats* stats)
 
 	Error e = write(fs, stats);
 	fs.close();
-	std::error_code ec;
 	if (e != Error::OK)
 	{
-		std::filesystem::remove(native::toFsPath(tmp), ec);
+		native::removeFilePath(tmp);
 		return e;
 	}
-	// 写完再 rename，中途崩溃不会留下半个归档
-	std::filesystem::rename(native::toFsPath(tmp), native::toFsPath(out), ec);
-	if (ec)
+	// 写完再 rename，中途崩溃不会留下半个归档。Windows 上即使旧归档正被游戏打开（带 FILE_SHARE_DELETE）也能替换
+	e = native::renamePath(tmp, out);
+	if (e != Error::OK)
 	{
-		std::filesystem::remove(native::toFsPath(tmp), ec);
-		return fail(native::errorFromCode(ec), "无法重命名到: " + out);
+		native::removeFilePath(tmp);
+		return fail(e, "无法重命名到: " + out);
 	}
 	return Error::OK;
 }
