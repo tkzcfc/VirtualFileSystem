@@ -1,33 +1,37 @@
-cmake_minimum_required(VERSION 3.1)
+cmake_minimum_required(VERSION 3.16)
 
 set(lib_name vfs)
-project(${lib_name})
+project(VirtualFileSystem VERSION 2.0.0 LANGUAGES C CXX)
 
-option(VFS_BUILD_EXAMPLES "Build the vfs example programs" ON)
-
-set(CMAKE_CXX_STANDARD 20)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
-
-file(GLOB_RECURSE VFS_SOURCES
-    ${CMAKE_CURRENT_LIST_DIR}/src/*.h
-    ${CMAKE_CURRENT_LIST_DIR}/src/*.cpp
-)
-
-add_library(${lib_name} STATIC ${VFS_SOURCES})
-target_include_directories(${lib_name} PUBLIC ${CMAKE_CURRENT_LIST_DIR}/src/)
-
-find_package(ZLIB QUIET)
-if(ZLIB_FOUND)
-    message(STATUS "Found ZLIB: ${ZLIB_INCLUDE_DIRS}")
-    message(STATUS "ZLIB libraries: ${ZLIB_LIBRARIES}")
-    add_definitions(-DVFS_HAS_ZLIB)
-    target_include_directories(${lib_name} PRIVATE ${ZLIB_INCLUDE_DIRS})
-    target_link_libraries(${lib_name} PRIVATE ZLIB::ZLIB)
+# 是否作为顶层项目构建（被别的项目 add_subdirectory 时默认不构建测试和工具）
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+    set(VFS_IS_TOP_LEVEL ON)
 else()
-    message(STATUS "ZLIB not found!")
+    set(VFS_IS_TOP_LEVEL OFF)
 endif()
 
-if (VFS_BUILD_EXAMPLES)
+list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/cmake)
+include(VfsOptions)
+include(VfsCompiler)
+
+# 第三方依赖（全部 vendored 在 3rd/）
+add_subdirectory(3rd)
+
+# 运行时库
+add_subdirectory(src/vfs)
+
+# 命令行工具
+if(VFS_BUILD_TOOLS)
+    add_subdirectory(tools/vfstool)
+endif()
+
+# 测试
+if(VFS_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
+
+# 示例
+if(VFS_BUILD_EXAMPLES)
     add_subdirectory(examples)
 endif()
