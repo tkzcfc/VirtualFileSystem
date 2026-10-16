@@ -564,12 +564,14 @@ Error VirtualFileSystem::listIn(const MountTable& table, const std::string& path
 	std::map<std::string, FileType, std::less<>> merged;
 	for (const auto& layer : layers)
 	{
-		// 这一层没有该目录（或者是文件）时 list 返回错误，直接跳过
-		layer.mount->backend->list(layer.rel, [&merged](const DirEntry& entry)
+		// 这一层没有该目录（或者是文件）时跳过；其他错误（I/O 错误、权限）原样返回，不能当作空目录
+		e = layer.mount->backend->list(layer.rel, [&merged](const DirEntry& entry)
 		{
 			merged.emplace(entry.name, entry.type);
 			return true;
 		});
+		if (e != Error::OK && e != Error::NOT_FOUND && e != Error::NOT_DIR && e != Error::INVALID_PATH)
+			return e;
 	}
 
 	// 挂载点的祖先合成为虚拟目录：例如挂载在 /a/b，列 / 时能看到 a

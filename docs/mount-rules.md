@@ -39,6 +39,7 @@ MountId mount(mountPoint, backend, MountOptions{priority, flags});
 - 结果**按名字字节序排序**。
 - 回调形式 `bool(const DirEntry&)`，返回 `false` 停止遍历。另有返回 `std::vector<DirEntry>` 的重载和深度优先的 `walk`。
 - 目标是文件返回 `NOT_DIR`，不存在返回 `NOT_FOUND`。
+- 某一层列目录时返回 `NOT_FOUND`/`NOT_DIR`/`INVALID_PATH` 以外的错误（例如 `IO_ERROR`、`PERMISSION_DENIED`）时，整个 `list` 返回该错误，不会把出错的层当作空目录。
 
 ## 5. 写入目标
 
