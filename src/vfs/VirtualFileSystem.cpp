@@ -839,36 +839,66 @@ Error VirtualFileSystem::createDirs(std::string_view rawPath) const
 	if (path == "/")
 		return Error::OK;
 
-	// 逐级处理每个前缀：已是目录则跳过，不存在则创建
-	size_t pos = 1;
-	while (pos <= path.size())
+	// 逐级处理每个前缀：已是目录则跳过，不存在则创建。
+	// 并发：其他线程可能在两步之间删掉刚创建（或刚检查过）的上级目录，此时 createDirIn 返回 NOT_FOUND，
+	// 从头重来；有上限，持续被删除时最终返回 NOT_FOUND（mkdir -p 在同样情况下也会失败）
+	const int MAX_RESTARTS = 16;
+	for (int attempt = 0;; ++attempt)
 	{
-		size_t end = path.find('/', pos);
-		if (end == std::string::npos)
-			end = path.size();
-		std::string prefix = path.substr(0, end);
-		const bool last = end == path.size();
+		bool restart = false;
+		size_t pos = 1;
+		while (pos <= path.size())
+		{
+			size_t end = path.find('/', pos);
+			if (end == std::string::npos)
+				end = path.size();
+			std::string prefix = path.substr(0, end);
+			const bool last = end == path.size();
 
-		std::vector<Layer> layers;
-		int visible = -1;
-		Stat st;
-		e = resolve(*table, prefix, layers, visible, st);
-		if (e == Error::OK)
-		{
-			if (st.type != FileType::DIR)
-				return last ? Error::EXISTS : Error::NOT_DIR;
-		}
-		else if (e == Error::NOT_FOUND)
-		{
-			e = createDirIn(*table, prefix);
-			if (e != Error::OK && e != Error::EXISTS)
+			std::vector<Layer> layers;
+			int visible = -1;
+			Stat st;
+			e = resolve(*table, prefix, layers, visible, st);
+			if (e == Error::NOT_FOUND)
+			{
+				e = createDirIn(*table, prefix);
+				if (e == Error::EXISTS)
+				{
+					// 并发创建了同名项：确认它是目录（也可能是文件，或已经又被删掉）
+					e = resolve(*table, prefix, layers, visible, st);
+				}
+				else if (e == Error::NOT_FOUND && pos > 1)
+				{
+					restart = true;   // 上级目录在检查之后消失了
+					break;
+				}
+				else if (e != Error::OK)
+					return e;
+				else
+				{
+					pos = end + 1;
+					continue;
+				}
+			}
+			if (e == Error::OK)
+			{
+				if (st.type != FileType::DIR)
+					return last ? Error::EXISTS : Error::NOT_DIR;
+			}
+			else if (e == Error::NOT_FOUND && pos > 1)
+			{
+				restart = true;
+				break;
+			}
+			else
 				return e;
+			pos = end + 1;
 		}
-		else
-			return e;
-		pos = end + 1;
+		if (!restart)
+			return Error::OK;
+		if (attempt >= MAX_RESTARTS)
+			return Error::NOT_FOUND;
 	}
-	return Error::OK;
 }
 
 namespace

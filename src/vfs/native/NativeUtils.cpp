@@ -56,8 +56,20 @@ std::string fromFsPath(const std::filesystem::path& p)
 	return s;
 }
 
+namespace
+{
+thread_local int t_lastOsError = 0;
+}
+
+int lastOsError()
+{
+	return t_lastOsError;
+}
+
 Error errorFromErrno(int e)
 {
+	if (e != 0)
+		t_lastOsError = e;
 	switch (e)
 	{
 	case 0:
@@ -151,6 +163,8 @@ std::wstring toWidePath(std::string_view utf8)
 
 Error errorFromWin32(unsigned long code)
 {
+	if (code != 0)
+		t_lastOsError = static_cast<int>(code);
 	switch (code)
 	{
 	case ERROR_SUCCESS:
@@ -195,19 +209,27 @@ Error errorFromWin32(unsigned long code)
 
 bool isTransientWin32(unsigned long code)
 {
+	// ERROR_INVALID_NAME：VFS 传下来的名字都已通过可移植性检查，仍出现时是并发删除中的瞬时状态
+	// （Wine 上目录正被删除时可见）；对真正非法的名字只多花约 63ms
 	return code == ERROR_ACCESS_DENIED || code == ERROR_SHARING_VIOLATION || code == ERROR_LOCK_VIOLATION ||
-		   code == ERROR_DELETE_PENDING;
+		   code == ERROR_DELETE_PENDING || code == ERROR_INVALID_NAME;
 }
 
 unsigned long retryTransient(const std::function<unsigned long()>& fn)
 {
-	// 第一次不等待；之后 1、2、4、8、16、32ms，总共最多约 63ms。真正的权限错误也只多花这么多时间
-	static const DWORD delays[] = {0, 1, 2, 4, 8, 16, 32};
+	// 第一次不等待；之后 1、2、4、8、16、32ms，总共最多约 63ms。真正的权限错误（ACCESS_DENIED）也只多花这么多时间。
+	// SHARING_VIOLATION / LOCK_VIOLATION 一定是其他句柄造成的（杀毒软件、索引服务、本进程其他线程的并发操作），
+	// 不会是真正的权限问题，额外再等 3 次 64ms，总共约 255ms
+	static const DWORD delays[] = {0, 1, 2, 4, 8, 16, 32, 64, 64, 64};
+	const size_t shortCount = 7;
 	unsigned long code = ERROR_SUCCESS;
-	for (DWORD d : delays)
+	for (size_t i = 0; i < sizeof(delays) / sizeof(delays[0]); ++i)
 	{
-		if (d)
-			::Sleep(d);
+		const bool sharing = code == ERROR_SHARING_VIOLATION || code == ERROR_LOCK_VIOLATION;
+		if (i >= shortCount && !sharing)
+			break;
+		if (delays[i])
+			::Sleep(delays[i]);
 		code = fn();
 		if (!isTransientWin32(code))
 			break;
@@ -267,6 +289,7 @@ static std::string_view parentOf(std::string_view utf8Path)
  */
 static Error errorForPath(DWORD code, std::string_view utf8Path, bool mustExist = false)
 {
+	t_lastOsError = static_cast<int>(code);
 	if (code == ERROR_PATH_NOT_FOUND || code == ERROR_DIRECTORY)
 		return classifyMissing(utf8Path);
 	if (mustExist && (code == ERROR_ACCESS_DENIED || code == ERROR_SHARING_VIOLATION ||
@@ -509,18 +532,55 @@ Error removeFilePath(std::string_view path)
 	return errorForPath(code, path, true);
 }
 
+namespace
+{
+Error renamePathOnce(std::string_view from, std::string_view to);
+}
+
 Error renamePath(std::string_view from, std::string_view to)
+{
+	// renamePathOnce 对目录覆盖、文件覆盖目录要先做几次检查（MoveFileExW 自己不按 rename(2) 处理这些），
+	// 这些检查在不同时刻观察源和目标，并发改名时可能看到“源和目标同时存在”这种在原子 rename 下
+	// 不可能出现的状态（例如另一线程刚把源改名成目标，再有线程改回来）。
+	// 由预检查得出的冲突结果（NOT_EMPTY / NOT_DIR / IS_DIR）重新执行确认，真实的冲突是稳定的，
+	// 每次都会得到同样结果；竞争造成的误判会在重试中消失。最多 4 次，只在出错路径上发生
+	Error err = Error::OK;
+	for (int attempt = 0; attempt < 4; ++attempt)
+	{
+		err = renamePathOnce(from, to);
+		if (err != Error::NOT_EMPTY && err != Error::NOT_DIR && err != Error::IS_DIR)
+			return err;
+		if (attempt > 0)
+			::Sleep(static_cast<DWORD>(attempt));
+	}
+	return err;
+}
+
+namespace
+{
+Error renamePathOnce(std::string_view from, std::string_view to)
 {
 	const std::wstring wfrom = toWidePath(from);
 	const std::wstring wto = toWidePath(to);
-	DWORD fa = ::GetFileAttributesW(wfrom.c_str());
+	// 预检查本身也会遇到并发操作造成的短暂错误，同样有限重试
+	DWORD fa = INVALID_FILE_ATTRIBUTES;
+	DWORD faCode = retryTransient([&]() -> unsigned long
+	{
+		fa = ::GetFileAttributesW(wfrom.c_str());
+		return fa != INVALID_FILE_ATTRIBUTES ? ERROR_SUCCESS : ::GetLastError();
+	});
 	if (fa == INVALID_FILE_ATTRIBUTES)
-		return errorForPath(::GetLastError(), from, true);
+		return errorForPath(faCode, from, true);
 	const bool fromDir = (fa & FILE_ATTRIBUTE_DIRECTORY) != 0;
 
 	// MoveFileExW 不能用目录替换目录，也不能用文件替换目录。按 POSIX rename(2) 的语义预先处理。
 	// 只差大小写的同一个名字（Windows 上是同一个文件）不做这些检查，单独处理
-	DWORD ta = ::GetFileAttributesW(wto.c_str());
+	DWORD ta = INVALID_FILE_ATTRIBUTES;
+	retryTransient([&]() -> unsigned long
+	{
+		ta = ::GetFileAttributesW(wto.c_str());
+		return ta != INVALID_FILE_ATTRIBUTES ? ERROR_SUCCESS : ::GetLastError();
+	});
 	const bool sameName = ::CompareStringOrdinal(wfrom.c_str(), static_cast<int>(wfrom.size()), wto.c_str(),
 												 static_cast<int>(wto.size()), TRUE) == CSTR_EQUAL;
 	if (sameName)
@@ -558,13 +618,18 @@ Error renamePath(std::string_view from, std::string_view to)
 			// 这些预检查不是原子的：其他线程可能同时移走了源或目标。出错时重新确认两者，
 			// 源已不存在报告 NOT_FOUND（与 rename(2) 一致），目标已不存在则直接改名
 			DWORD code = ERROR_SUCCESS;
-			const bool empty = dirIsEmpty(wto, code);
+			bool empty = false;
+			retryTransient([&]() -> unsigned long
+			{
+				empty = dirIsEmpty(wto, code);
+				return code;
+			});
 			if (code != ERROR_SUCCESS)
 			{
+				// 无法确认目标是否为空：源已消失报告 NOT_FOUND；否则交给 MoveFileExW 给出权威结果
+				// （目标仍存在时它返回 ALREADY_EXISTS → NOT_EMPTY，目标已消失时直接改名）
 				if (vanished(from))
 					return classifyMissing(from);
-				if (!vanished(to))
-					return errorFromWin32(code);
 			}
 			else if (!empty)
 				return vanished(from) ? classifyMissing(from) : Error::NOT_EMPTY;
@@ -596,11 +661,19 @@ Error renamePath(std::string_view from, std::string_view to)
 	if (code == ERROR_SUCCESS)
 		return Error::OK;
 	if (code == ERROR_ALREADY_EXISTS || code == ERROR_FILE_EXISTS)
+	{
+		// 源句柄打开之后被其他线程改名成了目标名（句柄跟着对象走），再改名到目标就成了“目标已存在”；
+		// 按原子 rename 的语义这次改名发生时源已不存在
+		if (vanished(from))
+			return classifyMissing(from);
 		return fromDir ? Error::NOT_EMPTY : Error::EXISTS;
+	}
 	if (code == ERROR_PATH_NOT_FOUND)
 		return vanished(from) ? classifyMissing(from) : classifyMissing(to);
 	return errorForPath(code, from, true);
 }
+
+} // namespace
 
 #else
 
@@ -700,9 +773,27 @@ Error listDir(std::string_view path, const std::function<bool(const std::string&
 Error makeDir(std::string_view path)
 {
 	std::string p(path);
-	if (::mkdir(p.c_str(), 0777) == 0)
-		return Error::OK;
-	return errorFromErrno(errno);
+	const size_t slash = p.find_last_of('/');
+	const std::string parent = slash != std::string::npos && slash > 0 ? p.substr(0, slash) : std::string();
+	Error err = Error::OK;
+	// 父目录或同名目录正被其他线程删除时，不同系统给出的 errno 不一样：Linux 是 ENOENT，
+	// macOS 上观察到映射成 INVALID_PATH 的错误码。对这类“意外”错误重新确认：父目录已经不存在按 NOT_FOUND
+	// 报告，否则（竞争已经结束）重试，最多 3 次
+	for (int attempt = 0; attempt < 3; ++attempt)
+	{
+		if (::mkdir(p.c_str(), 0777) == 0)
+			return Error::OK;
+		const int e = errno;
+		err = errorFromErrno(e);
+		if (err != Error::INVALID_PATH && err != Error::IO_ERROR)
+			return err;
+		struct stat st;
+		if (!parent.empty() && ::stat(parent.c_str(), &st) != 0 && errno == ENOENT)
+			return Error::NOT_FOUND;
+		if (::stat(p.c_str(), &st) == 0)
+			return Error::EXISTS;
+	}
+	return err;
 }
 
 Error removeDirPath(std::string_view path)

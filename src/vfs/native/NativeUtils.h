@@ -50,6 +50,12 @@ Error statPath(std::string_view utf8Path, Stat& out);
 Error listDir(std::string_view path, const std::function<bool(const std::string& name, FileType type)>& cb);
 
 /**
+ * 当前线程最近一次本机操作失败时的原始错误码（POSIX 为 errno，Windows 为 GetLastError() 的值），
+ * 在错误码映射时记录，只用于诊断（日志、测试输出）。没有失败过时为 0。
+ */
+int lastOsError();
+
+/**
  * 查询目录 dir 中名为 name 的条目在磁盘上的真实名字（大小写不敏感的文件系统上可能与 name 只差大小写）。
  * Windows 用 FindFirstFileExW，macOS 用 getattrlist(ATTR_CMN_NAME)，都是一次系统调用；
  * 其他平台的文件系统按字节匹配，条目存在时 actual 就是 name。
