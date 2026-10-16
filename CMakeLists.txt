@@ -35,3 +35,8 @@ endif()
 if(VFS_BUILD_EXAMPLES)
     add_subdirectory(examples)
 endif()
+
+# 性能基准
+if(VFS_BUILD_BENCH)
+    add_subdirectory(bench)
+endif()

@@ -74,6 +74,7 @@ cd build && ctest --output-on-failure
 | `VFS_BUILD_TOOLS` | 作为顶层项目时 ON | 构建 `vfstool` |
 | `VFS_BUILD_TESTS` | 作为顶层项目时 ON | 构建测试（会同时构建 `vfstool`） |
 | `VFS_BUILD_EXAMPLES` | OFF | 构建 `examples/` |
+| `VFS_BUILD_BENCH` | OFF | 构建性能基准 `vfs_bench`，见 [性能基准](docs/benchmark.md) |
 | `VFS_WITH_AXMOL` | OFF | 使用 axmol 的 `ax::IFileStream`，见 [接入 axmol](docs/integration-axmol.md) |
 | `VFS_WARNINGS_AS_ERRORS` | OFF | 把编译警告当作错误 |
 
@@ -101,10 +102,21 @@ VFS_TEST_SCALE=5 ./build/tests/vfs_tests     # 压力与随机测试的轮数放
 ./build/tests/vfs_tests --test-suite=stress  # 只跑某个 suite（doctest 的其他参数同样可用）
 ```
 
+### 性能基准
+
+```bash
+cmake -S . -B build-bench -DCMAKE_BUILD_TYPE=Release -DVFS_BUILD_BENCH=ON -DVFS_BUILD_TESTS=OFF
+cmake --build build-bench --target vfs_bench -j
+./build-bench/bench/vfs_bench --csv bench.csv --md bench.md   # 全部场景；--help 查看 --scale / --threads / --filter 等选项
+```
+
+`vfs_bench` 对比 `std::fstream`、`FILE*`、POSIX `pread` / Win32 `ReadFile` 与各种后端和分层组合的读、写、元数据性能，输出吞吐、p50/p99 延迟和相对 stdio 的倍数。本机结果与分析见 [docs/benchmark.md](docs/benchmark.md)。
+
 ## 目录结构
 
 ```
 3rd/            第三方库（固定版本）：doctest、xxHash、LZ4、CLI11
+bench/          性能基准 vfs_bench（默认不构建）
 cmake/          构建选项与编译器设置
 docs/           文档
 examples/       示例（默认不构建）
@@ -126,5 +138,6 @@ tools/vfstool/  命令行工具
 | [docs/api.md](docs/api.md) | 主要公开 API、`IFileStream` 语义、自定义后端 |
 | [docs/format.md](docs/format.md) | `.vfs` 二进制格式规范 |
 | [docs/vfstool.md](docs/vfstool.md) | 命令行工具参考 |
+| [docs/benchmark.md](docs/benchmark.md) | 性能基准：构建运行方法、本机结果与开销分析 |
 | [docs/integration-axmol.md](docs/integration-axmol.md) | 接入 axmol 引擎 |
 | [docs/style.md](docs/style.md) | 代码风格 |
