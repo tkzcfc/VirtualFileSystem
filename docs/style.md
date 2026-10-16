@@ -58,6 +58,6 @@
 
 ## 测试
 
-- 使用 doctest，每个模块一个测试目录（`tests/union/` 等）；`TEST_SUITE("union")` 自动注册为 ctest 用例 `vfs.union`。
+- 使用 doctest，每个模块一个测试目录（`tests/union/` 等）；`TEST_SUITE("union")` 自动注册为 ctest 用例 `vfs.union`。新 suite 需要加到 `tests/CMakeLists.txt` 的 suite 列表中。耗时长的用例加 `* doctest::skip(!test::slowEnabled())`，只在 `VFS_TEST_SLOW=1` 时运行；压力 / 随机测试的轮数乘以 `test::scale()`（`VFS_TEST_SCALE`），保证默认 `ctest` 在一分钟内完成。
 - 测试名用中文描述行为，例如 `"removeDir：只读层贡献了子孙时返回 READ_ONLY，什么都不删"`。
 - 测试只写入临时目录，结束时清理。

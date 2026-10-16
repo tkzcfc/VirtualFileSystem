@@ -1,5 +1,6 @@
 #include "TestUtils.h"
 #include <atomic>
+#include <cstdlib>
 #include <fstream>
 #include <random>
 
@@ -152,6 +153,19 @@ vfs::Error buildArchive(const std::string& outPath, const std::vector<ArchiveFil
 			return e;
 	}
 	return writer.write(outPath, stats);
+}
+
+bool slowEnabled()
+{
+	const char* v = std::getenv("VFS_TEST_SLOW");
+	return v && v[0] && std::string_view(v) != "0";
+}
+
+int scale()
+{
+	const char* v = std::getenv("VFS_TEST_SCALE");
+	int n = v ? std::atoi(v) : 1;
+	return n > 0 ? n : 1;
 }
 
 } // namespace test

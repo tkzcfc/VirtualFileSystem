@@ -92,6 +92,17 @@ struct ArchiveFile
 	vfs::FileWriteOptions options;
 };
 
+/**
+ * 慢测试开关：环境变量 VFS_TEST_SLOW=1 时返回 true。
+ * 慢测试统一写成 TEST_CASE("..." * doctest::skip(!test::slowEnabled()))，默认运行时跳过。
+ */
+bool slowEnabled();
+
+/**
+ * 测试规模系数：环境变量 VFS_TEST_SCALE（默认 1）。压力测试的轮数按它放大。
+ */
+int scale();
+
 vfs::Error buildArchive(const std::string& outPath, const std::vector<ArchiveFile>& files,
 						const vfs::ArchiveWriteOptions& options = {}, vfs::ArchiveWriteStats* stats = nullptr);
 

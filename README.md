@@ -84,7 +84,22 @@ add_subdirectory(VirtualFileSystem)
 target_link_libraries(my_game PRIVATE vfs)   # 或 vfs::vfs
 ```
 
-测试使用 doctest，按 suite 注册为 ctest 用例：`vfs.path`、`vfs.union`、`vfs.native`、`vfs.memory`、`vfs.stream`、`vfs.archive`、`vfs.crypto`、`vfs.tool`、`vfs.concurrency`，以及命令行端到端测试 `vfstool.e2e`。
+测试使用 doctest，按 suite 注册为 ctest 用例：`vfs.path`、`vfs.union`、`vfs.native`、`vfs.memory`、`vfs.stream`、`vfs.archive`、`vfs.crypto`、`vfs.tool`、`vfs.concurrency`，以及命令行端到端测试 `vfstool.e2e`。另有四组覆盖面更广的测试：
+
+| suite | 内容 |
+|---|---|
+| `vfs.matrix` | 同一组文件 / 目录 / 改名 / 流操作在 9 种后端与分层组合上逐一运行（本机、内存、嵌套挂载、归档在本机之下、内存叠在归档之上、优先级相同、三层叠加、只读本机目录等） |
+| `vfs.stress` | 多线程压力：同目录与不同目录的并发增删改读、改名、读写竞争、并发追加 copy-up、列目录与修改并发、挂载 / 卸载 / remount 抖动、同一归档上的大量句柄 |
+| `vfs.model` | 随机操作序列与参考模型逐步比对（错误码、合并视图、写入层内容） |
+| `vfs.extreme` | 极端情况：空文件、海量条目、深路径与超长名字、Unicode 与大小写、外部修改、只读目录、归档逐区域损坏与伪造索引、故障注入、句柄耗尽、超过 4 GB 的稀疏文件 |
+
+默认的 `ctest` 在一分钟内跑完。耗时长的用例默认跳过，用环境变量打开：
+
+```bash
+VFS_TEST_SLOW=1 ./build/tests/vfs_tests      # 包含慢速用例（10 万条目归档、>4 GB 稀疏文件、长时间模型比对）
+VFS_TEST_SCALE=5 ./build/tests/vfs_tests     # 压力与随机测试的轮数放大 5 倍
+./build/tests/vfs_tests --test-suite=stress  # 只跑某个 suite（doctest 的其他参数同样可用）
+```
 
 ## 目录结构
 
