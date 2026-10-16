@@ -5,10 +5,22 @@
 #include "vfs/VirtualFileSystem.h"
 #include "vfs/archive/ArchiveWriter.h"
 #include <filesystem>
+#include <map>
+#include <mutex>
+#include <ostream>
 #include <string>
 #include <vector>
 
-// 让 doctest 在断言失败时打印错误码名字
+// 让 doctest 在断言失败时打印错误码名字。
+// 注意：doctest 对枚举优先按底层整数打印（不会用 StringMaker 特化），必须提供 operator<<
+namespace vfs
+{
+inline std::ostream& operator<<(std::ostream& os, Error e)
+{
+	return os << errorName(e);
+}
+} // namespace vfs
+
 namespace doctest
 {
 template <>
@@ -97,6 +109,121 @@ struct ArchiveFile
  * 慢测试统一写成 TEST_CASE("..." * doctest::skip(!test::slowEnabled()))，默认运行时跳过。
  */
 bool slowEnabled();
+
+/**
+ * 运行时探测本机临时目录所在文件系统是否区分大小写（Linux 通常是，Windows/macOS 默认不是）。
+ * 结果缓存，只探测一次。
+ */
+bool nativeCaseSensitive();
+
+/**
+ * 运行时探测：本机文件系统能否替换（rename 覆盖）一个正被打开的文件。
+ * POSIX 总是可以；Windows 需要 POSIX 语义的 FileRenameInfoEx（Windows 10 1709+ 的 NTFS），
+ * FAT/exFAT、部分网络盘、旧系统和 Wine 不支持，此时替换会在其他句柄关闭前返回 PERMISSION_DENIED。
+ * 结果缓存，只探测一次。
+ */
+bool nativeReplaceOpenFile();
+
+/**
+ * 线程安全的错误码直方图：并发测试记录每种返回码出现的次数，失败时整体打印，方便跨平台诊断。
+ */
+class ErrorHistogram
+{
+public:
+	void add(vfs::Error e)
+	{
+		std::lock_guard<std::mutex> lock(m_mutex);
+		++m_counts[e];
+	}
+
+	size_t count(vfs::Error e) const
+	{
+		std::lock_guard<std::mutex> lock(m_mutex);
+		auto it = m_counts.find(e);
+		return it == m_counts.end() ? 0 : it->second;
+	}
+
+	// 形如 "OK=120 NOT_FOUND=3 PERMISSION_DENIED=1"
+	std::string str() const
+	{
+		std::lock_guard<std::mutex> lock(m_mutex);
+		std::string s;
+		for (const auto& [e, n] : m_counts)
+		{
+			if (!s.empty())
+				s.push_back(' ');
+			s += vfs::errorName(e);
+			s += '=';
+			s += std::to_string(n);
+		}
+		return s.empty() ? "<空>" : s;
+	}
+
+private:
+	mutable std::mutex m_mutex;
+	std::map<vfs::Error, size_t> m_counts;
+};
+
+/**
+ * 线程安全的失败记录：计数，并保留前几条带上下文（实际错误码、路径）的描述，断言失败时打印。
+ * ++failures 仍可用（不带详情）。
+ */
+class FailureLog
+{
+public:
+	static constexpr size_t MAX_DETAILS = 8;
+
+	void add(const std::string& what)
+	{
+		std::lock_guard<std::mutex> lock(m_mutex);
+		++m_count;
+		if (m_details.size() < MAX_DETAILS)
+			m_details.push_back(what);
+	}
+
+	FailureLog& operator++()
+	{
+		add("<无详情>");
+		return *this;
+	}
+
+	// err 不是 OK 时记录 "what -> 错误码名"
+	void expectOk(vfs::Error err, const std::string& what)
+	{
+		if (err != vfs::Error::OK)
+			add(what + " -> " + vfs::errorName(err));
+	}
+
+	// 内容不一致时记录长度与开头
+	void expectEq(const std::string& got, const std::string& want, const std::string& what)
+	{
+		if (got != want)
+			add(what + " -> 读到 " + std::to_string(got.size()) + " 字节 \"" + got.substr(0, 40) + "\"，期望 " +
+				std::to_string(want.size()) + " 字节 \"" + want.substr(0, 40) + "\"");
+	}
+
+	size_t load() const
+	{
+		std::lock_guard<std::mutex> lock(m_mutex);
+		return m_count;
+	}
+
+	std::string str() const
+	{
+		std::lock_guard<std::mutex> lock(m_mutex);
+		std::string s = std::to_string(m_count) + " 次失败";
+		for (const auto& d : m_details)
+			s += "\n  " + d;
+		if (m_count > m_details.size())
+			s += "\n  ...";
+		return s;
+	}
+
+private:
+	mutable std::mutex m_mutex;
+	size_t m_count = 0;
+	std::vector<std::string> m_details;
+};
 
 /**
  * 测试规模系数：环境变量 VFS_TEST_SCALE（默认 1）。压力测试的轮数按它放大。

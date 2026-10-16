@@ -445,9 +445,23 @@ TEST_SUITE("matrix")
 		CHECK_FALSE(e.fs.exists("/w/CASE.TXT"));
 		CHECK(e.fs.removeFile("/w/case.txt") == Error::OK);
 		CHECK(readAll(e.fs, "/w/Case.txt") == "upper");
-		// 底层文件按字节匹配
-		CHECK_FALSE(e.fs.exists("/w/BASE/a.txt"));
-		CHECK_FALSE(e.fs.exists("/w/base/A.txt"));
+		// 底层文件：内存、归档按字节匹配；本机底层在大小写不敏感的文件系统上（未开 exactCase）
+		// 会匹配到只差大小写的名字，这是 docs/mount-rules.md 中记录的平台差异
+		INFO("nativeBase=" << e.nativeBase << " nativeCaseSensitive=" << test::nativeCaseSensitive());
+		CHECK(e.fs.exists("/w/BASE/a.txt") == !e.baseCaseSensitive());
+		CHECK(e.fs.exists("/w/base/A.txt") == !e.baseCaseSensitive());
+	}
+
+	TEST_CASE_TEMPLATE("名字：大小写不敏感的写入层上只差大小写的名字指向同一文件", E, VFS_ENVS)
+	{
+		E e;
+		if (e.caseSensitive())
+			return;
+		// Windows / macOS 默认文件系统：这是平台能力，VFS 不做模拟（需要一致行为请开 NativeOptions::exactCase）
+		REQUIRE(e.fs.writeFile("/w/Case.txt", "upper") == Error::OK);
+		REQUIRE(e.fs.writeFile("/w/case.txt", "lower") == Error::OK);
+		CHECK(readAll(e.fs, "/w/Case.txt") == "lower");
+		CHECK(e.fs.exists("/w/CASE.TXT"));
 	}
 
 	TEST_CASE_TEMPLATE("路径变体：. .. 重复斜杠 反斜杠 结尾斜杠 无前导斜杠 都指向同一文件", E, VFS_ENVS)

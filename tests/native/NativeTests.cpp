@@ -124,6 +124,69 @@ TEST_SUITE("native")
 		CHECK_FALSE(dir.exists("d"));
 	}
 
+
+	TEST_CASE("exactCase：只差大小写的名字视为不存在，所有平台行为一致")
+	{
+		test::TempDir dir;
+		dir.write("Data/Hero.png", "hero");
+		VirtualFileSystem fs;
+		NativeOptions o;
+		o.exactCase = true;
+		REQUIRE(fs.mountNative("/", dir.path(), {}, o) != 0);
+		INFO("nativeCaseSensitive=" << test::nativeCaseSensitive());
+
+		// 精确名字正常工作
+		CHECK(test::readAll(fs, "/Data/Hero.png") == "hero");
+		CHECK(test::listNames(fs, "/Data") == Names{"Hero.png"});
+		// 最后一级或父目录只差大小写：都不存在
+		CHECK_FALSE(fs.exists("/Data/hero.png"));
+		CHECK_FALSE(fs.exists("/data/Hero.png"));
+		CHECK(test::readAll(fs, "/data/Hero.png") == "<ERR:NOT_FOUND>");
+		CHECK(fs.list("/data", [](const DirEntry&) { return true; }) == Error::NOT_FOUND);
+		CHECK(fs.removeFile("/Data/HERO.png") == Error::NOT_FOUND);
+		CHECK(fs.rename("/Data/HERO.png", "/Data/x.png") == Error::NOT_FOUND);
+		CHECK(fs.createDir("/data/sub") == Error::NOT_FOUND);
+		CHECK(fs.removeDir("/DATA") == Error::NOT_FOUND);
+
+		// 写入只差大小写的名字：
+		// 区分大小写的文件系统上是另一个文件；不区分的文件系统上会落到已有文件，拒绝为 EXISTS 而不是悄悄覆盖
+		Error w = fs.writeFile("/Data/hero.png", "lower");
+		Error d = fs.createDir("/data");
+		if (test::nativeCaseSensitive())
+		{
+			CHECK(w == Error::OK);
+			CHECK(d == Error::OK);
+			CHECK(test::readAll(fs, "/Data/hero.png") == "lower");
+		}
+		else
+		{
+			CHECK(w == Error::EXISTS);
+			CHECK(d == Error::EXISTS);
+			CHECK(dir.read("Data/Hero.png") == "hero");
+			// 只改大小写的改名是允许的
+			CHECK(fs.rename("/Data/Hero.png", "/Data/HERO.png") == Error::OK);
+			CHECK(test::listNames(fs, "/Data") == Names{"HERO.png"});
+			CHECK(test::readAll(fs, "/Data/HERO.png") == "hero");
+			CHECK_FALSE(fs.exists("/Data/Hero.png"));
+		}
+	}
+
+	TEST_CASE("exactCase 关闭（默认）：本机查找随文件系统的大小写规则")
+	{
+		test::TempDir dir;
+		dir.write("Data/Hero.png", "hero");
+		VirtualFileSystem fs;
+		REQUIRE(fs.mountNative("/", dir.path()) != 0);
+		INFO("nativeCaseSensitive=" << test::nativeCaseSensitive());
+		CHECK(fs.exists("/data/hero.png") == !test::nativeCaseSensitive());
+		// strictCase 只打警告，不改变结果
+		NativeOptions o;
+		o.strictCase = true;
+		VirtualFileSystem warn;
+		REQUIRE(warn.mountNative("/", dir.path(), {}, o) != 0);
+		CHECK(warn.exists("/data/hero.png") == !test::nativeCaseSensitive());
+	}
+
 #if !defined(_WIN32)
 	TEST_CASE("followSymlinks=false：逃出根目录的符号链接被拒绝")
 	{

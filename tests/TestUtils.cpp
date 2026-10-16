@@ -1,4 +1,5 @@
 #include "TestUtils.h"
+#include "vfs/native/NativeUtils.h"
 #include <atomic>
 #include <cstdlib>
 #include <fstream>
@@ -31,10 +32,36 @@ TempDir::TempDir()
 	m_path = fromPath(p);
 }
 
+// 递归删除，走 native:: 的操作，Windows 上超过 MAX_PATH 的深层目录也能删掉
+static void removeTree(const std::string& path)
+{
+	std::vector<std::pair<std::string, bool>> children;
+	vfs::native::listDir(path, [&](const std::string& name, vfs::FileType type) {
+		children.emplace_back(path + "/" + name, type == vfs::FileType::DIR);
+		return true;
+	});
+	for (const auto& [child, isDir] : children)
+	{
+		// listDir 会跟随符号链接，链接本身只删除链接，绝不递归进去
+		std::error_code ec;
+		if (stdfs::is_symlink(vfs::native::toFsPath(child), ec))
+			stdfs::remove(vfs::native::toFsPath(child), ec);
+		else if (isDir)
+			removeTree(child);
+		else
+			vfs::native::removeFilePath(child);
+	}
+	vfs::native::removeDirPath(path);
+}
+
 TempDir::~TempDir()
 {
 	std::error_code ec;
 	stdfs::remove_all(u8(m_path), ec);
+	// 兜底：Windows 上标准库（如 MinGW 的 directory_iterator）处理不了超过 MAX_PATH 的深层目录
+	vfs::Stat st;
+	if (vfs::native::statPath(m_path, st) == vfs::Error::OK)
+		removeTree(m_path);
 }
 
 std::string TempDir::sub(std::string_view rel) const
@@ -153,6 +180,30 @@ vfs::Error buildArchive(const std::string& outPath, const std::vector<ArchiveFil
 			return e;
 	}
 	return writer.write(outPath, stats);
+}
+
+bool nativeCaseSensitive()
+{
+	static const bool s_value = [] {
+		TempDir dir;
+		dir.write("CaseProbe.txt", "x");
+		return !dir.exists("caseprobe.txt");
+	}();
+	return s_value;
+}
+
+bool nativeReplaceOpenFile()
+{
+	static const bool s_value = [] {
+		TempDir dir;
+		dir.write("target.txt", "old");
+		dir.write("source.txt", "new");
+		vfs::VirtualFileSystem fs;
+		fs.mountNative("/", dir.path());
+		auto held = fs.openFileStream("/target.txt", vfs::IFileStream::Mode::READ);
+		return held && vfs::native::renamePath(dir.sub("source.txt"), dir.sub("target.txt")) == vfs::Error::OK;
+	}();
+	return s_value;
 }
 
 bool slowEnabled()

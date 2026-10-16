@@ -9,6 +9,7 @@
 #include <random>
 #include <set>
 #include <thread>
+#include <type_traits>
 
 using namespace vfs;
 using Mode = IFileStream::Mode;
@@ -99,7 +100,7 @@ TEST_SUITE("stress")
 		E e;
 		REQUIRE(e.fs.createDirs("/s/shared") == Error::OK);
 		const int rounds = 120 * test::scale();
-		std::atomic<int> failures{0};
+		test::FailureLog failures;
 		std::atomic<bool> done{false};
 
 		std::thread lister([&]()
@@ -114,7 +115,7 @@ TEST_SUITE("stress")
 				});
 				if (err != Error::OK || !std::is_sorted(names.begin(), names.end()) ||
 					std::adjacent_find(names.begin(), names.end()) != names.end())
-					++failures;
+					failures.add(std::string("list -> ") + errorName(err) + "，" + std::to_string(names.size()) + " 项");
 			}
 		});
 
@@ -124,16 +125,15 @@ TEST_SUITE("stress")
 			{
 				const std::string path = "/s/shared/t" + std::to_string(t) + "_" + std::to_string(i % 10);
 				const std::string data = payload(t, i);
-				if (e.fs.writeFile(path, data) != Error::OK)
-					++failures;
-				if (test::readAll(e.fs, path) != data)
-					++failures;
-				if (i % 3 == 0 && e.fs.removeFile(path) != Error::OK)
-					++failures;
+				failures.expectOk(e.fs.writeFile(path, data), "writeFile " + path);
+				failures.expectEq(test::readAll(e.fs, path), data, "readAll " + path);
+				if (i % 3 == 0)
+					failures.expectOk(e.fs.removeFile(path), "removeFile " + path);
 			}
 		});
 		done = true;
 		lister.join();
+		INFO("失败详情: " << failures.str());
 		CHECK(failures.load() == 0);
 		// 结束状态：每个线程的 10 个槽位中，最后一轮没有删除的文件内容正确
 		for (int t = 0; t < THREADS; ++t)
@@ -157,23 +157,21 @@ TEST_SUITE("stress")
 	{
 		E e;
 		const int rounds = 40 * test::scale();
-		std::atomic<int> failures{0};
+		test::FailureLog failures;
 		runThreads(THREADS, [&](int t)
 		{
 			const std::string root = "/s/own" + std::to_string(t);
 			for (int i = 0; i < rounds; ++i)
 			{
 				const std::string d = root + "/a" + std::to_string(i % 4) + "/b/c";
-				if (e.fs.createDirs(d) != Error::OK)
-					++failures;
-				if (e.fs.writeFile(d + "/f.txt", payload(t, i)) != Error::OK)
-					++failures;
-				if (test::readAll(e.fs, d + "/f.txt") != payload(t, i))
-					++failures;
-				if (i % 5 == 4 && e.fs.removeDir(root, true) != Error::OK)
-					++failures;
+				failures.expectOk(e.fs.createDirs(d), "createDirs " + d);
+				failures.expectOk(e.fs.writeFile(d + "/f.txt", payload(t, i)), "writeFile " + d + "/f.txt");
+				failures.expectEq(test::readAll(e.fs, d + "/f.txt"), payload(t, i), "readAll " + d + "/f.txt");
+				if (i % 5 == 4)
+					failures.expectOk(e.fs.removeDir(root, true), "removeDir(递归) " + root);
 			}
 		});
+		INFO("失败详情: " << failures.str());
 		CHECK(failures.load() == 0);
 	}
 
@@ -187,8 +185,9 @@ TEST_SUITE("stress")
 			REQUIRE(e.fs.writeFile("/s/mv/d0/f" + std::to_string(f), "content" + std::to_string(f)) == Error::OK);
 
 		const int rounds = 300 * test::scale();
-		std::atomic<int> failures{0};
+		test::FailureLog failures;
 		std::atomic<int> moved{0};
+		test::ErrorHistogram codes;
 		runThreads(THREADS, [&](int t)
 		{
 			std::mt19937 rng(static_cast<unsigned>(t * 7 + 1));
@@ -198,12 +197,15 @@ TEST_SUITE("stress")
 				const std::string from = "/s/mv/d" + std::to_string(rng() % 4) + "/" + name;
 				const std::string to = "/s/mv/d" + std::to_string(rng() % 4) + "/" + name;
 				Error err = e.fs.rename(from, to);
+				codes.add(err);
 				if (err == Error::OK)
 					++moved;
 				else if (err != Error::NOT_FOUND)
-					++failures;
+					failures.add("rename " + from + " -> " + to + ": " + errorName(err));
 			}
 		});
+		INFO("rename 返回码: " << codes.str());
+		INFO("失败详情: " << failures.str());
 		CHECK(failures.load() == 0);
 		CHECK(moved.load() > 0);
 		std::map<std::string, int> seen;
@@ -226,19 +228,24 @@ TEST_SUITE("stress")
 		REQUIRE(e.fs.createDirs("/s/rd/n0/inner") == Error::OK);
 		REQUIRE(e.fs.writeFile("/s/rd/n0/inner/x.txt", "X") == Error::OK);
 		const int rounds = 200 * test::scale();
-		std::atomic<int> failures{0};
+		test::FailureLog failures;
+		test::ErrorHistogram codes;
 		runThreads(THREADS, [&](int t)
 		{
 			std::mt19937 rng(static_cast<unsigned>(t + 100));
 			for (int i = 0; i < rounds; ++i)
 			{
 				Error err = e.fs.rename("/s/rd/n" + std::to_string(rng() % 3), "/s/rd/n" + std::to_string(rng() % 3));
+				codes.add(err);
 				if (err != Error::OK && err != Error::NOT_FOUND)
-					++failures;
+					failures.add(std::string("rename: ") + errorName(err));
 			}
 		});
-		CHECK(failures.load() == 0);
 		auto names = test::listNames(e.fs, "/s/rd");
+		INFO("rename 返回码: " << codes.str());
+		INFO("最终目录: " << doctest::toString(names));
+		INFO("失败详情: " << failures.str());
+		CHECK(failures.load() == 0);
 		REQUIRE(names.size() == 1);
 		CHECK(test::readAll(e.fs, "/s/rd/" + names[0] + "inner/x.txt") == "X");
 	}
@@ -248,39 +255,45 @@ TEST_SUITE("stress")
 		E e;
 		REQUIRE(e.fs.createDir("/s/md") == Error::OK);
 		const int rounds = 200 * test::scale();
-		std::atomic<int> failures{0};
+		test::FailureLog failures;
+		// 每种操作单独统计返回码，失败时整体打印
+		test::ErrorHistogram createDirsCodes, createDirCodes, removeDirCodes, removeTreeCodes;
+		auto expect = [&](test::ErrorHistogram& h, Error err, Error a, Error b, Error c)
+		{
+			h.add(err);
+			if (err != a && err != b && err != c)
+				failures.add(std::string("意外返回码 ") + errorName(err));
+		};
 		runThreads(THREADS, [&](int t)
 		{
 			std::mt19937 rng(static_cast<unsigned>(t + 1000));
 			for (int i = 0; i < rounds; ++i)
 			{
 				const std::string d = "/s/md/x" + std::to_string(rng() % 3) + "/y" + std::to_string(rng() % 3);
-				Error err = Error::OK;
 				switch (rng() % 4)
 				{
 				case 0:
-					err = e.fs.createDirs(d);
-					if (err != Error::OK && err != Error::NOT_FOUND && err != Error::EXISTS)
-						++failures;
+					// createDirs：中间目录被并发删掉时可能 NOT_FOUND；已存在（并发创建）算成功
+					expect(createDirsCodes, e.fs.createDirs(d), Error::OK, Error::NOT_FOUND, Error::EXISTS);
 					break;
 				case 1:
-					err = e.fs.createDir(d);
-					if (err != Error::OK && err != Error::NOT_FOUND && err != Error::EXISTS)
-						++failures;
+					expect(createDirCodes, e.fs.createDir(d), Error::OK, Error::NOT_FOUND, Error::EXISTS);
 					break;
 				case 2:
-					err = e.fs.removeDir(d);
-					if (err != Error::OK && err != Error::NOT_FOUND && err != Error::NOT_EMPTY)
-						++failures;
+					expect(removeDirCodes, e.fs.removeDir(d), Error::OK, Error::NOT_FOUND, Error::NOT_EMPTY);
 					break;
 				default:
-					err = e.fs.removeDir(d.substr(0, d.rfind('/')), true);
-					if (err != Error::OK && err != Error::NOT_FOUND && err != Error::NOT_EMPTY)
-						++failures;
+					expect(removeTreeCodes, e.fs.removeDir(d.substr(0, d.rfind('/')), true), Error::OK,
+						   Error::NOT_FOUND, Error::NOT_EMPTY);
 					break;
 				}
 			}
 		});
+		INFO("createDirs 返回码: " << createDirsCodes.str());
+		INFO("createDir 返回码: " << createDirCodes.str());
+		INFO("removeDir 返回码: " << removeDirCodes.str());
+		INFO("removeDir(递归) 返回码: " << removeTreeCodes.str());
+		INFO("失败详情: " << failures.str());
 		CHECK(failures.load() == 0);
 		// 视图一致：walk 到的每一项都能 stat 成功且类型一致
 		e.fs.walk("/s/md", [&](const std::string& full, const DirEntry& d)
@@ -297,7 +310,7 @@ TEST_SUITE("stress")
 		E e;
 		REQUIRE(e.fs.writeFile("/s/hot.bin", std::string(1000, 'A')) == Error::OK);
 		std::atomic<bool> done{false};
-		std::atomic<int> failures{0};
+		test::FailureLog failures;
 		std::atomic<int> reads{0};
 		const int rounds = 300 * test::scale();
 
@@ -317,14 +330,14 @@ TEST_SUITE("stress")
 						int n = s->read(buf, sizeof(buf));
 						if (n < 0)
 						{
-							++failures;
+							failures.add("read 返回 " + std::to_string(n));
 							break;
 						}
 						if (n == 0)
 							break;
 						for (int i = 0; i < n; ++i)
 							if ((buf[i] < 'A' || buf[i] > 'H') && buf[i] != 0)   // resize 扩展的部分为 0
-								++failures;
+								failures.add("读到意外字节 " + std::to_string(static_cast<int>(static_cast<unsigned char>(buf[i]))));
 					}
 					++reads;
 				}
@@ -337,23 +350,30 @@ TEST_SUITE("stress")
 				const char c = static_cast<char>('A' + (t * 2 + i % 2));
 				if (i % 4 == 0)
 				{
-					auto s = e.fs.openFileStream("/s/hot.bin", Mode::APPEND);
-					if (!s || s->write(std::string(100, c).data(), 100) != 100)
-						++failures;
+					Error oe = Error::OK;
+					auto s = e.fs.openFileStream("/s/hot.bin", Mode::APPEND, &oe);
+					if (!s)
+						failures.add(std::string("open APPEND -> ") + errorName(oe));
+					else if (int n = s->write(std::string(100, c).data(), 100); n != 100)
+						failures.add("APPEND write 返回 " + std::to_string(n));
 				}
 				else if (i % 4 == 1)
 				{
-					auto s = e.fs.openFileStream("/s/hot.bin", Mode::OVERLAPPED);
-					if (!s || s->resize(500 + i % 700) == false)
-						++failures;
+					Error oe = Error::OK;
+					auto s = e.fs.openFileStream("/s/hot.bin", Mode::OVERLAPPED, &oe);
+					if (!s)
+						failures.add(std::string("open OVERLAPPED -> ") + errorName(oe));
+					else if (!s->resize(500 + i % 700))
+						failures.add("resize 失败");
 				}
-				else if (e.fs.writeFile("/s/hot.bin", std::string(1000 + i % 500, c)) != Error::OK)
-					++failures;
+				else
+					failures.expectOk(e.fs.writeFile("/s/hot.bin", std::string(1000 + i % 500, c)), "writeFile hot.bin");
 			}
 		});
 		done = true;
 		for (auto& th : readers)
 			th.join();
+		INFO("失败详情: " << failures.str());
 		CHECK(failures.load() == 0);
 		CHECK(reads.load() > 0);
 	}
@@ -363,18 +383,23 @@ TEST_SUITE("stress")
 	{
 		E e;
 		const int perThread = 20;
-		std::atomic<int> failures{0};
+		test::FailureLog failures;
 		runThreads(THREADS, [&](int t)
 		{
 			for (int i = 0; i < perThread; ++i)
 			{
 				const std::string base = "/s/base/" + std::to_string(i % 16) + ".txt";
-				auto s = e.fs.openFileStream(base, Mode::APPEND);
+				Error oe = Error::OK;
+				auto s = e.fs.openFileStream(base, Mode::APPEND, &oe);
 				const std::string tag = "<" + std::to_string(t) + "." + std::to_string(i) + ">";
-				if (!s || s->write(tag.data(), static_cast<unsigned>(tag.size())) != static_cast<int>(tag.size()))
-					++failures;
+				if (!s)
+					failures.add("open APPEND " + base + " -> " + errorName(oe));
+				else if (int n = s->write(tag.data(), static_cast<unsigned>(tag.size()));
+						 n != static_cast<int>(tag.size()))
+					failures.add("APPEND write " + base + " 返回 " + std::to_string(n));
 			}
 		});
+		INFO("失败详情: " << failures.str());
 		CHECK(failures.load() == 0);
 		for (int f = 0; f < 16; ++f)
 		{
@@ -402,7 +427,7 @@ TEST_SUITE("stress")
 	{
 		E e;
 		REQUIRE(e.fs.createDir("/s/atomic") == Error::OK);
-		std::atomic<int> failures{0};
+		test::FailureLog failures;
 		std::atomic<bool> done{false};
 		std::thread reader([&]()
 		{
@@ -413,22 +438,37 @@ TEST_SUITE("stress")
 				{
 					// 读到的必须是某一次完整写入：首字符重复 len 次
 					if (s.empty() || s.find_first_not_of(s[0]) != std::string::npos)
-						++failures;
+						failures.add("读到不完整内容：" + std::to_string(s.size()) + " 字节");
 				}
 			}
 		});
 		const int rounds = 60 * test::scale();
+		// 内存层总能替换；本机层取决于平台
+		const bool replaceOpen = std::is_same_v<E, StressMemory> || std::is_same_v<E, StressMemoryOverArchive> ||
+								 test::nativeReplaceOpenFile();
+		test::ErrorHistogram atomicCodes;
 		runThreads(THREADS, [&](int t)
 		{
 			for (int i = 0; i < rounds; ++i)
 			{
 				const std::string data(2000 + 37 * t, static_cast<char>('a' + t));
-				if (e.fs.writeFileAtomic("/s/atomic/cfg", data.data(), data.size()) != Error::OK)
-					++failures;
+				Error err = e.fs.writeFileAtomic("/s/atomic/cfg", data.data(), data.size());
+				atomicCodes.add(err);
+				// 平台不能替换打开中的文件时（见 test::nativeReplaceOpenFile），读线程持有句柄期间替换
+				// 会失败为 PERMISSION_DENIED：这是平台能力限制，允许，但其余不变量（内容完整、无临时文件）照常检查
+				if (err == Error::PERMISSION_DENIED && !replaceOpen)
+					continue;
+				failures.expectOk(err, "writeFileAtomic cfg");
 			}
 		});
 		done = true;
 		reader.join();
+		INFO("writeFileAtomic 返回码: " << atomicCodes.str() << "（可替换打开中的文件: " << replaceOpen << "）");
+		INFO("失败详情: " << failures.str());
+		if (!replaceOpen)
+			MESSAGE("本机文件系统不支持替换打开中的文件（无 POSIX rename 语义），放宽了 writeFileAtomic 的检查");
+		// 至少要有成功的写入
+		CHECK(atomicCodes.count(Error::OK) > 0);
 		CHECK(failures.load() == 0);
 		CHECK(test::listNames(e.fs, "/s/atomic") == std::vector<std::string>{"cfg"});
 		const std::string final = test::readAll(e.fs, "/s/atomic/cfg");
@@ -454,7 +494,7 @@ TEST_SUITE("stress")
 		REQUIRE(id != 0);
 
 		std::atomic<bool> done{false};
-		std::atomic<int> failures{0};
+		test::FailureLog failures;
 		std::atomic<int> reads{0};
 		std::vector<std::thread> readers;
 		for (int r = 0; r < THREADS - 1; ++r)
@@ -478,14 +518,14 @@ TEST_SUITE("stress")
 		}
 		for (int i = 0; i < 2000 * test::scale() || reads.load() < 50; ++i)
 		{
-			if (fs.remount(id, (i % 2) ? a1 : a2) != Error::OK)
-				++failures;
+			failures.expectOk(fs.remount(id, (i % 2) ? a1 : a2), "remount");
 			if (i > 2000000)
 				break;
 		}
 		done = true;
 		for (auto& th : readers)
 			th.join();
+		INFO("失败详情: " << failures.str());
 		CHECK(failures.load() == 0);
 		CHECK(reads.load() >= 50);
 	}
@@ -504,7 +544,7 @@ TEST_SUITE("stress")
 		REQUIRE(fs.mount("/x", layers[0], env::prio(-100)) != 0);   // 保底层始终在
 
 		std::atomic<bool> done{false};
-		std::atomic<int> failures{0};
+		test::FailureLog failures;
 		std::vector<std::thread> readers;
 		for (int r = 0; r < 4; ++r)
 		{
@@ -530,13 +570,13 @@ TEST_SUITE("stress")
 				if (id == 0)
 					++failures;
 				std::this_thread::yield();
-				if (fs.unmount(id) != Error::OK)
-					++failures;
+				failures.expectOk(fs.unmount(id), "unmount");
 			}
 		});
 		done = true;
 		for (auto& th : readers)
 			th.join();
+		INFO("失败详情: " << failures.str());
 		CHECK(failures.load() == 0);
 		CHECK(fs.mounts().size() == 1);
 	}
@@ -556,7 +596,7 @@ TEST_SUITE("stress")
 		REQUIRE(fs.mountArchive("/a", dir.sub("h.vfs")) != 0);
 
 		const int perThread = 64;
-		std::atomic<int> failures{0};
+		test::FailureLog failures;
 		runThreads(16, [&](int t)
 		{
 			std::vector<std::unique_ptr<IFileStream>> streams;
@@ -585,6 +625,7 @@ TEST_SUITE("stress")
 					++failures;
 			}
 		});
+		INFO("失败详情: " << failures.str());
 		CHECK(failures.load() == 0);
 	}
 
@@ -593,7 +634,7 @@ TEST_SUITE("stress")
 		VirtualFileSystem fs;
 		REQUIRE(fs.mountMemory("/m") != 0);
 		std::atomic<bool> done{false};
-		std::atomic<int> failures{0};
+		test::FailureLog failures;
 		std::thread walker([&]()
 		{
 			while (!done.load())
@@ -626,6 +667,7 @@ TEST_SUITE("stress")
 		});
 		done = true;
 		walker.join();
+		INFO("失败详情: " << failures.str());
 		CHECK(failures.load() == 0);
 		CHECK(fs.generation() > g0);
 	}

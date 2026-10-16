@@ -56,16 +56,14 @@ struct EnvBase
 	bool baseWritable = true;   // 底层文件能否删除、改名
 	bool nativeTop = false;     // 写入层是本机目录（名字可移植性规则、大小写敏感性随 OS）
 	bool memoryTop = false;     // 写入层是内存后端
+	bool nativeBase = false;    // 底层（base/ 下的初始文件）在本机目录里
 
-	// 写入层是否区分大小写
-	bool caseSensitive() const
-	{
-#if defined(_WIN32) || defined(__APPLE__)
-		return !nativeTop;
-#else
-		return true;
-#endif
-	}
+	// 写入层是否区分大小写：本机写入层取决于临时目录所在的文件系统（运行时探测，
+	// Linux 通常区分；Windows NTFS、macOS APFS 默认不区分），其他后端总是区分
+	bool caseSensitive() const { return !nativeTop || test::nativeCaseSensitive(); }
+
+	// 底层文件是否按字节匹配名字（未开启 NativeOptions::exactCase 时，本机底层随文件系统）
+	bool baseCaseSensitive() const { return !nativeBase || test::nativeCaseSensitive(); }
 };
 
 // 单个本机目录
@@ -73,6 +71,7 @@ struct NativeEnv : EnvBase
 {
 	NativeEnv()
 	{
+		nativeBase = true;
 		nativeTop = true;
 		dir.write("root/base/a.txt", "A");
 		dir.write("root/base/sub/b.txt", "B");
@@ -95,6 +94,7 @@ struct NestedNativeEnv : EnvBase
 {
 	NestedNativeEnv()
 	{
+		nativeBase = true;
 		nativeTop = true;
 		auto rootMem = MemoryBackend::create();
 		rootMem->addFile("readme.txt", "root");
@@ -168,6 +168,7 @@ struct MemoryOverReadOnlyNativeEnv : EnvBase
 {
 	MemoryOverReadOnlyNativeEnv()
 	{
+		nativeBase = true;
 		baseWritable = false;
 		memoryTop = true;
 		dir.write("root/base/a.txt", "A");

@@ -7,6 +7,7 @@
 #include "vfs/archive/ByteIO.h"
 #include "vfs/crypto/Hash.h"
 #include "vfs/native/NativeFileStream.h"
+#include "vfs/native/NativeUtils.h"
 #include "vfs/native/SingleFileBackend.h"
 #include <cstring>
 #include <set>
@@ -195,6 +196,8 @@ TEST_SUITE("extreme")
 			nrel += (i ? "/" : "") + std::string("n") + std::to_string(i % 10);
 		dir.mkdir("native");
 		REQUIRE(fs.mountNative("/n", dir.sub("native")) != 0);
+		// 本机全路径约 300+ 字节，超过 Windows MAX_PATH（260），需要 \\?\ 长路径前缀
+		INFO("本机路径长度 " << dir.sub("native/" + nrel + "/leaf").size());
 		REQUIRE(fs.createDirs("/n/" + nrel) == Error::OK);
 		REQUIRE(fs.writeFile("/n/" + nrel + "/leaf", "ndeep") == Error::OK);
 		CHECK(readAll(fs, "/n/" + nrel + "/leaf") == "ndeep");
@@ -413,14 +416,25 @@ TEST_SUITE("extreme")
 
 		auto open = fs.openFileStream("/n/f.txt", Mode::READ);
 		REQUIRE(open);
-		// 外部替换（写临时文件再 rename 覆盖）
+		// 外部替换（写临时文件再 rename 覆盖）。
+		// 用 native::renamePath 而不是 std::filesystem::rename：Windows 上后者（MoveFileExW 传统语义）
+		// 不能替换有打开句柄的文件（即使句柄带 FILE_SHARE_DELETE），这是外部工具自己的限制，与 VFS 无关；
+		// renamePath 在支持的系统上用 POSIX 语义替换（Windows 10 1709+ NTFS），和“安全保存”类工具的做法一致
+		// 平台不支持替换打开中的文件时（见 test::nativeReplaceOpenFile），外部工具也只能等句柄关闭，测试同样先关闭
+		if (!test::nativeReplaceOpenFile())
+		{
+			MESSAGE("本机文件系统不支持替换打开中的文件，先关闭流再做外部替换");
+			open.reset();
+		}
 		dir.write("tmp.txt", "v2-longer");
-		std::filesystem::rename(test::u8(dir.sub("tmp.txt")), test::u8(dir.sub("root/f.txt")));
+		Error re = vfs::native::renamePath(dir.sub("tmp.txt"), dir.sub("root/f.txt"));
+		REQUIRE_MESSAGE(re == Error::OK, "外部替换文件失败: " << re << "（流是否仍打开: " << (open != nullptr) << "）");
 		CHECK(readAll(fs, "/n/f.txt") == "v2-longer");
 		CHECK(fs.fileSize("/n/f.txt") == 9);
 #if !defined(_WIN32)
-		// POSIX：已打开的流仍然指向旧文件
-		CHECK(test::str(test::readStream(*open)) == "v1");
+		// POSIX：已打开的流仍然指向旧文件（Windows 上取决于是否走了 POSIX 语义，不检查）
+		if (open)
+			CHECK(test::str(test::readStream(*open)) == "v1");
 #endif
 		open.reset();
 
