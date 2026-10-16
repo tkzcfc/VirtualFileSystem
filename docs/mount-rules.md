@@ -22,6 +22,7 @@ MountId mount(mountPoint, backend, MountOptions{priority, flags});
 - `MountFlags::ReadOnly`：即使后端可写，这一层也按只读处理。
 - `MountFlags::WriteTarget`：在可写层中优先作为写入目标（见 §5）。
 - 挂载点可以建在合并视图中不存在的路径上，它的祖先路径会显示为**只读的虚拟目录**。根目录 `/` 始终存在。
+- 挂载点的祖先路径**始终是目录**：低层在同一位置上有同名文件时，该文件被遮蔽（`stat`/`list` 显示为目录，`removeFile`/`writeFile` 返回 `IS_DIR`），保证挂载点可达。
 - 挂载点和它的祖先不能被 `removeDir` 删除，也不能被 `rename`，返回 `BUSY`。
 
 推荐用法：只读资源挂在 `/res`（归档与开发目录叠加），可写数据挂在 `/user`（单一本机目录）。把只读层和可写层叠在同一个挂载点上，适合“补丁覆盖”这类场景。

@@ -359,6 +359,9 @@ Error VirtualFileSystem::resolve(const MountTable& table, std::string_view path,
 		Error e = layer.mount->backend->stat(layer.rel, s);
 		if (e == Error::OK)
 		{
+			// 挂载点的祖先必须是目录：底层在这个位置上的文件被挂载路径遮蔽，否则挂载点会变得不可达
+			if (s.type != FileType::DIR && table.isVirtualDir(path))
+				continue;
 			// 最高层命中即为可见项
 			visible = static_cast<int>(i);
 			st = s;
@@ -581,15 +584,13 @@ Error VirtualFileSystem::listIn(const MountTable& table, const std::string& path
 			continue;
 		std::string_view rest = std::string_view(m.point).substr(path.size() == 1 ? 1 : path.size() + 1);
 		std::string_view name = rest.substr(0, rest.find('/'));
-		if (merged.find(name) != merged.end())
-			continue;
-		// 子项类型由它自身的解析结果决定（例如单文件挂载点是文件）
+		// 子项类型由它自身的解析结果决定（例如单文件挂载点是文件；挂载点的祖先即使在底层是文件也显示为目录）
 		std::string child = Path::join(path, name);
 		std::vector<Layer> childLayers;
 		int childVisible = -1;
 		Stat cs;
 		if (resolve(table, child, childLayers, childVisible, cs) == Error::OK)
-			merged.emplace(std::string(name), cs.type);
+			merged[std::string(name)] = cs.type;
 	}
 
 	DirEntry entry;
