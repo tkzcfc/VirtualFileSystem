@@ -1,5 +1,5 @@
-// 本文件：本机文件流，移植自 axmol `FileStream` 的 lowio 实现（决策 #29）。
-// POSIX 上使用 open/lseek64/read/write；Windows 上使用 CreateFileW 系列（UTF-8 转 UTF-16，决策 #28）。
+// 本文件：本机文件流，移植自 axmol `FileStream` 的 lowio 实现。
+// POSIX 上使用 open/lseek64/read/write；Windows 上使用 CreateFileW 系列（UTF-8 转 UTF-16）。
 #pragma once
 
 #include "../Common.h"
@@ -11,7 +11,7 @@ NS_VFS_BEGIN
  * 本机文件流。
  * - 与 axmol FileStream 相同的打开语义：READ=O_RDONLY；WRITE=O_CREAT|O_RDWR|O_TRUNC；
  *   APPEND=O_APPEND|O_CREAT|O_RDWR；OVERLAPPED=O_CREAT|O_RDWR。
- * - Windows 上额外带 FILE_SHARE_DELETE，打开期间允许删除/替换文件（决策 #18、#34）。
+ * - Windows 上额外带 FILE_SHARE_DELETE，打开期间允许删除/替换文件。
  * - 打开目录会失败（errno=EISDIR）。
  * 线程安全：单个对象不能跨线程同时使用；不同对象互不影响。只能移动，不能拷贝。
  */

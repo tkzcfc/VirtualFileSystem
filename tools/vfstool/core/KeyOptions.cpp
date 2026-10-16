@@ -69,7 +69,7 @@ std::string toHex(const uint8_t* data, size_t size)
 Error resolveKey(const KeySource& source, std::vector<uint8_t>& key, std::ostream& err)
 {
 	key.clear();
-	// 优先级：--key-file > --key-hex > VFS_KEY（vfs-format F20）
+	// 优先级：--key-file > --key-hex > VFS_KEY
 	if (!source.keyFile.empty())
 	{
 		NativeFileStream fs;

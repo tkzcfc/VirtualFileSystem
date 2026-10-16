@@ -6,7 +6,7 @@ NS_VFS_BEGIN
 
 void MountTable::sort()
 {
-	// priority 大的优先；priority 相同时后挂载（id 更大）的优先，与 Linux、Godot 一致（决策 #3）
+	// priority 大的优先；priority 相同时后挂载（id 更大）的优先，与 Linux、Godot 一致
 	std::stable_sort(mounts.begin(), mounts.end(), [](const MountEntry& a, const MountEntry& b)
 	{
 		if (a.priority != b.priority)
@@ -24,7 +24,7 @@ void MountTable::collectLayers(std::string_view path, std::vector<Layer>& out) c
 		if (!Path::isUnder(path, m.point, rel))
 			continue;
 		out.push_back(Layer{&m, rel});
-		// 决策 #2：Opaque 挂载以下，优先级更低的层全部不可见
+		// Opaque 挂载以下，优先级更低的层全部不可见
 		if (m.flags & MountFlags::Opaque)
 			break;
 	}

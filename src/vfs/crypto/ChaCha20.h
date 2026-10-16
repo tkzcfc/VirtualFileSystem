@@ -1,5 +1,5 @@
 // 本文件：项目内自带的 ChaCha20 流密码（RFC 8439），只用于加密 .vfs 索引区。
-// 不引入第三方密码库（final-decisions #5），正确性由 tests/crypto 中的 RFC 8439 测试向量保证。
+// 不引入第三方密码库，正确性由 tests/crypto 中的 RFC 8439 测试向量保证。
 #pragma once
 
 #include "../Common.h"

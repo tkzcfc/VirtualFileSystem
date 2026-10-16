@@ -1,4 +1,4 @@
-// 本文件：挂载表（决策 #3、#15、#17）。
+// 本文件：挂载表。
 // 挂载表是不可变快照：查询时拿到 shared_ptr<const MountTable> 后无锁使用；
 // mount/unmount 时复制一份、修改、再发布新快照（copy-on-write）。
 #pragma once
@@ -14,8 +14,8 @@ NS_VFS_BEGIN
 enum MountFlags : uint32_t
 {
 	ReadOnly = 1u << 0,     // 把这一层当作只读，即使后端可写
-	Opaque = 1u << 1,       // 遮蔽：挂载点以下比它优先级低的层全部不可见（决策 #2）
-	WriteTarget = 1u << 2,  // 默认写入层：在可写候选中优先（决策 #5，类似 PhysicsFS 的 setWriteDir）
+	Opaque = 1u << 1,       // 遮蔽：挂载点以下比它优先级低的层全部不可见
+	WriteTarget = 1u << 2,  // 默认写入层：在可写候选中优先
 };
 
 /**
@@ -23,7 +23,7 @@ enum MountFlags : uint32_t
  */
 enum UnmountFlags : uint32_t
 {
-	FailIfBusy = 1u << 0,   // 仍有打开的流时返回 BUSY，不卸载（决策 #18 严格模式）
+	FailIfBusy = 1u << 0,   // 仍有打开的流时返回 BUSY，不卸载
 };
 
 /**
@@ -31,7 +31,7 @@ enum UnmountFlags : uint32_t
  */
 struct MountOptions
 {
-	int priority = 0;     // 大的优先；相同时后挂载的优先（决策 #3）
+	int priority = 0;     // 大的优先；相同时后挂载的优先
 	uint32_t flags = 0;   // MountFlags 位组合
 };
 
@@ -92,27 +92,27 @@ class VFS_DLL MountTable
 {
 public:
 	std::vector<MountEntry> mounts;                                // 已按优先级排序：priority 降序，同优先级 id 降序
-	std::vector<std::pair<std::string, std::string>> aliases;      // 前缀映射（决策 #30），按前缀长度降序
+	std::vector<std::pair<std::string, std::string>> aliases;      // 前缀映射，按前缀长度降序
 
 	/**
-	 * 按决策 #3 排序。
+	 * 排序：priority 大的在前；相同时后挂载的（id 大的）在前。
 	 */
 	void sort();
 
 	/**
 	 * 收集路径 P 的层栈：所有挂载点是 P 前缀的挂载，按优先级从高到低；
-	 * 遇到 Opaque 挂载后，更低的层不再加入（决策 #2）。
+	 * 遇到 Opaque 挂载后，更低的层不再加入。
 	 * @param path 规范路径（out 中的 rel 指向它，调用方必须保证它在使用期间有效）
 	 */
 	void collectLayers(std::string_view path, std::vector<Layer>& out) const;
 
 	/**
-	 * P 是否是合成的虚拟目录：根目录，或某个挂载点的真祖先（决策 #13、#15）。
+	 * P 是否是合成的虚拟目录：根目录，或某个挂载点的真祖先。
 	 */
 	bool isVirtualDir(std::string_view path) const;
 
 	/**
-	 * P 是否正好是某个挂载点，或是某个挂载点的祖先（这类路径不能被删除或改名，决策 #15）。
+	 * P 是否正好是某个挂载点，或是某个挂载点的祖先（这类路径不能被删除或改名）。
 	 */
 	bool isMountPointOrAncestor(std::string_view path) const;
 

@@ -34,7 +34,7 @@ Error Path::normalize(std::string_view in, std::string& out)
 			continue;
 		if (seg == "..")
 		{
-			// 越过根目录直接报错，不做截断（决策 #11）
+			// 越过根目录直接报错，不做截断
 			if (segStarts.empty())
 				return Error::INVALID_PATH;
 			result.resize(segStarts.back());

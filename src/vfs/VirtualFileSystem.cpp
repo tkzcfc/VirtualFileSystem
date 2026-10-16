@@ -13,7 +13,7 @@ constexpr size_t COPY_BUFFER_SIZE = 64 * 1024;
 
 /**
  * VFS 返回给调用方的流包装：
- * - 持有后端的 shared_ptr，保证惰性卸载后后端仍然存活（决策 #18）；
+ * - 持有后端的 shared_ptr，保证惰性卸载后后端仍然存活；
  * - 维护挂载的打开流计数，供 UnmountFlags::FailIfBusy 使用。
  * 所有调用直接转发给内部流，开销只是一次虚函数调用。
  */
@@ -37,7 +37,7 @@ public:
 
 	virtual bool open(std::string_view /*path*/, IFileStream::Mode /*mode*/) override
 	{
-		// 流只能通过 VirtualFileSystem::openFileStream 获得（决策 (b)-3）
+		// 流只能通过 VirtualFileSystem::openFileStream 获得
 		errno = ENOTSUP;
 		return false;
 	}
@@ -149,7 +149,7 @@ VirtualFileSystem::~VirtualFileSystem()
 
 std::shared_ptr<const MountTable> VirtualFileSystem::snapshot() const
 {
-	// 决策 #17：锁只保护指针复制，之后的查询都在这份不可变快照上进行
+	// 锁只保护指针复制，之后的查询都在这份不可变快照上进行
 	std::lock_guard<std::mutex> lock(m_mutex);
 	return m_table;
 }
@@ -253,7 +253,7 @@ Error VirtualFileSystem::unmount(MountId id, uint32_t flags)
 		// 严格模式：仍有打开的流时拒绝卸载（相当于 umount 默认的 EBUSY）
 		if ((flags & UnmountFlags::FailIfBusy) && it->state->openStreams.load(std::memory_order_acquire) > 0)
 			return Error::BUSY;
-		// 惰性卸载：只从命名空间移除；已打开的流持有后端，直到最后一个流关闭才真正释放（决策 #18）
+		// 惰性卸载：只从命名空间移除；已打开的流持有后端，直到最后一个流关闭才真正释放
 		table.mounts.erase(it);
 		return Error::OK;
 	});
@@ -269,7 +269,7 @@ Error VirtualFileSystem::remount(MountId id, std::shared_ptr<IBackend> backend)
 		{
 			if (m.id == id)
 			{
-				// 新后端使用新的状态计数；旧流继续持有旧后端（决策 #34）
+				// 新后端使用新的状态计数；旧流继续持有旧后端
 				m.backend = backend;
 				m.state = std::make_shared<MountState>();
 				return Error::OK;
@@ -358,7 +358,7 @@ Error VirtualFileSystem::resolve(const MountTable& table, std::string_view path,
 			continue;
 		if (e == Error::NOT_DIR)
 		{
-			// overlay 规则（决策 #13）：只有当父路径在合并视图中不是目录时，“上层文件遮蔽下层目录”才成立；
+			// overlay 规则：只有当父路径在合并视图中不是目录时，“上层文件遮蔽下层目录”才成立；
 			// 如果更高层把父路径提供为目录，那么这一层的文件已被遮蔽，相当于没有该项
 			if (path.size() > 1)
 			{
@@ -375,7 +375,7 @@ Error VirtualFileSystem::resolve(const MountTable& table, std::string_view path,
 		return e;
 	}
 
-	// 挂载点的祖先合成为只读虚拟目录（决策 #13、#15）
+	// 挂载点的祖先合成为只读虚拟目录
 	if (table.isVirtualDir(path))
 	{
 		st = Stat();
@@ -387,7 +387,7 @@ Error VirtualFileSystem::resolve(const MountTable& table, std::string_view path,
 
 int VirtualFileSystem::chooseWriteTarget(const std::vector<Layer>& layers)
 {
-	// 决策 #5：显式标记 WriteTarget 的可写层优先，其次是优先级最高的可写层
+	// 显式标记 WriteTarget 的可写层优先，其次是优先级最高的可写层
 	for (size_t i = 0; i < layers.size(); ++i)
 	{
 		if ((layers[i].mount->flags & MountFlags::WriteTarget) && layers[i].mount->writable())
@@ -403,7 +403,7 @@ int VirtualFileSystem::chooseWriteTarget(const std::vector<Layer>& layers)
 
 Error VirtualFileSystem::ensureParents(const Layer& layer, std::string_view relParent)
 {
-	// 决策 #6：父目录在合并视图中存在时，在写入层中 mkdir -p 出相对路径链（overlay 的 copy-up 目录）
+	// 父目录在合并视图中存在时，在写入层中 mkdir -p 出相对路径链（overlay 的 copy-up 目录）
 	if (relParent.empty())
 		return Error::OK;
 	IBackend* backend = layer.mount->backend.get();
@@ -442,7 +442,7 @@ Error VirtualFileSystem::copyUp(const Layer& src, const Layer& dst)
 	if (!in)
 		return e;
 
-	// 支持 rename 的后端：先写临时文件再 rename，保证中途失败不会留下半个文件（决策 #7）
+	// 支持 rename 的后端：先写临时文件再 rename，保证中途失败不会留下半个文件
 	const bool atomic = (dst.mount->backend->capabilities() & BackendCaps::Rename) != 0;
 	std::string target(dst.rel);
 	std::string tmp = atomic ? target + ".vfs-copyup.tmp" : target;
@@ -547,7 +547,7 @@ Error VirtualFileSystem::listIn(const MountTable& table, const std::string& path
 	if (st.type != FileType::DIR)
 		return Error::NOT_DIR;
 
-	// 决策 #13：按名字去重，高层先插入所以高层决定类型；std::map 保证按名字字节序输出
+	// 按名字去重，高层先插入所以高层决定类型；std::map 保证按名字字节序输出
 	std::map<std::string, FileType, std::less<>> merged;
 	for (const auto& layer : layers)
 	{
@@ -705,21 +705,21 @@ std::unique_ptr<IFileStream> VirtualFileSystem::openFileStream(std::string_view 
 	int target = -1;
 	if (found && layers[visible].mount->writable())
 	{
-		// 决策 #5-2：可见项所在的层可写，就写在原处
+		// 可见项所在的层可写，就写在原处
 		target = visible;
 	}
 	else
 	{
-		// 决策 #5-3：否则写入覆盖该路径的最高优先级可写挂载
+		// 否则写入覆盖该路径的最高优先级可写挂载
 		target = chooseWriteTarget(layers);
 		if (target < 0)
 			return failStream(err, Error::READ_ONLY);
-		// 决策 #5-4：写入层比持有可见项的只读层低，写了也读不到，拒绝
+		// 写入层比持有可见项的只读层低，写了也读不到，拒绝
 		if (found && target > visible)
 			return failStream(err, Error::READ_ONLY);
 		if (!found)
 		{
-			// 决策 #6：父目录必须在合并视图中存在（与 open(O_CREAT) 一致，不会凭空创建父目录）
+			// 父目录必须在合并视图中存在（与 open(O_CREAT) 一致，不会凭空创建父目录）
 			std::string parent(Path::parent(path));
 			std::vector<Layer> parentLayers;
 			int parentVisible = -1;
@@ -737,7 +737,7 @@ std::unique_ptr<IFileStream> VirtualFileSystem::openFileStream(std::string_view 
 		e = ensureParents(dst, Path::parentRelative(dst.rel));
 		if (e != Error::OK)
 			return failStream(err, e);
-		// 决策 #7：APPEND/OVERLAPPED 修改只读层中的文件时，先把下层内容完整复制到写入层
+		// APPEND/OVERLAPPED 修改只读层中的文件时，先把下层内容完整复制到写入层
 		if (found && (mode == IFileStream::Mode::APPEND || mode == IFileStream::Mode::OVERLAPPED))
 		{
 			e = copyUp(layers[visible], dst);
@@ -765,7 +765,7 @@ Error VirtualFileSystem::createDirIn(const MountTable& table, const std::string&
 	int visible = -1;
 	Stat st;
 	Error e = resolve(table, path, layers, visible, st);
-	// 决策 #10：已经是目录或文件都返回 EXISTS
+	// 已经是目录或文件都返回 EXISTS
 	if (e == Error::OK)
 		return Error::EXISTS;
 	if (e != Error::NOT_FOUND)
@@ -890,11 +890,11 @@ Error VirtualFileSystem::removeDir(std::string_view rawPath, bool recursive) con
 		return e;
 	if (st.type != FileType::DIR)
 		return Error::NOT_DIR;
-	// 决策 #15：挂载点本身和它的祖先（包括根目录、合成的虚拟目录）不能删除
+	// 挂载点本身和它的祖先（包括根目录、合成的虚拟目录）不能删除
 	if (table->isMountPointOrAncestor(path))
 		return Error::BUSY;
 
-	// 决策 #1：先检查，再执行。统计有多少层在合并视图中提供了这个目录
+	// 先检查，再执行。统计有多少层在合并视图中提供了这个目录
 	int contributor = -1;
 	int count = 0;
 	for (size_t i = 0; i < layers.size(); ++i)
@@ -949,10 +949,10 @@ Error VirtualFileSystem::removeFile(std::string_view rawPath) const
 		return e;
 	if (st.type == FileType::DIR || visible < 0)
 		return Error::IS_DIR;
-	// 单文件挂载点本身不能删除（决策 #15）
+	// 单文件挂载点本身不能删除
 	if (table->isMountPoint(path))
 		return Error::BUSY;
-	// 决策 #8：只删可见项；可见项在只读层时返回 EROFS
+	// 只删可见项；可见项在只读层时返回 EROFS
 	const Layer& layer = layers[visible];
 	if (!layer.mount->writable())
 		return Error::READ_ONLY;
@@ -981,7 +981,7 @@ Error VirtualFileSystem::rename(std::string_view rawFrom, std::string_view rawTo
 		return e;
 	if (from == to)
 		return Error::OK;
-	// 挂载点及其祖先不能改名（决策 #15）
+	// 挂载点及其祖先不能改名
 	if (fromVisible < 0 || table->isMountPointOrAncestor(from) || table->isMountPointOrAncestor(to))
 		return Error::BUSY;
 	const Layer& src = fromLayers[fromVisible];
@@ -1031,7 +1031,7 @@ Error VirtualFileSystem::rename(std::string_view rawFrom, std::string_view rawTo
 	}
 
 	const Layer& dst = toLayers[target];
-	// 决策 #9：只有源和目标落在同一个挂载上才能原子 rename，否则 EXDEV
+	// 只有源和目标落在同一个挂载上才能原子 rename，否则 EXDEV
 	if (dst.mount->id != src.mount->id)
 		return Error::CROSS_DEVICE;
 	if (!(src.mount->backend->capabilities() & BackendCaps::Rename))
@@ -1100,7 +1100,7 @@ Error VirtualFileSystem::readFile(std::string_view path, std::vector<uint8_t>& o
 	out.clear();
 	if (size > 0)
 		out.reserve(static_cast<size_t>(size));
-	// 单次读写上限约 2 GB（决策 #4），这里分块循环读到 EOF
+	// 单次读写上限约 2 GB，这里分块循环读到 EOF
 	std::vector<uint8_t> buf(COPY_BUFFER_SIZE);
 	while (true)
 	{

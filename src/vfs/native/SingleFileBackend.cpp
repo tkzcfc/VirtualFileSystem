@@ -97,7 +97,7 @@ Error SingleFileBackend::createDir(std::string_view rel)
 
 Error SingleFileBackend::removeFile(std::string_view rel)
 {
-	// 挂载点不能删除（决策 #15）
+	// 挂载点不能删除
 	return rel.empty() ? Error::BUSY : Error::NOT_DIR;
 }
 

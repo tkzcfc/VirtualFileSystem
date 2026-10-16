@@ -19,7 +19,7 @@ MemoryFileStream::~MemoryFileStream()
 
 bool MemoryFileStream::open(std::string_view /*path*/, IFileStream::Mode /*mode*/)
 {
-	// 内存流只能由后端构造，见决策 (b)-3
+	// 内存流只能由后端构造
 	errno = ENOTSUP;
 	return false;
 }
@@ -53,7 +53,7 @@ int64_t MemoryFileStream::seek(int64_t offset, int origin) const
 		errno = EINVAL;
 		return -1;
 	}
-	// 结果为负时按 POSIX 返回 EINVAL，位置保持不变（决策 #33）
+	// 结果为负时按 POSIX 返回 EINVAL，位置保持不变
 	if ((offset < 0 && base + offset < 0) || (offset > 0 && base > INT64_MAX - offset))
 	{
 		errno = EINVAL;

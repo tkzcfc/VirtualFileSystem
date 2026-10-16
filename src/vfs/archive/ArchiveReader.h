@@ -1,4 +1,4 @@
-// 本文件：.vfs 归档读取：解析 header/footer/index、快速损坏校验、索引解密、构建目录树（vfs-format §3.6）。
+// 本文件：.vfs 归档读取：解析 header/footer/index、快速损坏校验、索引解密、构建目录树。
 #pragma once
 
 #include "ArchiveFormat.h"
@@ -61,7 +61,7 @@ struct ArchiveEntry
 };
 
 /**
- * 读取选项（vfs-format F22 的简化版）。
+ * 读取选项。
  */
 struct ArchiveOptions
 {
@@ -78,8 +78,8 @@ struct TransparentStringHash
 };
 
 /**
- * 解析后的归档索引，open 之后不可变，通过 shared_ptr<const> 在后端和所有流之间共享（vfs-format F25）。
- * 最后一个流关闭后才释放，实现惰性卸载（决策 #18）。
+ * 解析后的归档索引，open 之后不可变，通过 shared_ptr<const> 在后端和所有流之间共享。
+ * 最后一个流关闭后才释放，实现惰性卸载。
  * 线程安全：只读，可以任意并发访问。
  */
 class VFS_DLL ArchiveIndex
@@ -151,7 +151,7 @@ public:
 						   IFileStream* stream = nullptr);
 
 	/**
-	 * 离线校验每个文件的内容哈希（运行时默认不校验，final-decisions #3）。
+	 * 离线校验每个文件的内容哈希（运行时默认不校验）。
 	 * @param cb 每个文件条目校验完成后回调（可为空）
 	 * @return 全部通过返回 OK；有文件不匹配返回 CORRUPTED
 	 */

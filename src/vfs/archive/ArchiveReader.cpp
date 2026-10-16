@@ -117,7 +117,7 @@ Error ArchiveIndex::stat(std::string_view rel, Stat& out) const
 	{
 		out.type = FileType::FILE;
 		out.size = static_cast<int64_t>(e->size);
-		// 条目 mtime 为 0 时回退到归档文件本身的 mtime（决策 #27）
+		// 条目 mtime 为 0 时回退到归档文件本身的 mtime
 		out.mtime = e->mtime != 0 ? e->mtime : sourceMtime;
 		return Error::OK;
 	}
@@ -325,7 +325,7 @@ std::shared_ptr<const ArchiveIndex> ArchiveReader::open(std::shared_ptr<IArchive
 			return fail(Error::KEY_INVALID);
 	}
 
-	// 5. 解析条目。把每个字段都当作不可信输入（vfs-format F26）
+	// 5. 解析条目。把每个字段都当作不可信输入
 	const uint8_t* pool = indexBuf.data() + static_cast<size_t>(h.entryCount) * ENTRY_SIZE;
 	const uint64_t poolSize = h.indexSize - static_cast<uint64_t>(h.entryCount) * ENTRY_SIZE;
 	const uint64_t dataEnd = h.dataOffset + h.dataSize;
@@ -372,7 +372,7 @@ std::shared_ptr<const ArchiveIndex> ArchiveReader::open(std::shared_ptr<IArchive
 			continue;
 		}
 
-		// 文件数据必须完全落在数据区内。允许多个条目指向同一段数据（内容去重，final-decisions #10）
+		// 文件数据必须完全落在数据区内。允许多个条目指向同一段数据（内容去重）
 		if (entry.offset < h.dataOffset || !rangeOk(entry.offset, entry.storedSize, dataEnd))
 			return fail(Error::CORRUPTED);
 		if (entry.cipher == CipherType::XOR)
@@ -423,7 +423,7 @@ Error ArchiveReader::readEntry(const ArchiveIndex& index, const ArchiveEntry& en
 	Error e = readFully(*stream, index.baseOffset + static_cast<int64_t>(entry.offset), stored.data(), stored.size());
 	if (e != Error::OK)
 		return e;
-	// 顺序与打包相反：先解密，再解压（打包时先压缩再加密，final-decisions #6）
+	// 顺序与打包相反：先解密，再解压（打包时先压缩再加密）
 	if (entry.cipher == CipherType::XOR)
 		xorCipher(stored.data(), stored.size(), entry.key.data(), entry.keyLength, 0);
 

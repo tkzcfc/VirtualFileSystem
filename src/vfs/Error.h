@@ -1,4 +1,4 @@
-// 本文件：VFS 层的错误码（决策 #22）。
+// 本文件：VFS 层的错误码。
 // 流层沿用 axmol 的 “-1 + errno” 风格；VFS 层的 API 统一返回 vfs::Error。
 #pragma once
 
@@ -19,8 +19,8 @@ enum class Error
 	NOT_DIR,            // ENOTDIR：路径中间某一级不是目录，或者对文件做目录操作
 	IS_DIR,             // EISDIR：对目录做文件操作
 	NOT_EMPTY,          // ENOTEMPTY：目录非空
-	READ_ONLY,          // EROFS：只读层、没有可写层，或写入后会被遮挡（决策 #5）
-	CROSS_DEVICE,       // EXDEV：跨后端 rename（决策 #9）
+	READ_ONLY,          // EROFS：只读层、没有可写层，或写入后会被遮挡
+	CROSS_DEVICE,       // EXDEV：跨后端 rename
 	BUSY,               // EBUSY：挂载点不能删除/改名，或严格卸载时仍有打开的流
 	INVALID_PATH,       // EINVAL：路径不合法（`..` 越过根、控制字符、Windows 保留名等）
 	PERMISSION_DENIED,  // EACCES：操作系统拒绝，或 symlink 逃出根目录
@@ -47,7 +47,7 @@ VFS_DLL const char* errorName(Error err);
  */
 VFS_DLL const char* errorMessage(Error err);
 
-// 小工具：把错误写入可选的输出参数；失败时同时设置 errno，方便与 axmol 风格兼容（决策 #22）
+// 小工具：把错误写入可选的输出参数；失败时同时设置 errno，方便与 axmol 风格兼容
 inline void setError(Error* out, Error err)
 {
 	if (out)

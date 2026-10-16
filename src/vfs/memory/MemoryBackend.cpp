@@ -204,7 +204,7 @@ std::unique_ptr<IFileStream> MemoryBackend::open(std::string_view rel, IFileStre
 		}
 	}
 
-	// WRITE 模式截断已有内容（修正旧实现不截断的 bug，决策 #14）
+	// WRITE 模式截断已有内容
 	if (mode == IFileStream::Mode::WRITE)
 	{
 		std::unique_lock<std::shared_mutex> bufLock(buffer->mutex);
@@ -300,7 +300,7 @@ Error MemoryBackend::removeFile(std::string_view rel)
 		return Error::NOT_FOUND;
 	if (it->second->type == FileType::DIR)
 		return Error::IS_DIR;
-	// unlink 语义：只移除名字，缓冲区由仍然打开的流继续持有（决策 #18）
+	// unlink 语义：只移除名字，缓冲区由仍然打开的流继续持有
 	parent->children.erase(it);
 	parent->mtime = currentUnixTime();
 	return Error::OK;

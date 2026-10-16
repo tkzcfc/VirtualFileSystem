@@ -56,7 +56,7 @@ struct DedupValue
 	uint64_t storedSize;
 };
 
-// 由内容哈希确定性派生 keyLen 字节的 XOR key（不随机，保证可复现，final-decisions #8）
+// 由内容哈希确定性派生 keyLen 字节的 XOR key（不随机，保证可复现）
 void deriveFileKey(const Hash128& contentHash, uint8_t* key, uint32_t keyLen)
 {
 	uint8_t seedBytes[16];
@@ -219,7 +219,7 @@ Error ArchiveWriter::prepare(std::vector<Pending>& sorted)
 		unique.push_back(std::move(p));
 	}
 
-	// 大小写冲突：在大小写不敏感的平台上会互相覆盖（决策 #12）
+	// 大小写冲突：在大小写不敏感的平台上会互相覆盖
 	std::unordered_map<std::string, std::string> folded;
 	folded.reserve(unique.size());
 	for (const auto& p : unique)
@@ -244,7 +244,7 @@ Error ArchiveWriter::prepare(std::vector<Pending>& sorted)
 		if (p.type == EntryType::FILE && hasChildren)
 			return fail(Error::NOT_DIR, "路径既是文件又是目录: " + p.path);
 		if (p.type == EntryType::DIR && hasChildren)
-			continue;   // 非空目录由文件路径推导，不写条目（vfs-format F12）
+			continue;   // 非空目录由文件路径推导，不写条目
 		result.push_back(p);
 	}
 	sorted = std::move(result);
@@ -369,7 +369,7 @@ Error ArchiveWriter::write(IFileStream& out, ArchiveWriteStats* stats)
 		entry.hash = contentHash.low;
 		st.totalSize += size;
 
-		// 2.2 存储方式：先压缩，再加密（final-decisions #6）
+		// 2.2 存储方式：先压缩，再加密
 		const uint8_t* storedData = nullptr;
 		entry.compression = CompressionType::NONE;
 		if (item.options.compress && size > 0 && size <= Compression::lz4MaxInputSize())
@@ -445,7 +445,7 @@ Error ArchiveWriter::write(IFileStream& out, ArchiveWriteStats* stats)
 		}
 		else
 		{
-			// 大文件：第二遍流式读取、加密、写入，内存占用固定 1 MB（vfs-format F18）
+			// 大文件：第二遍流式读取、加密、写入，内存占用固定 1 MB
 			if (file->seek(0, SEEK_SET) != 0)
 				return fail(Error::IO_ERROR, "seek 失败: " + item.nativePath);
 			uint64_t done = 0;
@@ -522,7 +522,7 @@ Error ArchiveWriter::write(IFileStream& out, ArchiveWriteStats* stats)
 		}
 		else
 		{
-			// 没有外部密钥：派生密钥并存入文件，只起混淆作用（final-decisions #5）
+			// 没有外部密钥：派生密钥并存入文件，只起混淆作用
 			for (uint32_t i = 0; i < INDEX_KEY_SIZE; i += 16)
 			{
 				Hash128 k = xxh3_128(index.data(), index.size(), SEED_INDEX_KEY + i);

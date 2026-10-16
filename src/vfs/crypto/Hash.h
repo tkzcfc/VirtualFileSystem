@@ -1,4 +1,4 @@
-// 本文件：XXH3 哈希的薄封装。xxHash 的头文件只在 Hash.cpp 中出现，不暴露给库外（vfs-format F4）。
+// 本文件：XXH3 哈希的薄封装。xxHash 的头文件只在 Hash.cpp 中出现，不暴露给库外。
 #pragma once
 
 #include "../Common.h"

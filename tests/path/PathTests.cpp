@@ -1,4 +1,4 @@
-// 路径规范化测试（决策 #11、#12）
+// 路径规范化测试
 #include "TestUtils.h"
 #include "vfs/Path.h"
 

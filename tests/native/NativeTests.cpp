@@ -125,7 +125,7 @@ TEST_SUITE("native")
 	}
 
 #if !defined(_WIN32)
-	TEST_CASE("followSymlinks=false：逃出根目录的符号链接被拒绝（决策 #20）")
+	TEST_CASE("followSymlinks=false：逃出根目录的符号链接被拒绝")
 	{
 		test::TempDir outside;
 		outside.write("secret.txt", "secret");

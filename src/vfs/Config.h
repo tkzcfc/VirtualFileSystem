@@ -6,7 +6,7 @@
 #    define VFS_WITH_AXMOL 0
 #endif
 
-// 单次 read/write 的最大字节数。接口用 int 返回读写长度，所以必须小于 INT_MAX（决策 #4）
+// 单次 read/write 的最大字节数。接口用 int 返回读写长度，所以必须小于 INT_MAX
 #ifndef VFS_MAX_IO_CHUNK
 #    define VFS_MAX_IO_CHUNK 0x7FFFF000u
 #endif

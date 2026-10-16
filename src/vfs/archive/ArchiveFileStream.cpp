@@ -21,7 +21,7 @@ ArchiveFileStream::~ArchiveFileStream()
 
 bool ArchiveFileStream::open(std::string_view /*path*/, IFileStream::Mode /*mode*/)
 {
-	// 归档流只能由 ArchiveBackend 构造（决策 (b)-3）
+	// 归档流只能由 ArchiveBackend 构造
 	errno = ENOTSUP;
 	return false;
 }
@@ -60,7 +60,7 @@ int64_t ArchiveFileStream::seek(int64_t offset, int origin) const
 		errno = EINVAL;
 		return -1;
 	}
-	// 允许 seek 到 EOF 之后，之后的 read 返回 0（决策 #33）
+	// 允许 seek 到 EOF 之后，之后的 read 返回 0
 	m_pos = base + offset;
 	return m_pos;
 }
@@ -118,7 +118,7 @@ int ArchiveFileStream::read(void* buf, unsigned int size) const
 
 int ArchiveFileStream::write(const void* /*buf*/, unsigned int /*size*/) const
 {
-	// 运行时归档只读（vfs-format F24）
+	// 运行时归档只读
 	errno = EROFS;
 	return -1;
 }

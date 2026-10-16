@@ -1,4 +1,4 @@
-// 分层合并视图测试：优先级、合并列表、Opaque、写入目标、copy-up、删除、rename、mkdir/rmdir（决策 #1-#16）
+// 分层合并视图测试：优先级、合并列表、Opaque、写入目标、copy-up、删除、rename、mkdir/rmdir
 #include "TestUtils.h"
 #include "vfs/memory/MemoryBackend.h"
 #include <algorithm>
@@ -55,7 +55,7 @@ MountOptions prio(int p, uint32_t flags = 0)
 
 TEST_SUITE("union")
 {
-	TEST_CASE("优先级：priority 大的优先，相同时后挂载的优先（决策 #3）")
+	TEST_CASE("优先级：priority 大的优先，相同时后挂载的优先")
 	{
 		VirtualFileSystem fs;
 		MountId a = fs.mount("/", roMemory({{"f.txt", "A"}}));
@@ -82,7 +82,7 @@ TEST_SUITE("union")
 		CHECK(fs.unmount(c) == Error::NOT_FOUND);
 	}
 
-	TEST_CASE("嵌套挂载按 priority 排序，与深度无关（决策 #15）")
+	TEST_CASE("嵌套挂载按 priority 排序，与深度无关")
 	{
 		VirtualFileSystem fs;
 		fs.mount("/a", roMemory({{"b/x.txt", "deep-by-root"}}), prio(10));
@@ -93,7 +93,7 @@ TEST_SUITE("union")
 		CHECK(listNames(fs, "/a/b") == Names{"x.txt", "y.txt"});
 	}
 
-	TEST_CASE("列目录：合并、去重、按字节序排序（决策 #13）")
+	TEST_CASE("列目录：合并、去重、按字节序排序")
 	{
 		VirtualFileSystem fs;
 		fs.mount("/", roMemory({{"d/b.txt", "1"}, {"d/a.txt", "1"}, {"d/sub/x", "1"}}));
@@ -115,7 +115,7 @@ TEST_SUITE("union")
 		CHECK(fs.list("/nope", [](const DirEntry&) { return true; }) == Error::NOT_FOUND);
 	}
 
-	TEST_CASE("类型冲突：高层文件遮蔽低层目录，查找子路径返回 NOT_DIR（决策 #13）")
+	TEST_CASE("类型冲突：高层文件遮蔽低层目录，查找子路径返回 NOT_DIR")
 	{
 		VirtualFileSystem fs;
 		fs.mount("/", roMemory({{"x/y.txt", "low"}, {"f", "low-file"}}));
@@ -132,7 +132,7 @@ TEST_SUITE("union")
 		CHECK(readAll(fs, "/f/inner.txt") == "high-dir");
 	}
 
-	TEST_CASE("Opaque：挂载点以下屏蔽更低的层（决策 #2）")
+	TEST_CASE("Opaque：挂载点以下屏蔽更低的层")
 	{
 		VirtualFileSystem fs;
 		fs.mount("/", roMemory({{"data/a.txt", "low"}, {"data/b.txt", "low"}, {"other.txt", "low"}}));
@@ -147,7 +147,7 @@ TEST_SUITE("union")
 		CHECK(listNames(fs, "/data") == Names{"a.txt", "c.txt"});
 	}
 
-	TEST_CASE("虚拟祖先目录：挂载点的祖先显示为只读目录（决策 #15）")
+	TEST_CASE("虚拟祖先目录：挂载点的祖先显示为只读目录")
 	{
 		VirtualFileSystem fs;
 		fs.mount("/x/y/z", roMemory({{"f.txt", "1"}}));
@@ -177,7 +177,7 @@ TEST_SUITE("union")
 		CHECK(fs.fileSize("/a.txt") == -1);
 	}
 
-	TEST_CASE("写入目标：可见项可写则原地写（决策 #5.2）")
+	TEST_CASE("写入目标：可见项可写则原地写")
 	{
 		VirtualFileSystem fs;
 		auto low = rwMemory({{"f.txt", "low"}});
@@ -189,7 +189,7 @@ TEST_SUITE("union")
 		CHECK(backendContent(high, "f.txt") == "<none>");
 	}
 
-	TEST_CASE("写入目标：新文件写到覆盖该路径的最高优先级可写层（决策 #5.3）")
+	TEST_CASE("写入目标：新文件写到覆盖该路径的最高优先级可写层")
 	{
 		VirtualFileSystem fs;
 		auto w1 = rwMemory();
@@ -202,7 +202,7 @@ TEST_SUITE("union")
 		CHECK(backendContent(w1, "new.txt") == "<none>");
 	}
 
-	TEST_CASE("写入目标：WriteTarget 标记的挂载优先（决策 #5.5）")
+	TEST_CASE("写入目标：WriteTarget 标记的挂载优先")
 	{
 		VirtualFileSystem fs;
 		auto marked = rwMemory();
@@ -230,7 +230,7 @@ TEST_SUITE("union")
 		CHECK_FALSE(st.writable);
 	}
 
-	TEST_CASE("写入目标：可写层被只读层遮蔽时拒绝写入（决策 #5.4）")
+	TEST_CASE("写入目标：可写层被只读层遮蔽时拒绝写入")
 	{
 		VirtualFileSystem fs;
 		auto rw = rwMemory();
@@ -254,7 +254,7 @@ TEST_SUITE("union")
 		CHECK(backendContent(user, "save.dat") == "s");
 	}
 
-	TEST_CASE("copy-up 目录：父目录只在只读层时，在写入目标中自动 mkdir -p（决策 #6）")
+	TEST_CASE("copy-up 目录：父目录只在只读层时，在写入目标中自动 mkdir -p")
 	{
 		VirtualFileSystem fs;
 		fs.mount("/", roMemory({{"a/b/c.txt", "c"}}));
@@ -276,7 +276,7 @@ TEST_SUITE("union")
 		CHECK(fs.writeFile("/a/b/c.txt/x", "x") == Error::NOT_DIR);
 	}
 
-	TEST_CASE("copy-up 文件：APPEND/OVERLAPPED 先拷贝下层内容，WRITE 直接新建（决策 #7）")
+	TEST_CASE("copy-up 文件：APPEND/OVERLAPPED 先拷贝下层内容，WRITE 直接新建")
 	{
 		VirtualFileSystem fs;
 		auto ro = roMemory({{"cfg/a.ini", "base"}, {"cfg/b.ini", "base"}, {"cfg/c.ini", "base"}});
@@ -314,7 +314,7 @@ TEST_SUITE("union")
 		CHECK(listNames(fs, "/cfg") == Names{"a.ini", "b.ini", "c.ini"});
 	}
 
-	TEST_CASE("removeFile：只读层返回 READ_ONLY；删除覆盖文件后原版重新露出（决策 #4、#8）")
+	TEST_CASE("removeFile：只读层返回 READ_ONLY；删除覆盖文件后原版重新露出")
 	{
 		VirtualFileSystem fs;
 		fs.mount("/", roMemory({{"f.txt", "original"}}));
@@ -338,7 +338,7 @@ TEST_SUITE("union")
 		CHECK(fs.removeFile("/dir") == Error::IS_DIR);
 	}
 
-	TEST_CASE("rename：同一可写后端内成功；只读源 READ_ONLY；跨后端 CROSS_DEVICE（决策 #9）")
+	TEST_CASE("rename：同一可写后端内成功；只读源 READ_ONLY；跨后端 CROSS_DEVICE")
 	{
 		VirtualFileSystem fs;
 		fs.mount("/", roMemory({{"ro.txt", "r"}}));
@@ -370,7 +370,7 @@ TEST_SUITE("union")
 		CHECK(readAll(fs, "/b/copy.txt") == "r");
 	}
 
-	TEST_CASE("createDir / createDirs（决策 #10）")
+	TEST_CASE("createDir / createDirs")
 	{
 		VirtualFileSystem fs;
 		fs.mount("/", roMemory({{"ro/sub/f.txt", "f"}}));
@@ -395,7 +395,7 @@ TEST_SUITE("union")
 		CHECK(fs.createDir("/") == Error::EXISTS);
 	}
 
-	TEST_CASE("removeDir：争议 1 的例子——只读层贡献了子孙时返回 READ_ONLY，什么都不删")
+	TEST_CASE("removeDir：只读层贡献了子孙时返回 READ_ONLY，什么都不删")
 	{
 		VirtualFileSystem fs;
 		fs.mount("/", roMemory({{"a/b/c.txt", "pack"}}));
@@ -443,7 +443,7 @@ TEST_SUITE("union")
 		CHECK(w2->stat("d", st) == Error::OK);
 	}
 
-	TEST_CASE("惰性卸载：流在卸载后仍然可读；FailIfBusy 严格模式（决策 #18）")
+	TEST_CASE("惰性卸载：流在卸载后仍然可读；FailIfBusy 严格模式")
 	{
 		VirtualFileSystem fs;
 		MountId id = fs.mount("/dlc", roMemory({{"big.bin", "0123456789"}}));
@@ -468,7 +468,7 @@ TEST_SUITE("union")
 		CHECK(fs.unmount(id2, UnmountFlags::FailIfBusy) == Error::OK);
 	}
 
-	TEST_CASE("内存后端 unlink 语义：删除打开中的文件，流继续可用（决策 #18）")
+	TEST_CASE("内存后端 unlink 语义：删除打开中的文件，流继续可用")
 	{
 		VirtualFileSystem fs;
 		fs.mount("/", rwMemory({{"f.txt", "data"}}));
@@ -586,7 +586,7 @@ TEST_SUITE("union")
 		CHECK(n == 3);
 	}
 
-	TEST_CASE("单文件挂载：子路径返回 NOT_DIR，可读写（决策 #16）")
+	TEST_CASE("单文件挂载：子路径返回 NOT_DIR，可读写")
 	{
 		test::TempDir dir;
 		dir.write("cfg.json", "{}");

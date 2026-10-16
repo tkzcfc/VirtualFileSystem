@@ -1,4 +1,4 @@
-// 本文件：归档中单个未压缩文件的只读流（vfs-format F23）。明文与 XOR 加密共用一个类。
+// 本文件：归档中单个未压缩文件的只读流。明文与 XOR 加密共用一个类。
 #pragma once
 
 #include "../Common.h"
@@ -9,10 +9,10 @@ NS_VFS_BEGIN
 
 /**
  * 归档中单个文件的只读流。
- * 每次 open 都持有一个独立的来源流（本机文件时就是独立的 OS 句柄），按偏移读取，零锁（决策 #25）。
- * - seek 只修改 m_pos，越界规则与 POSIX 一致（决策 #33）。
+ * 每次 open 都持有一个独立的来源流（本机文件时就是独立的 OS 句柄），按偏移读取，零锁。
+ * - seek 只修改 m_pos，越界规则与 POSIX 一致。
  * - read：先 clamp 到 [0, size)，再从底层句柄的 base+offset+pos 处读取，XOR 文件按位置即时解密。
- * - write 返回 -1（errno=EROFS），resize 返回 false（errno=ENOTSUP），nativeHandle() 返回 -1（决策 (b)-6）。
+ * - write 返回 -1（errno=EROFS），resize 返回 false（errno=ENOTSUP），nativeHandle() 返回 -1。
  * 同一个对象不能跨线程使用。
  */
 class VFS_DLL ArchiveFileStream : public IFileStream

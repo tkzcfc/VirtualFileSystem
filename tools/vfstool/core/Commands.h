@@ -1,4 +1,4 @@
-// 本文件：vfstool 各子命令的参数结构与实现入口（vfs-format F19）。
+// 本文件：vfstool 各子命令的参数结构与实现入口。
 // 每个命令都是 vfstool_core 中的一个函数，CLI（main.cpp）只负责解析参数；测试直接调用这些函数。
 #pragma once
 
@@ -13,7 +13,7 @@ namespace tool
 {
 
 /**
- * 退出码（vfs-format F19）。
+ * 退出码。
  */
 enum class ExitCode : int
 {
@@ -26,7 +26,7 @@ enum class ExitCode : int
 };
 
 /**
- * 密钥来源。优先级：keyFile > keyHex > 环境变量 VFS_KEY（vfs-format F20）。
+ * 密钥来源。优先级：keyFile > keyHex > 环境变量 VFS_KEY。
  */
 struct KeySource
 {

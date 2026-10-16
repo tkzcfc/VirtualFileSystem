@@ -1,4 +1,4 @@
-// 本文件：内存后端。内存中的可读写目录树（决策 #26）。
+// 本文件：内存后端。内存中的可读写目录树。
 #pragma once
 
 #include "../IBackend.h"
@@ -16,7 +16,7 @@ struct MemoryOptions
 /**
  * 内存后端。
  * - 节点是目录或带 shared_ptr<MemoryBuffer> 的文件；支持 mkdir/rmdir/rename/resize。
- * - 删除打开中的文件采用 unlink 语义：名字立即移除，数据由流继续持有（决策 #18）。
+ * - 删除打开中的文件采用 unlink 语义：名字立即移除，数据由流继续持有。
  * 线程安全：树结构由一把读写锁保护；文件数据由各自缓冲区的锁保护。
  */
 class VFS_DLL MemoryBackend : public IBackend

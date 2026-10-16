@@ -24,7 +24,7 @@ struct PackItem
 	FileWriteOptions options;
 };
 
-// 默认排除（vfs-format F21），作为最前面的规则，用户的 --include 可以覆盖
+// 默认排除，作为最前面的规则，用户的 --include 可以覆盖
 const char* const s_defaultExcludes[] = {".git", ".svn", ".DS_Store", "Thumbs.db", "desktop.ini"};
 
 class Collector

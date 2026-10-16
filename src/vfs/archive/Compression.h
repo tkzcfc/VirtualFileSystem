@@ -1,4 +1,4 @@
-// 本文件：LZ4 压缩的薄封装（final-decisions #6）。LZ4 的头文件只在 Compression.cpp 中出现。
+// 本文件：LZ4 压缩的薄封装。LZ4 的头文件只在 Compression.cpp 中出现。
 #pragma once
 
 #include "../Common.h"

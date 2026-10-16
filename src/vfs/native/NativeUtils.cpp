@@ -160,7 +160,7 @@ Error statPath(std::string_view utf8Path, Stat& out)
 {
 	std::string path(utf8Path);
 	struct stat st;
-	// stat 会跟随 symlink；是否允许跟随由 NativeBackend 另行检查（决策 #20）
+	// stat 会跟随 symlink；是否允许跟随由 NativeBackend 另行检查
 	if (::stat(path.c_str(), &st) != 0)
 		return errorFromErrno(errno);
 	if (S_ISDIR(st.st_mode))

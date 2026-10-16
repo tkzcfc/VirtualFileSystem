@@ -8,9 +8,9 @@ NS_VFS_BEGIN
 
 /**
  * 内存文件流。
- * - 由后端工厂构造，公开的 open(path, mode) 返回 false 并设置 errno=ENOTSUP（决策 (b)-3）。
+ * - 由后端工厂构造，公开的 open(path, mode) 返回 false 并设置 errno=ENOTSUP。
  * - READ 模式下 write/resize 返回失败（errno=EBADF）。
- * - APPEND 模式每次 write 都写到末尾；seek 越界后 write 会用 0 填充空洞（决策 #33）。
+ * - APPEND 模式每次 write 都写到末尾；seek 越界后 write 会用 0 填充空洞。
  * 线程安全：单个流对象不能跨线程使用；多个流共享同一缓冲区时由缓冲区的锁保证内存安全。
  */
 class VFS_DLL MemoryFileStream : public IFileStream

@@ -435,7 +435,7 @@ TEST_SUITE("archive")
 		CHECK(openErr(tail) == Error::OK);
 	}
 
-	TEST_CASE("版本不匹配：只检查一个版本号（final-decisions #1）")
+	TEST_CASE("版本不匹配：只检查一个版本号")
 	{
 		test::TempDir dir;
 		REQUIRE(test::buildArchive(dir.sub("a.vfs"), sampleFiles()) == Error::OK);

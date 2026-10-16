@@ -1,4 +1,4 @@
-// 本文件：单文件后端。把一个本机文件挂到虚拟路径上，相当于 Linux 的文件 bind mount（决策 #16）。
+// 本文件：单文件后端。把一个本机文件挂到虚拟路径上，相当于 Linux 的文件 bind mount。
 #pragma once
 
 #include "../IBackend.h"

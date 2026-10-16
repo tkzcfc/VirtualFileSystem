@@ -1,4 +1,4 @@
-// 本文件：后端（挂载类型）接口（决策 #21）。
+// 本文件：后端（挂载类型）接口。
 // 后端只负责自己的相对路径，完全不知道分层的存在；union、copy-up、递归删除等逻辑全部在 VirtualFileSystem 中。
 #pragma once
 
@@ -29,7 +29,7 @@ enum BackendCaps : uint32_t
  *
  * 线程安全：所有方法都可能被多个线程并发调用，实现必须自己保证线程安全。
  * 所有权：后端由 std::shared_ptr 持有；open 返回的流应当自己保活所需的数据
- * （例如归档索引、内存缓冲区），这样卸载后流仍然可用（决策 #18 惰性卸载）。
+ * （例如归档索引、内存缓冲区），这样卸载后流仍然可用。
  */
 class VFS_DLL IBackend
 {
@@ -86,7 +86,7 @@ public:
 	virtual Error rename(std::string_view /*from*/, std::string_view /*to*/) { return Error::READ_ONLY; }
 
 	/**
-	 * 返回本机路径（只有本机后端返回非空串），用于必须使用真实路径的模块（决策 #35）。
+	 * 返回本机路径（只有本机后端返回非空串），用于必须使用真实路径的模块。
 	 */
 	virtual std::string realPath(std::string_view /*rel*/) const { return std::string(); }
 

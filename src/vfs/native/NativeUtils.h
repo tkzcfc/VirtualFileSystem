@@ -15,7 +15,7 @@ namespace native
 
 /**
  * UTF-8 字符串转成 std::filesystem::path。
- * 一律通过 char8_t 构造，保证 Windows 上非 ASCII 路径正确（决策 #28，禁止窄字符构造）。
+ * 一律通过 char8_t 构造，保证 Windows 上非 ASCII 路径正确。
  */
 std::filesystem::path toFsPath(std::string_view utf8);
 
@@ -42,7 +42,7 @@ Error statPath(std::string_view utf8Path, Stat& out);
 
 #if defined(_WIN32)
 /**
- * UTF-8 转 UTF-16；绝对路径超过 MAX_PATH 时自动加 "\\\\?\\" 前缀（决策 #28）。
+ * UTF-8 转 UTF-16；绝对路径超过 MAX_PATH 时自动加 "\\\\?\\" 前缀。
  */
 std::wstring toWidePath(std::string_view utf8);
 #endif

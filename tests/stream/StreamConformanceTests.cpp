@@ -1,4 +1,4 @@
-// IFileStream 一致性测试：同一套用例跑遍所有后端（决策 #33）。
+// IFileStream 一致性测试：同一套用例跑遍所有后端。
 // 只读用例覆盖全部后端；写入用例只覆盖可写后端。
 #include "TestUtils.h"
 #include "vfs/archive/ArchiveBackend.h"

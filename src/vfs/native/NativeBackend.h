@@ -1,4 +1,4 @@
-// 本文件：本机目录后端。把一个本机目录挂到虚拟路径上（决策 #21）。
+// 本文件：本机目录后端。把一个本机目录挂到虚拟路径上。
 #pragma once
 
 #include "../IBackend.h"
@@ -11,15 +11,15 @@ NS_VFS_BEGIN
 struct NativeOptions
 {
 	bool readOnly = false;        // 只读：所有写操作返回 READ_ONLY
-	bool followSymlinks = true;   // 为 false 时，解析后逃出根目录的路径一律拒绝（决策 #20）
-	bool strictCase = false;      // 为 true 时核对真实文件名的大小写，不一致打警告（决策 #12，建议只在 Debug 打开）
+	bool followSymlinks = true;   // 为 false 时，解析后逃出根目录的路径一律拒绝
+	bool strictCase = false;      // 为 true 时核对真实文件名的大小写，不一致打警告
 	bool createRoot = false;      // 根目录不存在时自动创建（mkdir -p）
 };
 
 /**
  * 本机目录后端。
- * - 不做任何缓存，每次都访问文件系统，外部修改立即可见（决策 #32）。
- * - 路径段额外拒绝 ':' 和 Windows 保留名，保证各平台行为一致（决策 #11）。
+ * - 不做任何缓存，每次都访问文件系统，外部修改立即可见。
+ * - 路径段额外拒绝 ':' 和 Windows 保留名，保证各平台行为一致。
  * 线程安全：无共享可变状态，可以任意并发调用。
  */
 class VFS_DLL NativeBackend : public IBackend

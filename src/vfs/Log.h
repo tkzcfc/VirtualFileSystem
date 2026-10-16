@@ -1,4 +1,4 @@
-// 本文件：可注入的日志输出（决策 #22）。库内不直接 printf。
+// 本文件：可注入的日志输出。库内不直接 printf。
 #pragma once
 
 #include "Common.h"

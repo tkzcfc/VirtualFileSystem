@@ -1,5 +1,5 @@
 // 本文件：.vfs 归档格式的常量、字段偏移和枚举（单一事实来源）。
-// 完整规范见 docs/vfs-format.md。所有整数固定小端，通过 ByteIO 逐字节读写，禁止 memcpy 结构体。
+// 完整规范见 docs/format.md。所有整数固定小端，通过 ByteIO 逐字节读写，禁止 memcpy 结构体。
 //
 // 布局：
 //   [0]            Header 128B（明文）
@@ -20,7 +20,7 @@ constexpr uint8_t MAGIC[8] = {0x89, 'V', 'F', 'S', '\r', '\n', 0x1A, '\n'};
 // "\x89VFE\r\n\x1A\n"：footer magic
 constexpr uint8_t FOOTER_MAGIC[8] = {0x89, 'V', 'F', 'E', '\r', '\n', 0x1A, '\n'};
 
-// 格式版本：与读取方不一致直接拒绝（final-decisions #1）
+// 格式版本：与读取方不一致直接拒绝
 constexpr uint32_t VERSION = 1;
 
 constexpr uint32_t HEADER_SIZE = 128;
@@ -84,13 +84,13 @@ constexpr size_t F_ARCHIVE_SIZE = 8;     // [8] u64 archiveSize（从 header 起
 enum ArchiveFlags : uint32_t
 {
 	IndexEncrypted = 1u << 0,   // 索引区用 ChaCha20 加密
-	KeyStored = 1u << 1,        // 索引密钥存放在 header 中（不追求高安全性，final-decisions #5）
+	KeyStored = 1u << 1,        // 索引密钥存放在 header 中（不追求高安全性）
 };
 
 enum class EntryType : uint8_t
 {
 	FILE = 1,
-	DIR = 2,    // 只用于空目录（final-decisions #7：默认不保留）
+	DIR = 2,    // 只用于空目录
 };
 
 enum class CipherType : uint8_t

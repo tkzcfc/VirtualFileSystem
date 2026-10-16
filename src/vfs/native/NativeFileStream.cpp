@@ -79,7 +79,7 @@ bool NativeFileStream::open(std::string_view path, IFileStream::Mode mode)
 {
 	close();
 
-	// 与 axmol 相同的模式表，只是共享模式多了 FILE_SHARE_DELETE（决策 #18：打开期间允许删除/替换）
+	// 与 axmol 相同的模式表，只是共享模式多了 FILE_SHARE_DELETE
 	static const DWORD shareMode = FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE;
 	DWORD access = GENERIC_READ | GENERIC_WRITE;
 	DWORD creation = OPEN_ALWAYS;

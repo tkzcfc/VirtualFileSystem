@@ -1,4 +1,4 @@
-// 本文件：文件类型与元数据（决策 #27）。
+// 本文件：文件类型与元数据。
 #pragma once
 
 #include "Common.h"
@@ -9,7 +9,7 @@ NS_VFS_BEGIN
 using MountId = uint64_t;
 
 /**
- * 文件类型。VFS 不支持 symlink（决策 #20），所以只有文件和目录两种。
+ * 文件类型。VFS 不支持 symlink，所以只有文件和目录两种。
  */
 enum class FileType : uint8_t
 {
@@ -19,7 +19,7 @@ enum class FileType : uint8_t
 };
 
 /**
- * 元数据。不提供权限位和 atime（决策 #27）。
+ * 元数据。不提供权限位和 atime。
  */
 struct Stat
 {

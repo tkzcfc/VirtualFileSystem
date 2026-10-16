@@ -105,7 +105,7 @@ Error NativeBackend::toNative(std::string_view rel, std::string& out) const
 
 	if (!m_options.followSymlinks && !rel.empty())
 	{
-		// 决策 #20：解析 symlink 后必须仍在根目录之内
+		// 解析 symlink 后必须仍在根目录之内
 		std::error_code ec;
 		stdfs::path canon = stdfs::weakly_canonical(native::toFsPath(out), ec);
 		if (ec)

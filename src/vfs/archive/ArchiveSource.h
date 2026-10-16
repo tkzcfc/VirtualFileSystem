@@ -1,4 +1,4 @@
-// 本文件：归档的数据来源抽象（决策 #25、#26）。归档可以来自本机文件，也可以来自内存（例如嵌入在可执行文件里）。
+// 本文件：归档的数据来源抽象。归档可以来自本机文件，也可以来自内存（例如嵌入在可执行文件里）。
 #pragma once
 
 #include "../IFileStream.h"
@@ -10,7 +10,7 @@ NS_VFS_BEGIN
 /**
  * 归档数据来源。
  * 线程安全：openStream 可以被多个线程并发调用；每次调用返回一个独立的只读流（独立的 OS 句柄或独立的游标），
- * 所以多个线程读同一归档时互不加锁（决策 #25）。
+ * 所以多个线程读同一归档时互不加锁。
  */
 class VFS_DLL IArchiveSource
 {
@@ -23,7 +23,7 @@ public:
 	virtual std::unique_ptr<IFileStream> openStream(Error* err) const = 0;
 
 	/**
-	 * 来源的修改时间（Unix 秒），条目 mtime 为 0 时用它代替（决策 #27）。
+	 * 来源的修改时间（Unix 秒），条目 mtime 为 0 时用它代替。
 	 */
 	virtual int64_t mtime() const { return 0; }
 

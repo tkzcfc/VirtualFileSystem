@@ -1,4 +1,4 @@
-// vfstool 命令行入口：用 CLI11 解析参数后调用 vfstool_core 中的命令实现（vfs-format F19）
+// vfstool 命令行入口：用 CLI11 解析参数后调用 vfstool_core 中的命令实现
 #include "core/Commands.h"
 #include "vfs/native/NativeFileStream.h"
 #include "CLI11.hpp"
@@ -87,7 +87,7 @@ std::vector<std::string> utf8Arguments(int argc, char** argv)
 	return args;
 }
 
-// 展开 @args.txt：文件中的参数按空白分隔，支持双引号（vfs-format F21）。
+// 展开 @args.txt：文件中的参数按空白分隔，支持双引号。
 // 参数文件按 UTF-8 解释，允许带 UTF-8 BOM（Windows 记事本默认会加）
 bool expandResponseFiles(const std::vector<std::string>& in, std::vector<std::string>& out)
 {

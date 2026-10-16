@@ -1,4 +1,4 @@
-// 并发压力测试：多线程读归档、挂载/卸载与打开中的流并发、内存后端并发读写（决策 #17、#18、#19、#21）
+// 并发压力测试：多线程读归档、挂载/卸载与打开中的流并发、内存后端并发读写
 #include "TestUtils.h"
 #include "vfs/archive/ArchiveBackend.h"
 #include "vfs/memory/MemoryBackend.h"
