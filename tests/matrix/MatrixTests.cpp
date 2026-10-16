@@ -24,7 +24,7 @@ TEST_SUITE("matrix")
 {
 	// ================================================================ 文件读写
 
-	TEST_CASE_TEMPLATE("文件：各种大小的写入与读回", E, VFS_ENVS)
+	TEST_CASE_TEMPLATE("files: writes and reads of various sizes", E, VFS_ENVS)
 	{
 		E e;
 		const size_t sizes[] = {0, 1, 7, 4095, 4096, 4097, 65539, 1u << 20};
@@ -43,7 +43,7 @@ TEST_SUITE("matrix")
 		}
 	}
 
-	TEST_CASE_TEMPLATE("文件：WRITE 截断、APPEND 追加、OVERLAPPED 原地改写", E, VFS_ENVS)
+	TEST_CASE_TEMPLATE("files: WRITE truncates, APPEND appends, OVERLAPPED rewrites in place", E, VFS_ENVS)
 	{
 		E e;
 		REQUIRE(e.fs.writeFile("/w/m.txt", "0123456789") == Error::OK);
@@ -85,7 +85,7 @@ TEST_SUITE("matrix")
 		CHECK(e.fs.isFile("/w/new_ov.txt"));
 	}
 
-	TEST_CASE_TEMPLATE("文件：removeFile 的各种情况", E, VFS_ENVS)
+	TEST_CASE_TEMPLATE("files: removeFile cases", E, VFS_ENVS)
 	{
 		E e;
 		REQUIRE(e.fs.writeFile("/w/del.txt", "x") == Error::OK);
@@ -100,7 +100,7 @@ TEST_SUITE("matrix")
 		CHECK(e.fs.isDir("/w/d"));
 	}
 
-	TEST_CASE_TEMPLATE("文件：写入时父目录必须存在，父路径是文件返回 NOT_DIR", E, VFS_ENVS)
+	TEST_CASE_TEMPLATE("files: the parent must exist; a file as parent returns NOT_DIR", E, VFS_ENVS)
 	{
 		E e;
 		CHECK(e.fs.writeFile("/w/missing/x.txt", "x") == Error::NOT_FOUND);
@@ -116,7 +116,7 @@ TEST_SUITE("matrix")
 
 	// ================================================================ 目录
 
-	TEST_CASE_TEMPLATE("目录：createDir / createDirs / list / removeDir 生命周期", E, VFS_ENVS)
+	TEST_CASE_TEMPLATE("directories: createDir / createDirs / list / removeDir lifecycle", E, VFS_ENVS)
 	{
 		E e;
 		CHECK(e.fs.createDir("/w/d1") == Error::OK);
@@ -146,7 +146,7 @@ TEST_SUITE("matrix")
 		CHECK_FALSE(e.fs.exists("/w/d1"));
 	}
 
-	TEST_CASE_TEMPLATE("目录：list 合并、去重、按字节序排序", E, VFS_ENVS)
+	TEST_CASE_TEMPLATE("directories: list is merged, deduplicated and sorted by bytes", E, VFS_ENVS)
 	{
 		E e;
 		for (const char* n : {"zeta", "Alpha", "beta", "_x", "10", "2"})
@@ -161,7 +161,7 @@ TEST_SUITE("matrix")
 		CHECK(listNames(e.fs, "/w/base") == expected);
 	}
 
-	TEST_CASE_TEMPLATE("目录：深层目录（64 层）创建、写入、walk、递归删除", E, VFS_ENVS)
+	TEST_CASE_TEMPLATE("directories: deep tree (64 levels) create, write, walk, recursive remove", E, VFS_ENVS)
 	{
 		E e;
 		std::string path = "/w/deep";
@@ -183,7 +183,7 @@ TEST_SUITE("matrix")
 		CHECK_FALSE(e.fs.exists("/w/deep"));
 	}
 
-	TEST_CASE_TEMPLATE("目录：一个目录下 1500 个文件，list 完整有序，逐个删除后为空", E, VFS_ENVS)
+	TEST_CASE_TEMPLATE("directories: 1500 files in one directory, complete sorted listing, empty after removing each", E, VFS_ENVS)
 	{
 		E e;
 		REQUIRE(e.fs.createDir("/w/many") == Error::OK);
@@ -204,7 +204,7 @@ TEST_SUITE("matrix")
 
 	// ================================================================ rename / move
 
-	TEST_CASE_TEMPLATE("rename 文件：同目录、跨目录、覆盖、类型冲突、不存在、相同路径", E, VFS_ENVS)
+	TEST_CASE_TEMPLATE("rename files: same dir, across dirs, overwrite, type conflict, missing, same path", E, VFS_ENVS)
 	{
 		E e;
 		REQUIRE(e.fs.createDirs("/w/r/a") == Error::OK);
@@ -237,7 +237,7 @@ TEST_SUITE("matrix")
 		CHECK(readAll(e.fs, "/w/r/b/old.txt") == "F");
 	}
 
-	TEST_CASE_TEMPLATE("rename 目录：带内容移动、移到自己的子目录、覆盖空目录 / 非空目录 / 文件", E, VFS_ENVS)
+	TEST_CASE_TEMPLATE("rename directories: move with content, into own subtree, over empty dir / non-empty dir / file", E, VFS_ENVS)
 	{
 		E e;
 		REQUIRE(e.fs.createDirs("/w/t/src/inner") == Error::OK);
@@ -298,7 +298,7 @@ TEST_SUITE("matrix")
 
 	// ================================================================ 底层文件
 
-	TEST_CASE_TEMPLATE("底层文件：读取、覆盖、删除覆盖后恢复、直接删除、改名", E, VFS_ENVS)
+	TEST_CASE_TEMPLATE("lower files: read, override, restore after removing the override, remove, rename", E, VFS_ENVS)
 	{
 		E e;
 		CHECK(readAll(e.fs, "/w/base/a.txt") == "A");
@@ -337,7 +337,7 @@ TEST_SUITE("matrix")
 		}
 	}
 
-	TEST_CASE_TEMPLATE("底层文件：APPEND / OVERLAPPED 保留原内容（只读层上先 copy-up）", E, VFS_ENVS)
+	TEST_CASE_TEMPLATE("lower files: APPEND / OVERLAPPED keep the content (copy-up from read-only layers)", E, VFS_ENVS)
 	{
 		E e;
 		{
@@ -359,7 +359,7 @@ TEST_SUITE("matrix")
 		CHECK(listNames(e.fs, "/w/base") == (Names{"a.txt", "sub/"}));
 	}
 
-	TEST_CASE_TEMPLATE("底层目录：在其中建子目录与文件、removeDir 与 rename 的规则", E, VFS_ENVS)
+	TEST_CASE_TEMPLATE("lower directories: creating children inside, removeDir and rename rules", E, VFS_ENVS)
 	{
 		E e;
 		CHECK(e.fs.createDir("/w/base/sub/new") == Error::OK);
@@ -384,7 +384,7 @@ TEST_SUITE("matrix")
 
 	// ================================================================ 名字与路径
 
-	TEST_CASE_TEMPLATE("名字：中文、日文、emoji、空格、点开头、多个点、255 字节长名", E, VFS_ENVS)
+	TEST_CASE_TEMPLATE("names: Chinese, Japanese, emoji, spaces, leading dot, multiple dots, 255-byte names", E, VFS_ENVS)
 	{
 		E e;
 		const std::string names[] = {
@@ -416,7 +416,7 @@ TEST_SUITE("matrix")
 		CHECK(listNames(e.fs, "/w/names").empty());
 	}
 
-	TEST_CASE_TEMPLATE("名字：结尾的点或空格、冒号、Windows 保留名（本机层拒绝，内存层允许）", E, VFS_ENVS)
+	TEST_CASE_TEMPLATE("names: trailing dot or space, colon, Windows reserved names (rejected by native, allowed by memory)", E, VFS_ENVS)
 	{
 		E e;
 		for (const char* n : {"trail.", "trail ", "a:b", "CON", "nul.txt", "com1"})
@@ -433,7 +433,7 @@ TEST_SUITE("matrix")
 		}
 	}
 
-	TEST_CASE_TEMPLATE("名字：只有大小写不同的名字是不同的文件（区分大小写的写入层）", E, VFS_ENVS)
+	TEST_CASE_TEMPLATE("names: names differing only in case are different files (case-sensitive write layer)", E, VFS_ENVS)
 	{
 		E e;
 		if (!e.caseSensitive())
@@ -452,7 +452,7 @@ TEST_SUITE("matrix")
 		CHECK(e.fs.exists("/w/base/A.txt") == !e.baseCaseSensitive());
 	}
 
-	TEST_CASE_TEMPLATE("名字：大小写不敏感的写入层上只差大小写的名字指向同一文件", E, VFS_ENVS)
+	TEST_CASE_TEMPLATE("names: on a case-insensitive write layer, names differing only in case are the same file", E, VFS_ENVS)
 	{
 		E e;
 		if (e.caseSensitive())
@@ -464,7 +464,7 @@ TEST_SUITE("matrix")
 		CHECK(e.fs.exists("/w/CASE.TXT"));
 	}
 
-	TEST_CASE_TEMPLATE("路径变体：. .. 重复斜杠 反斜杠 结尾斜杠 无前导斜杠 都指向同一文件", E, VFS_ENVS)
+	TEST_CASE_TEMPLATE("path variants: . .. repeated slashes, backslashes, trailing slash, no leading slash all reach the same file", E, VFS_ENVS)
 	{
 		E e;
 		REQUIRE(e.fs.writeFile("/w/p/q.txt", "q") == Error::NOT_FOUND);
@@ -485,7 +485,7 @@ TEST_SUITE("matrix")
 
 	// ================================================================ 流
 
-	TEST_CASE_TEMPLATE("流：seek 越过 EOF、0 字节读写、close 后操作、空洞补 0", E, VFS_ENVS)
+	TEST_CASE_TEMPLATE("streams: seek past EOF, zero-byte read/write, use after close, zero-filled holes", E, VFS_ENVS)
 	{
 		E e;
 		REQUIRE(e.fs.writeFile("/w/s.bin", "abc") == Error::OK);
@@ -523,7 +523,7 @@ TEST_SUITE("matrix")
 		CHECK(r->write("x", 1) == -1);
 	}
 
-	TEST_CASE_TEMPLATE("流：删除打开中的文件后，已打开的读流仍能读完", E, VFS_ENVS)
+	TEST_CASE_TEMPLATE("streams: an open reader can finish after the file is removed", E, VFS_ENVS)
 	{
 		E e;
 		const std::string data = blob(100000, 77);
@@ -538,7 +538,7 @@ TEST_SUITE("matrix")
 		CHECK(readAll(e.fs, "/w/open.bin") == "new");
 	}
 
-	TEST_CASE_TEMPLATE("流：同时打开 300 个流（同一文件与不同文件），各自位置独立", E, VFS_ENVS)
+	TEST_CASE_TEMPLATE("streams: 300 open streams (same and different files) with independent positions", E, VFS_ENVS)
 	{
 		E e;
 		REQUIRE(e.fs.createDir("/w/h") == Error::OK);
@@ -563,7 +563,7 @@ TEST_SUITE("matrix")
 
 	// ================================================================ 元数据
 
-	TEST_CASE_TEMPLATE("stat 与 generation：类型、大小、可写标志随操作变化", E, VFS_ENVS)
+	TEST_CASE_TEMPLATE("stat and generation: type, size and writable flag follow operations", E, VFS_ENVS)
 	{
 		E e;
 		const uint64_t g0 = e.fs.generation();
@@ -592,7 +592,7 @@ TEST_SUITE("matrix")
 		CHECK(st.type == FileType::DIR);
 	}
 
-	TEST_CASE_TEMPLATE("realPath：本机写入层返回真实路径，其他后端返回空串", E, VFS_ENVS)
+	TEST_CASE_TEMPLATE("realPath: native write layers return the real path, other backends an empty string", E, VFS_ENVS)
 	{
 		E e;
 		REQUIRE(e.fs.writeFile("/w/real.txt", "r") == Error::OK);
@@ -607,7 +607,7 @@ TEST_SUITE("matrix")
 		CHECK(e.fs.realPath("/w/none").empty());
 	}
 
-	TEST_CASE_TEMPLATE("walk 与逐级 list 的结果一致", E, VFS_ENVS)
+	TEST_CASE_TEMPLATE("walk matches level-by-level list", E, VFS_ENVS)
 	{
 		E e;
 		REQUIRE(e.fs.createDirs("/w/tree/a/b") == Error::OK);

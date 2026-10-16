@@ -131,4 +131,4 @@ MountId mount(mountPoint, backend, MountOptions{priority, flags});
 | `KEY_REQUIRED` | `EACCES` | 归档索引已加密但没有提供密钥 |
 | `KEY_INVALID` | `EACCES` | 密钥长度不对或密钥错误 |
 
-`errorName(e)` 返回枚举名，`errorMessage(e)` 返回中文说明，`toErrno(e)` 返回上表中的 errno。
+`errorName(e)` 返回枚举名，`errorMessage(e)` 返回英文说明，`toErrno(e)` 返回上表中的 errno。

@@ -156,7 +156,7 @@ void NativeBackend::checkCase(std::string_view rel) const
 	// 在大小写不敏感的文件系统上（Windows/macOS），"A.png" 能打开 "a.png"，发布到归档后就找不到了
 	bool last = false;
 	if (matchCase(rel, last) != Error::OK || last)
-		log(LogLevel::WARN, "vfs: 路径大小写与磁盘上的真实名字不一致: " + std::string(rel));
+		log(LogLevel::WARN, "vfs: path case differs from the actual name on disk: " + std::string(rel));
 }
 
 Error NativeBackend::stat(std::string_view rel, Stat& out) const

@@ -10,7 +10,7 @@ int runUnpack(const UnpackOptions& options, std::ostream& out, std::ostream& err
 {
 	if (options.outputDir.empty())
 	{
-		err << "错误: 需要 -o 输出目录\n";
+		err << "error: -o <output dir> is required\n";
 		return static_cast<int>(ExitCode::USAGE);
 	}
 	std::shared_ptr<const ArchiveIndex> index;
@@ -27,7 +27,7 @@ int runUnpack(const UnpackOptions& options, std::ostream& out, std::ostream& err
 	auto stream = index->source->openStream(&e);
 	if (!stream)
 	{
-		err << "错误: 无法读取归档: " << errorMessage(e) << "\n";
+		err << "error: cannot read archive: " << errorMessage(e) << "\n";
 		return exitCodeFor(e);
 	}
 
@@ -41,11 +41,11 @@ int runUnpack(const UnpackOptions& options, std::ostream& out, std::ostream& err
 		if (e != Error::OK)
 		{
 			if (e == Error::EXISTS)
-				err << "错误: 文件已存在（使用 --force 覆盖）: " << entry.path << "\n";
+				err << "error: file exists (use --force to overwrite): " << entry.path << "\n";
 			else if (e == Error::CORRUPTED)
-				err << "错误: 内容校验失败: " << entry.path << "\n";
+				err << "error: content verification failed: " << entry.path << "\n";
 			else
-				err << "错误: 写出失败: " << entry.path << " (" << errorName(e) << ")\n";
+				err << "error: write failed: " << entry.path << " (" << errorName(e) << ")\n";
 			result = e == Error::CORRUPTED ? static_cast<int>(ExitCode::INTEGRITY) : exitCodeFor(e);
 			return result;
 		}
@@ -56,7 +56,7 @@ int runUnpack(const UnpackOptions& options, std::ostream& out, std::ostream& err
 		else
 			++files;
 	}
-	out << "已解包 " << files << " 个文件、" << dirs << " 个空目录到 " << options.outputDir << "\n";
+	out << "unpacked " << files << " file(s) and " << dirs << " empty dir(s) to " << options.outputDir << "\n";
 	return result;
 }
 

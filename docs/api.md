@@ -20,7 +20,7 @@ enum class Error { OK, NOT_FOUND, EXISTS, NOT_DIR, IS_DIR, NOT_EMPTY, READ_ONLY,
 
 int toErrno(Error e);              // 映射到 POSIX errno，见 mount-rules.md §11
 const char* errorName(Error e);    // "NOT_FOUND"
-const char* errorMessage(Error e); // 中文说明
+const char* errorMessage(Error e); // 英文说明（例如 "no such file or directory"）
 ```
 
 - 返回 `Error` 的函数失败时同时设置 `errno = toErrno(e)`。

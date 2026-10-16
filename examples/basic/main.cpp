@@ -21,7 +21,7 @@ int main()
 		writer.addData("scripts/main.lua", std::vector<uint8_t>(script.begin(), script.end()), fo);
 		if (writer.write(*out) != Error::OK)
 		{
-			std::cerr << "打包失败: " << writer.lastError() << "\n";
+			std::cerr << "pack failed: " << writer.lastError() << "\n";
 			return 1;
 		}
 	}
@@ -50,11 +50,11 @@ int main()
 
 	// 5. 列出合并视图
 	for (const auto& e : fs.list("/res"))
-		std::cout << (e.type == FileType::DIR ? "[目录] " : "[文件] ") << e.name << "\n";
+		std::cout << (e.type == FileType::DIR ? "[dir]  " : "[file] ") << e.name << "\n";
 
 	// 6. 删除覆盖文件：归档里的原版重新露出
 	fs.removeFile("/res/config.json");
 	fs.readFile("/res/config.json", text);
-	std::cout << "删除覆盖后 config.json: " << text << "\n";
+	std::cout << "config.json after removing the override: " << text << "\n";
 	return 0;
 }

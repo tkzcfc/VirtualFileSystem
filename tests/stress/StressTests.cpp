@@ -95,7 +95,7 @@ std::string payload(int t, int i)
 
 TEST_SUITE("stress")
 {
-	TEST_CASE_TEMPLATE("同一目录：每个线程创建 / 写 / 读 / 覆盖 / 删除自己的文件，同时有线程 list", E, STRESS_ENVS)
+	TEST_CASE_TEMPLATE("same directory: each thread creates / writes / reads / overwrites / removes its own files while another lists", E, STRESS_ENVS)
 	{
 		E e;
 		REQUIRE(e.fs.createDirs("/s/shared") == Error::OK);
@@ -115,7 +115,7 @@ TEST_SUITE("stress")
 				});
 				if (err != Error::OK || !std::is_sorted(names.begin(), names.end()) ||
 					std::adjacent_find(names.begin(), names.end()) != names.end())
-					failures.add(std::string("list -> ") + errorName(err) + "，" + std::to_string(names.size()) + " 项");
+					failures.add(std::string("list -> ") + errorName(err) + ", " + std::to_string(names.size()) + " entries");
 			}
 		});
 
@@ -133,7 +133,7 @@ TEST_SUITE("stress")
 		});
 		done = true;
 		lister.join();
-		INFO("失败详情: " << failures.str());
+		INFO("failure details: " << failures.str());
 		CHECK(failures.load() == 0);
 		// 结束状态：每个线程的 10 个槽位中，最后一轮没有删除的文件内容正确
 		for (int t = 0; t < THREADS; ++t)
@@ -153,7 +153,7 @@ TEST_SUITE("stress")
 		}
 	}
 
-	TEST_CASE_TEMPLATE("不同目录：每个线程在自己的目录树中 createDirs / 写 / removeDir 递归", E, STRESS_ENVS)
+	TEST_CASE_TEMPLATE("separate directories: each thread runs createDirs / write / recursive removeDir in its own tree", E, STRESS_ENVS)
 	{
 		E e;
 		const int rounds = 40 * test::scale();
@@ -168,14 +168,14 @@ TEST_SUITE("stress")
 				failures.expectOk(e.fs.writeFile(d + "/f.txt", payload(t, i)), "writeFile " + d + "/f.txt");
 				failures.expectEq(test::readAll(e.fs, d + "/f.txt"), payload(t, i), "readAll " + d + "/f.txt");
 				if (i % 5 == 4)
-					failures.expectOk(e.fs.removeDir(root, true), "removeDir(递归) " + root);
+					failures.expectOk(e.fs.removeDir(root, true), "removeDir(recursive) " + root);
 			}
 		});
-		INFO("失败详情: " << failures.str());
+		INFO("failure details: " << failures.str());
 		CHECK(failures.load() == 0);
 	}
 
-	TEST_CASE_TEMPLATE("并发改名：文件在 4 个目录间随机移动，最终每个文件恰好在一个位置且内容完好", E, STRESS_ENVS)
+	TEST_CASE_TEMPLATE("concurrent renames: files move randomly between 4 directories, each ends up in exactly one place intact", E, STRESS_ENVS)
 	{
 		E e;
 		const int FILES = 40;
@@ -204,8 +204,8 @@ TEST_SUITE("stress")
 					failures.add("rename " + from + " -> " + to + ": " + errorName(err) + test::osErrorSuffix());
 			}
 		});
-		INFO("rename 返回码: " << codes.str());
-		INFO("失败详情: " << failures.str());
+		INFO("rename codes: " << codes.str());
+		INFO("failure details: " << failures.str());
 		CHECK(failures.load() == 0);
 		CHECK(moved.load() > 0);
 		std::map<std::string, int> seen;
@@ -222,7 +222,7 @@ TEST_SUITE("stress")
 			CHECK(kv.second == 1);
 	}
 
-	TEST_CASE_TEMPLATE("并发改名目录：目录树在几个名字间轮换，最终恰好存在一份", E, STRESS_ENVS)
+	TEST_CASE_TEMPLATE("concurrent directory renames: a tree rotates between names, exactly one copy remains", E, STRESS_ENVS)
 	{
 		E e;
 		REQUIRE(e.fs.createDirs("/s/rd/n0/inner") == Error::OK);
@@ -242,15 +242,15 @@ TEST_SUITE("stress")
 			}
 		});
 		auto names = test::listNames(e.fs, "/s/rd");
-		INFO("rename 返回码: " << codes.str());
-		INFO("最终目录: " << doctest::toString(names));
-		INFO("失败详情: " << failures.str());
+		INFO("rename codes: " << codes.str());
+		INFO("final directories: " << doctest::toString(names));
+		INFO("failure details: " << failures.str());
 		CHECK(failures.load() == 0);
 		REQUIRE(names.size() == 1);
 		CHECK(test::readAll(e.fs, "/s/rd/" + names[0] + "inner/x.txt") == "X");
 	}
 
-	TEST_CASE_TEMPLATE("并发 mkdir / rmdir 同一组目录：只返回预期的错误码，结束后视图一致", E, STRESS_ENVS)
+	TEST_CASE_TEMPLATE("concurrent mkdir / rmdir on the same directories: only expected error codes, consistent view afterwards", E, STRESS_ENVS)
 	{
 		E e;
 		REQUIRE(e.fs.createDir("/s/md") == Error::OK);
@@ -263,7 +263,7 @@ TEST_SUITE("stress")
 		{
 			h.add(err);
 			if (err != a && err != b && err != c)
-				failures.add("意外返回码 " + what + " -> " + errorName(err) + test::osErrorSuffix());
+				failures.add("unexpected code " + what + " -> " + errorName(err) + test::osErrorSuffix());
 		};
 		runThreads(THREADS, [&](int t)
 		{
@@ -288,18 +288,18 @@ TEST_SUITE("stress")
 						   Error::NOT_EMPTY);
 					break;
 				default:
-					expect(removeTreeCodes, "removeDir(递归) " + d.substr(0, d.rfind('/')),
+					expect(removeTreeCodes, "removeDir(recursive) " + d.substr(0, d.rfind('/')),
 						   e.fs.removeDir(d.substr(0, d.rfind('/')), true), Error::OK,
 						   Error::NOT_FOUND, Error::NOT_EMPTY);
 					break;
 				}
 			}
 		});
-		INFO("createDirs 返回码: " << createDirsCodes.str());
-		INFO("createDir 返回码: " << createDirCodes.str());
-		INFO("removeDir 返回码: " << removeDirCodes.str());
-		INFO("removeDir(递归) 返回码: " << removeTreeCodes.str());
-		INFO("失败详情: " << failures.str());
+		INFO("createDirs codes: " << createDirsCodes.str());
+		INFO("createDir codes: " << createDirCodes.str());
+		INFO("removeDir codes: " << removeDirCodes.str());
+		INFO("removeDir(recursive) codes: " << removeTreeCodes.str());
+		INFO("failure details: " << failures.str());
 		CHECK(failures.load() == 0);
 		// 视图一致：walk 到的每一项都能 stat 成功且类型一致
 		e.fs.walk("/s/md", [&](const std::string& full, const DirEntry& d)
@@ -311,7 +311,7 @@ TEST_SUITE("stress")
 		});
 	}
 
-	TEST_CASE_TEMPLATE("读写同一文件：写线程整体替换 / 追加，读线程看到的每个字节都来自某次写入", E, STRESS_ENVS)
+	TEST_CASE_TEMPLATE("read/write one file: writers replace / append, readers only see bytes from some write", E, STRESS_ENVS)
 	{
 		E e;
 		REQUIRE(e.fs.writeFile("/s/hot.bin", std::string(1000, 'A')) == Error::OK);
@@ -336,14 +336,14 @@ TEST_SUITE("stress")
 						int n = s->read(buf, sizeof(buf));
 						if (n < 0)
 						{
-							failures.add("read 返回 " + std::to_string(n));
+							failures.add("read returned " + std::to_string(n));
 							break;
 						}
 						if (n == 0)
 							break;
 						for (int i = 0; i < n; ++i)
 							if ((buf[i] < 'A' || buf[i] > 'H') && buf[i] != 0)   // resize 扩展的部分为 0
-								failures.add("读到意外字节 " + std::to_string(static_cast<int>(static_cast<unsigned char>(buf[i]))));
+								failures.add("unexpected byte " + std::to_string(static_cast<int>(static_cast<unsigned char>(buf[i]))));
 					}
 					++reads;
 				}
@@ -361,7 +361,7 @@ TEST_SUITE("stress")
 					if (!s)
 						failures.add(std::string("open APPEND -> ") + errorName(oe));
 					else if (int n = s->write(std::string(100, c).data(), 100); n != 100)
-						failures.add("APPEND write 返回 " + std::to_string(n));
+						failures.add("APPEND write returned " + std::to_string(n));
 				}
 				else if (i % 4 == 1)
 				{
@@ -370,7 +370,7 @@ TEST_SUITE("stress")
 					if (!s)
 						failures.add(std::string("open OVERLAPPED -> ") + errorName(oe));
 					else if (!s->resize(500 + i % 700))
-						failures.add("resize 失败");
+						failures.add("resize failed");
 				}
 				else
 					failures.expectOk(e.fs.writeFile("/s/hot.bin", std::string(1000 + i % 500, c)), "writeFile hot.bin");
@@ -379,12 +379,12 @@ TEST_SUITE("stress")
 		done = true;
 		for (auto& th : readers)
 			th.join();
-		INFO("失败详情: " << failures.str());
+		INFO("failure details: " << failures.str());
 		CHECK(failures.load() == 0);
 		CHECK(reads.load() > 0);
 	}
 
-	TEST_CASE_TEMPLATE("并发 APPEND 同一个只读层文件（copy-up 竞争）：原内容保留，每次追加恰好出现一次", E,
+	TEST_CASE_TEMPLATE("concurrent APPEND to one read-only-layer file (copy-up race): original kept, every append appears exactly once", E,
 					   StressMemoryOverArchive, StressNativeOverArchive)
 	{
 		E e;
@@ -402,10 +402,10 @@ TEST_SUITE("stress")
 					failures.add("open APPEND " + base + " -> " + errorName(oe));
 				else if (int n = s->write(tag.data(), static_cast<unsigned>(tag.size()));
 						 n != static_cast<int>(tag.size()))
-					failures.add("APPEND write " + base + " 返回 " + std::to_string(n));
+					failures.add("APPEND write " + base + " returned " + std::to_string(n));
 			}
 		});
-		INFO("失败详情: " << failures.str());
+		INFO("failure details: " << failures.str());
 		CHECK(failures.load() == 0);
 		for (int f = 0; f < 16; ++f)
 		{
@@ -429,7 +429,7 @@ TEST_SUITE("stress")
 			CHECK(n.find("tmp") == std::string::npos);
 	}
 
-	TEST_CASE_TEMPLATE("并发 writeFileAtomic 同一路径：最终内容是某一次完整写入，不留临时文件", E, STRESS_ENVS)
+	TEST_CASE_TEMPLATE("concurrent writeFileAtomic on one path: final content is one complete write, no temp files left", E, STRESS_ENVS)
 	{
 		E e;
 		REQUIRE(e.fs.createDir("/s/atomic") == Error::OK);
@@ -444,7 +444,7 @@ TEST_SUITE("stress")
 				{
 					// 读到的必须是某一次完整写入：首字符重复 len 次
 					if (s.empty() || s.find_first_not_of(s[0]) != std::string::npos)
-						failures.add("读到不完整内容：" + std::to_string(s.size()) + " 字节");
+						failures.add("incomplete content: " + std::to_string(s.size()) + " bytes");
 				}
 			}
 		});
@@ -469,10 +469,10 @@ TEST_SUITE("stress")
 		});
 		done = true;
 		reader.join();
-		INFO("writeFileAtomic 返回码: " << atomicCodes.str() << "（可替换打开中的文件: " << replaceOpen << "）");
-		INFO("失败详情: " << failures.str());
+		INFO("writeFileAtomic codes: " << atomicCodes.str() << " (can replace open files: " << replaceOpen << ")");
+		INFO("failure details: " << failures.str());
 		if (!replaceOpen)
-			MESSAGE("本机文件系统不支持替换打开中的文件（无 POSIX rename 语义），放宽了 writeFileAtomic 的检查");
+			MESSAGE("native file system cannot replace open files (no POSIX rename semantics); writeFileAtomic checks relaxed");
 		// 至少要有成功的写入
 		CHECK(atomicCodes.count(Error::OK) > 0);
 		CHECK(failures.load() == 0);
@@ -482,7 +482,7 @@ TEST_SUITE("stress")
 		CHECK(final.size() == static_cast<size_t>(2000 + 37 * (final[0] - 'a')));
 	}
 
-	TEST_CASE("remount 抖动：读线程看到的内容始终是两个版本之一的完整内容")
+	TEST_CASE("remount churn: readers always see the complete content of one of the two versions")
 	{
 		test::TempDir dir;
 		const auto v1 = test::randomBytes(50000, 1);
@@ -531,12 +531,12 @@ TEST_SUITE("stress")
 		done = true;
 		for (auto& th : readers)
 			th.join();
-		INFO("失败详情: " << failures.str());
+		INFO("failure details: " << failures.str());
 		CHECK(failures.load() == 0);
 		CHECK(reads.load() >= 50);
 	}
 
-	TEST_CASE("挂载 / 卸载抖动：多层同点挂载随机增删，读线程只看到某一层的完整内容")
+	TEST_CASE("mount / unmount churn: random layers at one mount point, readers only see one layer's complete content")
 	{
 		VirtualFileSystem fs;
 		std::vector<std::shared_ptr<MemoryBackend>> layers;
@@ -582,12 +582,12 @@ TEST_SUITE("stress")
 		done = true;
 		for (auto& th : readers)
 			th.join();
-		INFO("失败详情: " << failures.str());
+		INFO("failure details: " << failures.str());
 		CHECK(failures.load() == 0);
 		CHECK(fs.mounts().size() == 1);
 	}
 
-	TEST_CASE("同一归档上同时打开 1024 个流，16 个线程随机 seek / read 校验")
+	TEST_CASE("1024 streams on one archive, 16 threads verify random seek / read")
 	{
 		test::TempDir dir;
 		std::vector<test::ArchiveFile> files;
@@ -631,11 +631,11 @@ TEST_SUITE("stress")
 					++failures;
 			}
 		});
-		INFO("失败详情: " << failures.str());
+		INFO("failure details: " << failures.str());
 		CHECK(failures.load() == 0);
 	}
 
-	TEST_CASE("walk / stat / exists 与修改并发：不崩溃，结果自洽")
+	TEST_CASE("walk / stat / exists concurrent with modifications: no crash, consistent results")
 	{
 		VirtualFileSystem fs;
 		REQUIRE(fs.mountMemory("/m") != 0);
@@ -673,7 +673,7 @@ TEST_SUITE("stress")
 		});
 		done = true;
 		walker.join();
-		INFO("失败详情: " << failures.str());
+		INFO("failure details: " << failures.str());
 		CHECK(failures.load() == 0);
 		CHECK(fs.generation() > g0);
 	}

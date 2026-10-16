@@ -55,7 +55,7 @@ MountOptions prio(int p, uint32_t flags = 0)
 
 TEST_SUITE("union")
 {
-	TEST_CASE("优先级：priority 大的优先，相同时后挂载的优先")
+	TEST_CASE("priority: higher priority wins; on ties the later mount wins")
 	{
 		VirtualFileSystem fs;
 		MountId a = fs.mount("/", roMemory({{"f.txt", "A"}}));
@@ -82,7 +82,7 @@ TEST_SUITE("union")
 		CHECK(fs.unmount(c) == Error::NOT_FOUND);
 	}
 
-	TEST_CASE("嵌套挂载按 priority 排序，与深度无关")
+	TEST_CASE("nested mounts are ordered by priority regardless of depth")
 	{
 		VirtualFileSystem fs;
 		fs.mount("/a", roMemory({{"b/x.txt", "deep-by-root"}}), prio(10));
@@ -93,7 +93,7 @@ TEST_SUITE("union")
 		CHECK(listNames(fs, "/a/b") == Names{"x.txt", "y.txt"});
 	}
 
-	TEST_CASE("列目录：合并、去重、按字节序排序")
+	TEST_CASE("list: merged, deduplicated, sorted by bytes")
 	{
 		VirtualFileSystem fs;
 		fs.mount("/", roMemory({{"d/b.txt", "1"}, {"d/a.txt", "1"}, {"d/sub/x", "1"}}));
@@ -115,7 +115,7 @@ TEST_SUITE("union")
 		CHECK(fs.list("/nope", [](const DirEntry&) { return true; }) == Error::NOT_FOUND);
 	}
 
-	TEST_CASE("类型冲突：高层文件遮蔽低层目录，查找子路径返回 NOT_DIR")
+	TEST_CASE("type conflict: an upper file shadows a lower directory; sub-paths return NOT_DIR")
 	{
 		VirtualFileSystem fs;
 		fs.mount("/", roMemory({{"x/y.txt", "low"}, {"f", "low-file"}}));
@@ -132,7 +132,7 @@ TEST_SUITE("union")
 		CHECK(readAll(fs, "/f/inner.txt") == "high-dir");
 	}
 
-	TEST_CASE("Opaque：挂载点以下屏蔽更低的层")
+	TEST_CASE("Opaque: hides lower layers below the mount point")
 	{
 		VirtualFileSystem fs;
 		fs.mount("/", roMemory({{"data/a.txt", "low"}, {"data/b.txt", "low"}, {"other.txt", "low"}}));
@@ -147,7 +147,7 @@ TEST_SUITE("union")
 		CHECK(listNames(fs, "/data") == Names{"a.txt", "c.txt"});
 	}
 
-	TEST_CASE("虚拟祖先目录：挂载点的祖先显示为只读目录")
+	TEST_CASE("virtual ancestors: mount point ancestors appear as read-only directories")
 	{
 		VirtualFileSystem fs;
 		fs.mount("/x/y/z", roMemory({{"f.txt", "1"}}));
@@ -167,7 +167,7 @@ TEST_SUITE("union")
 		CHECK(fs.rename("/x/y/z", "/q") == Error::BUSY);
 	}
 
-	TEST_CASE("空 VFS：根目录存在且为空")
+	TEST_CASE("empty VFS: the root exists and is empty")
 	{
 		VirtualFileSystem fs;
 		CHECK(fs.isDir("/"));
@@ -177,7 +177,7 @@ TEST_SUITE("union")
 		CHECK(fs.fileSize("/a.txt") == -1);
 	}
 
-	TEST_CASE("写入目标：可见项可写则原地写")
+	TEST_CASE("write target: a writable visible item is written in place")
 	{
 		VirtualFileSystem fs;
 		auto low = rwMemory({{"f.txt", "low"}});
@@ -189,7 +189,7 @@ TEST_SUITE("union")
 		CHECK(backendContent(high, "f.txt") == "<none>");
 	}
 
-	TEST_CASE("写入目标：新文件写到覆盖该路径的最高优先级可写层")
+	TEST_CASE("write target: new files go to the highest-priority writable layer covering the path")
 	{
 		VirtualFileSystem fs;
 		auto w1 = rwMemory();
@@ -202,7 +202,7 @@ TEST_SUITE("union")
 		CHECK(backendContent(w1, "new.txt") == "<none>");
 	}
 
-	TEST_CASE("写入目标：WriteTarget 标记的挂载优先")
+	TEST_CASE("write target: mounts flagged WriteTarget win")
 	{
 		VirtualFileSystem fs;
 		auto marked = rwMemory();
@@ -214,7 +214,7 @@ TEST_SUITE("union")
 		CHECK(backendContent(other, "new.txt") == "<none>");
 	}
 
-	TEST_CASE("写入目标：没有可写层返回 READ_ONLY；ReadOnly 标志生效")
+	TEST_CASE("write target: READ_ONLY without a writable layer; the ReadOnly flag is honoured")
 	{
 		VirtualFileSystem fs;
 		auto rw = rwMemory({{"f.txt", "x"}});
@@ -230,7 +230,7 @@ TEST_SUITE("union")
 		CHECK_FALSE(st.writable);
 	}
 
-	TEST_CASE("写入目标：可写层被只读层遮蔽时拒绝写入")
+	TEST_CASE("write target: writes are refused when a read-only layer shadows the writable one")
 	{
 		VirtualFileSystem fs;
 		auto rw = rwMemory();
@@ -243,7 +243,7 @@ TEST_SUITE("union")
 		CHECK(fs.writeFile("/g.txt", "x") == Error::OK);
 	}
 
-	TEST_CASE("写入目标：可写层只覆盖子树时，子树外不可写")
+	TEST_CASE("write target: a writable layer covering only a subtree cannot write outside it")
 	{
 		VirtualFileSystem fs;
 		fs.mount("/", roMemory({{"res/a.txt", "a"}}));
@@ -254,7 +254,7 @@ TEST_SUITE("union")
 		CHECK(backendContent(user, "save.dat") == "s");
 	}
 
-	TEST_CASE("copy-up 目录：父目录只在只读层时，在写入目标中自动 mkdir -p")
+	TEST_CASE("copy-up of directories: parents that exist only in read-only layers are created (mkdir -p) in the write target")
 	{
 		VirtualFileSystem fs;
 		fs.mount("/", roMemory({{"a/b/c.txt", "c"}}));
@@ -276,7 +276,7 @@ TEST_SUITE("union")
 		CHECK(fs.writeFile("/a/b/c.txt/x", "x") == Error::NOT_DIR);
 	}
 
-	TEST_CASE("copy-up 文件：APPEND/OVERLAPPED 先拷贝下层内容，WRITE 直接新建")
+	TEST_CASE("copy-up of files: APPEND/OVERLAPPED copy the lower content first, WRITE creates a new file")
 	{
 		VirtualFileSystem fs;
 		auto ro = roMemory({{"cfg/a.ini", "base"}, {"cfg/b.ini", "base"}, {"cfg/c.ini", "base"}});
@@ -314,7 +314,7 @@ TEST_SUITE("union")
 		CHECK(listNames(fs, "/cfg") == Names{"a.ini", "b.ini", "c.ini"});
 	}
 
-	TEST_CASE("removeFile：只读层返回 READ_ONLY；删除覆盖文件后原版重新露出")
+	TEST_CASE("removeFile: READ_ONLY on read-only layers; removing an override reveals the original")
 	{
 		VirtualFileSystem fs;
 		fs.mount("/", roMemory({{"f.txt", "original"}}));
@@ -338,7 +338,7 @@ TEST_SUITE("union")
 		CHECK(fs.removeFile("/dir") == Error::IS_DIR);
 	}
 
-	TEST_CASE("rename：同一可写后端内成功；只读源 READ_ONLY；跨后端 CROSS_DEVICE")
+	TEST_CASE("rename: succeeds within one writable backend; read-only source READ_ONLY; across backends CROSS_DEVICE")
 	{
 		VirtualFileSystem fs;
 		fs.mount("/", roMemory({{"ro.txt", "r"}}));
@@ -395,7 +395,7 @@ TEST_SUITE("union")
 		CHECK(fs.createDir("/") == Error::EXISTS);
 	}
 
-	TEST_CASE("removeDir：只读层贡献了子孙时返回 READ_ONLY，什么都不删")
+	TEST_CASE("removeDir: READ_ONLY and nothing removed when a read-only layer contributes descendants")
 	{
 		VirtualFileSystem fs;
 		fs.mount("/", roMemory({{"a/b/c.txt", "pack"}}));
@@ -412,7 +412,7 @@ TEST_SUITE("union")
 		CHECK(fs.removeDir("/a/b") == Error::READ_ONLY);
 	}
 
-	TEST_CASE("removeDir：非递归要求为空，递归只删可写层")
+	TEST_CASE("removeDir: non-recursive requires empty; recursive removes only the writable layer")
 	{
 		VirtualFileSystem fs;
 		auto rw = rwMemory({{"d/x.txt", "x"}, {"d/sub/y.txt", "y"}, {"e/", ""}});
@@ -430,7 +430,7 @@ TEST_SUITE("union")
 		CHECK(fs.removeDir("/") == Error::BUSY);
 	}
 
-	TEST_CASE("removeDir：两个可写层都有该目录时返回 READ_ONLY（只删写入目标）")
+	TEST_CASE("removeDir: READ_ONLY when two writable layers both have the directory")
 	{
 		VirtualFileSystem fs;
 		auto w1 = rwMemory({{"d/", ""}});
@@ -443,7 +443,7 @@ TEST_SUITE("union")
 		CHECK(w2->stat("d", st) == Error::OK);
 	}
 
-	TEST_CASE("惰性卸载：流在卸载后仍然可读；FailIfBusy 严格模式")
+	TEST_CASE("lazy unmount: streams stay readable after unmount; FailIfBusy strict mode")
 	{
 		VirtualFileSystem fs;
 		MountId id = fs.mount("/dlc", roMemory({{"big.bin", "0123456789"}}));
@@ -468,7 +468,7 @@ TEST_SUITE("union")
 		CHECK(fs.unmount(id2, UnmountFlags::FailIfBusy) == Error::OK);
 	}
 
-	TEST_CASE("内存后端 unlink 语义：删除打开中的文件，流继续可用")
+	TEST_CASE("memory backend unlink semantics: removing an open file keeps the stream usable")
 	{
 		VirtualFileSystem fs;
 		fs.mount("/", rwMemory({{"f.txt", "data"}}));
@@ -483,7 +483,7 @@ TEST_SUITE("union")
 		CHECK(test::str(test::readStream(*s)) == "data");
 	}
 
-	TEST_CASE("remount 替换后端；mounts() 反映当前状态；generation 递增")
+	TEST_CASE("remount replaces the backend; mounts() reflects the current state; generation increases")
 	{
 		VirtualFileSystem fs;
 		uint64_t g0 = fs.generation();
@@ -504,7 +504,7 @@ TEST_SUITE("union")
 		CHECK(fs.remount(id, nullptr) != Error::OK);
 	}
 
-	TEST_CASE("挂载参数校验")
+	TEST_CASE("mount argument validation")
 	{
 		VirtualFileSystem fs;
 		Error err = Error::OK;
@@ -518,7 +518,7 @@ TEST_SUITE("union")
 		CHECK(fs.mounts().empty());
 	}
 
-	TEST_CASE("别名：前缀替换（res:// → /res）")
+	TEST_CASE("aliases: prefix replacement (res:// → /res)")
 	{
 		VirtualFileSystem fs;
 		fs.mount("/res", roMemory({{"img/a.png", "png"}}));
@@ -532,7 +532,7 @@ TEST_SUITE("union")
 		CHECK_FALSE(fs.exists("res://img/a.png"));
 	}
 
-	TEST_CASE("非法路径在所有 API 上都返回 INVALID_PATH")
+	TEST_CASE("invalid paths return INVALID_PATH from every API")
 	{
 		VirtualFileSystem fs;
 		fs.mount("/", rwMemory({{"f", "x"}}));
@@ -550,7 +550,7 @@ TEST_SUITE("union")
 		CHECK(readAll(fs, "\\x\\..\\f") == "x");
 	}
 
-	TEST_CASE("readFile / openFileStream 对目录返回 IS_DIR；writeFileAtomic 不留下临时文件")
+	TEST_CASE("readFile / openFileStream on a directory return IS_DIR; writeFileAtomic leaves no temp file")
 	{
 		VirtualFileSystem fs;
 		fs.mount("/", rwMemory({{"d/f", "x"}}));
@@ -567,7 +567,7 @@ TEST_SUITE("union")
 		CHECK(listNames(fs, "/d") == Names{"f", "g"});
 	}
 
-	TEST_CASE("walk：深度优先、合并视图、可提前停止")
+	TEST_CASE("walk: depth-first, merged view, can stop early")
 	{
 		VirtualFileSystem fs;
 		fs.mount("/", roMemory({{"a/1", "1"}, {"a/b/2", "2"}}));
@@ -586,7 +586,7 @@ TEST_SUITE("union")
 		CHECK(n == 3);
 	}
 
-	TEST_CASE("单文件挂载：子路径返回 NOT_DIR，可读写")
+	TEST_CASE("single-file mount: sub-paths return NOT_DIR; readable and writable")
 	{
 		test::TempDir dir;
 		dir.write("cfg.json", "{}");

@@ -18,7 +18,7 @@ int runCat(const CatOptions& options, std::ostream& out, std::ostream& err)
 	std::string path;
 	if (Path::normalizeRelative(options.path, path) != Error::OK)
 	{
-		err << "错误: 非法路径: " << options.path << "\n";
+		err << "error: invalid path: " << options.path << "\n";
 		return static_cast<int>(ExitCode::USAGE);
 	}
 	// 通过运行时后端读取，与游戏里的读取路径完全一致（大文件也是流式输出）
@@ -27,7 +27,7 @@ int runCat(const CatOptions& options, std::ostream& out, std::ostream& err)
 	auto stream = backend.open(path, IFileStream::Mode::READ, &e);
 	if (!stream)
 	{
-		err << "错误: 无法打开 " << options.path << ": " << errorMessage(e) << "\n";
+		err << "error: cannot open " << options.path << ": " << errorMessage(e) << "\n";
 		return e == Error::NOT_FOUND || e == Error::IS_DIR ? static_cast<int>(ExitCode::IO) : exitCodeFor(e);
 	}
 	std::vector<char> buf(256 * 1024);
@@ -36,7 +36,7 @@ int runCat(const CatOptions& options, std::ostream& out, std::ostream& err)
 		int n = stream->read(buf.data(), static_cast<unsigned int>(buf.size()));
 		if (n < 0)
 		{
-			err << "错误: 读取失败\n";
+			err << "error: read failed\n";
 			return static_cast<int>(ExitCode::IO);
 		}
 		if (n == 0)

@@ -102,7 +102,7 @@ bool expandResponseFiles(const std::vector<std::string>& in, std::vector<std::st
 		NativeFileStream fs;
 		if (!fs.open(arg.substr(1), IFileStream::Mode::READ))
 		{
-			std::cerr << "错误: 无法读取参数文件 " << arg.substr(1) << "\n";
+			std::cerr << "error: cannot read argument file " << arg.substr(1) << "\n";
 			return false;
 		}
 		std::string content;
@@ -160,8 +160,8 @@ std::vector<Rule> orderedRules(CLI::App* app, CLI::Option* positive, CLI::Option
 
 void addKeyOptions(CLI::App* cmd, KeySource& key)
 {
-	cmd->add_option("--key-file", key.keyFile, "索引密钥文件（32 字节原始数据或 64 个 hex 字符）");
-	cmd->add_option("--key-hex", key.keyHex, "索引密钥（64 个 hex 字符，会打印警告）");
+	cmd->add_option("--key-file", key.keyFile, "index key file (32 raw bytes or 64 hex characters)");
+	cmd->add_option("--key-hex", key.keyHex, "index key (64 hex characters; prints a warning)");
 }
 
 } // namespace
@@ -180,96 +180,96 @@ int main(int argc, char** argv)
 	for (auto& a : args)
 		argvExpanded.push_back(a.data());
 
-	CLI::App app{"vfstool：.vfs 归档工具（打包、解包、查看、校验）"};
+	CLI::App app{"vfstool: .vfs archive tool (pack, unpack, inspect, verify)"};
 	app.require_subcommand(1);
 	// CLI11 在 Windows 上默认把 "/x" 当作 Windows 风格选项，会把以 '/' 开头的路径误当成选项。
 	// 各平台统一只用 "-x/--xxx"（必须在添加子命令之前设置，子命令会继承）
 	app.allow_windows_style_options(false);
-	app.set_version_flag("--version", "vfstool 2.0.0（.vfs 格式版本 1）");
+	app.set_version_flag("--version", "vfstool 2.0.0 (.vfs format version 1)");
 
 	// ---------------- pack
 	PackOptions pack;
-	auto* packCmd = app.add_subcommand("pack", "把目录打包成 .vfs");
-	packCmd->add_option("dir", pack.inputDir, "源目录")->required();
-	packCmd->add_option("-o,--output", pack.outputPath, "输出 .vfs 文件");
-	packCmd->add_option("--prefix", pack.prefix, "归档内路径前缀");
-	auto* includeOpt = packCmd->add_option("--include", "包含规则（glob，可重复，最后匹配生效）")->allow_extra_args(false)->take_all();
-	auto* excludeOpt = packCmd->add_option("--exclude", "排除规则（glob，可重复）")->allow_extra_args(false)->take_all();
-	auto* encryptOpt = packCmd->add_option("--encrypt", "XOR 加密规则（glob，可重复）")->allow_extra_args(false)->take_all();
-	auto* noEncryptOpt = packCmd->add_option("--no-encrypt", "不加密规则（glob，可重复）")->allow_extra_args(false)->take_all();
-	auto* compressOpt = packCmd->add_option("--compress", "LZ4 压缩规则（glob，可重复）")->allow_extra_args(false)->take_all();
-	auto* noCompressOpt = packCmd->add_option("--no-compress", "不压缩规则（glob，可重复）")->allow_extra_args(false)->take_all();
-	packCmd->add_flag("--encrypt-all", pack.encryptAll, "默认加密所有文件");
-	packCmd->add_flag("--compress-all", pack.compressAll, "默认压缩所有文件");
-	packCmd->add_option("--align", pack.alignment, "数据对齐（2 的幂，1..65536，默认 16）");
+	auto* packCmd = app.add_subcommand("pack", "pack a directory into a .vfs archive");
+	packCmd->add_option("dir", pack.inputDir, "source directory")->required();
+	packCmd->add_option("-o,--output", pack.outputPath, "output .vfs file");
+	packCmd->add_option("--prefix", pack.prefix, "path prefix inside the archive");
+	auto* includeOpt = packCmd->add_option("--include", "include pattern (glob, repeatable, last match wins)")->allow_extra_args(false)->take_all();
+	auto* excludeOpt = packCmd->add_option("--exclude", "exclude pattern (glob, repeatable)")->allow_extra_args(false)->take_all();
+	auto* encryptOpt = packCmd->add_option("--encrypt", "XOR-encrypt pattern (glob, repeatable)")->allow_extra_args(false)->take_all();
+	auto* noEncryptOpt = packCmd->add_option("--no-encrypt", "do-not-encrypt pattern (glob, repeatable)")->allow_extra_args(false)->take_all();
+	auto* compressOpt = packCmd->add_option("--compress", "LZ4-compress pattern (glob, repeatable)")->allow_extra_args(false)->take_all();
+	auto* noCompressOpt = packCmd->add_option("--no-compress", "do-not-compress pattern (glob, repeatable)")->allow_extra_args(false)->take_all();
+	packCmd->add_flag("--encrypt-all", pack.encryptAll, "encrypt all files by default");
+	packCmd->add_flag("--compress-all", pack.compressAll, "compress all files by default");
+	packCmd->add_option("--align", pack.alignment, "data alignment (power of two, 1..65536, default 16)");
 	addKeyOptions(packCmd, pack.key);
-	packCmd->add_flag("--store-key", pack.storeKey, "把外部索引密钥也存进文件");
-	packCmd->add_flag("--no-index-encrypt", pack.noIndexEncrypt, "索引不加密");
-	packCmd->add_option("--xor-key-len", pack.xorKeyLength, "单文件 XOR key 长度（16..32，默认 32）");
-	packCmd->add_option("--lz4-level", pack.compressionLevel, "LZ4 HC 压缩级别（1..12，默认 9）");
-	packCmd->add_flag("--keep-mtime", pack.keepMtime, "写入源文件的真实 mtime（默认 0，便于复现）");
-	packCmd->add_flag("--empty-dirs", pack.emptyDirs, "保留空目录（默认不保留）");
-	packCmd->add_flag("--no-dedup", pack.noDedup, "关闭内容去重");
-	packCmd->add_flag("--no-default-excludes", pack.noDefaultExcludes, "不排除 .git/.svn/.DS_Store/Thumbs.db/desktop.ini");
-	packCmd->add_flag("--dry-run", pack.dryRun, "只列出将要打包的文件");
-	packCmd->add_flag("-v,--verbose", pack.verbose, "输出每个文件");
+	packCmd->add_flag("--store-key", pack.storeKey, "also store the external index key in the archive");
+	packCmd->add_flag("--no-index-encrypt", pack.noIndexEncrypt, "do not encrypt the index");
+	packCmd->add_option("--xor-key-len", pack.xorKeyLength, "per-file XOR key length (16..32, default 32)");
+	packCmd->add_option("--lz4-level", pack.compressionLevel, "LZ4 HC compression level (1..12, default 9)");
+	packCmd->add_flag("--keep-mtime", pack.keepMtime, "store the real source mtime (default 0 for reproducible output)");
+	packCmd->add_flag("--empty-dirs", pack.emptyDirs, "keep empty directories (dropped by default)");
+	packCmd->add_flag("--no-dedup", pack.noDedup, "disable content deduplication");
+	packCmd->add_flag("--no-default-excludes", pack.noDefaultExcludes, "do not exclude .git/.svn/.DS_Store/Thumbs.db/desktop.ini");
+	packCmd->add_flag("--dry-run", pack.dryRun, "only list the files that would be packed");
+	packCmd->add_flag("-v,--verbose", pack.verbose, "print every file");
 
 	// ---------------- unpack
 	UnpackOptions unpack;
-	auto* unpackCmd = app.add_subcommand("unpack", "解包整个归档");
-	unpackCmd->add_option("archive", unpack.archive.archive, "归档文件")->required();
-	unpackCmd->add_option("-o,--output", unpack.outputDir, "输出目录")->required();
-	auto* unIncludeOpt = unpackCmd->add_option("--include", "包含规则（glob）")->allow_extra_args(false)->take_all();
-	auto* unExcludeOpt = unpackCmd->add_option("--exclude", "排除规则（glob）")->allow_extra_args(false)->take_all();
+	auto* unpackCmd = app.add_subcommand("unpack", "unpack the whole archive");
+	unpackCmd->add_option("archive", unpack.archive.archive, "archive file")->required();
+	unpackCmd->add_option("-o,--output", unpack.outputDir, "output directory")->required();
+	auto* unIncludeOpt = unpackCmd->add_option("--include", "include pattern (glob)")->allow_extra_args(false)->take_all();
+	auto* unExcludeOpt = unpackCmd->add_option("--exclude", "exclude pattern (glob)")->allow_extra_args(false)->take_all();
 	addKeyOptions(unpackCmd, unpack.archive.key);
-	unpackCmd->add_flag("--force", unpack.force, "覆盖已存在的文件");
-	unpackCmd->add_flag("--no-verify", unpack.noVerify, "不校验内容哈希");
-	unpackCmd->add_flag("-v,--verbose", unpack.verbose, "输出每个文件");
+	unpackCmd->add_flag("--force", unpack.force, "overwrite existing files");
+	unpackCmd->add_flag("--no-verify", unpack.noVerify, "do not verify content hashes");
+	unpackCmd->add_flag("-v,--verbose", unpack.verbose, "print every file");
 
 	// ---------------- info
 	InfoOptions info;
-	auto* infoCmd = app.add_subcommand("info", "显示归档信息");
-	infoCmd->add_option("archive", info.archive.archive, "归档文件")->required();
+	auto* infoCmd = app.add_subcommand("info", "show archive information");
+	infoCmd->add_option("archive", info.archive.archive, "archive file")->required();
 	addKeyOptions(infoCmd, info.archive.key);
-	infoCmd->add_flag("--json", info.json, "JSON 输出");
+	infoCmd->add_flag("--json", info.json, "JSON output");
 
 	// ---------------- list
 	ListOptions list;
-	auto* listCmd = app.add_subcommand("list", "列出条目");
+	auto* listCmd = app.add_subcommand("list", "list entries");
 	listCmd->alias("ls");
-	listCmd->add_option("archive", list.archive.archive, "归档文件")->required();
-	listCmd->add_option("pattern", list.pattern, "glob 过滤");
+	listCmd->add_option("archive", list.archive.archive, "archive file")->required();
+	listCmd->add_option("pattern", list.pattern, "glob filter");
 	addKeyOptions(listCmd, list.archive.key);
-	listCmd->add_flag("-l,--long", list.longFormat, "显示大小、存储大小、标志和哈希");
-	listCmd->add_flag("--json", list.json, "JSON 输出");
+	listCmd->add_flag("-l,--long", list.longFormat, "show size, stored size, flags and hash");
+	listCmd->add_flag("--json", list.json, "JSON output");
 
 	// ---------------- cat
 	CatOptions cat;
-	auto* catCmd = app.add_subcommand("cat", "把单个文件输出到 stdout");
-	catCmd->add_option("archive", cat.archive.archive, "归档文件")->required();
-	catCmd->add_option("path", cat.path, "归档内路径")->required();
+	auto* catCmd = app.add_subcommand("cat", "write a single file to stdout");
+	catCmd->add_option("archive", cat.archive.archive, "archive file")->required();
+	catCmd->add_option("path", cat.path, "path inside the archive")->required();
 	addKeyOptions(catCmd, cat.archive.key);
 
 	// ---------------- extract
 	ExtractOptions extract;
-	auto* extractCmd = app.add_subcommand("extract", "提取指定文件或目录");
-	extractCmd->add_option("archive", extract.archive.archive, "归档文件")->required();
-	extractCmd->add_option("paths", extract.paths, "归档内路径")->required();
-	extractCmd->add_option("-o,--output", extract.outputDir, "输出目录")->required();
-	extractCmd->add_flag("--force", extract.force, "覆盖已存在的文件");
+	auto* extractCmd = app.add_subcommand("extract", "extract the given files or directories");
+	extractCmd->add_option("archive", extract.archive.archive, "archive file")->required();
+	extractCmd->add_option("paths", extract.paths, "path inside the archive")->required();
+	extractCmd->add_option("-o,--output", extract.outputDir, "output directory")->required();
+	extractCmd->add_flag("--force", extract.force, "overwrite existing files");
 	addKeyOptions(extractCmd, extract.archive.key);
 
 	// ---------------- verify
 	VerifyOptions verify;
-	auto* verifyCmd = app.add_subcommand("verify", "校验 header、索引和每个文件的内容哈希");
-	verifyCmd->add_option("archive", verify.archive.archive, "归档文件")->required();
+	auto* verifyCmd = app.add_subcommand("verify", "verify the header, the index and every file's content hash");
+	verifyCmd->add_option("archive", verify.archive.archive, "archive file")->required();
 	addKeyOptions(verifyCmd, verify.archive.key);
-	verifyCmd->add_flag("-v,--verbose", verify.verbose, "输出每个文件的结果");
+	verifyCmd->add_flag("-v,--verbose", verify.verbose, "print the result for every file");
 
 	// ---------------- keygen
 	KeygenOptions keygen;
-	auto* keygenCmd = app.add_subcommand("keygen", "生成 32 字节随机索引密钥");
-	keygenCmd->add_option("-o,--output", keygen.outputFile, "输出文件（默认打印到 stdout）");
+	auto* keygenCmd = app.add_subcommand("keygen", "generate a random 32-byte index key");
+	keygenCmd->add_option("-o,--output", keygen.outputFile, "output file (default: print to stdout)");
 
 	try
 	{

@@ -76,7 +76,7 @@ TEST_SUITE("extreme")
 {
 	// ================================================================ 空文件与海量条目
 
-	TEST_CASE("零字节文件：所有后端与加密 / 压缩组合")
+	TEST_CASE("zero-byte files: every backend and encryption / compression combination")
 	{
 		test::TempDir dir;
 		FileWriteOptions x, z, xz;
@@ -109,7 +109,7 @@ TEST_SUITE("extreme")
 		}
 	}
 
-	TEST_CASE("海量条目：2 万个文件的归档与内存后端，查找、列目录、遍历都正确")
+	TEST_CASE("many entries: 20k-file archive and memory backend; lookup, listing and walking are correct")
 	{
 		const int N = 20000;
 		test::TempDir dir;
@@ -142,7 +142,7 @@ TEST_SUITE("extreme")
 		}
 	}
 
-	TEST_CASE("海量条目（慢）：10 万个文件的归档与内存后端，以及 10 万文件的单个目录" * doctest::skip(!test::slowEnabled()))
+	TEST_CASE("many entries (slow): 100k-file archive and memory backend, and one directory with 100k files" * doctest::skip(!test::slowEnabled()))
 	{
 		const int N = 100000;
 		test::TempDir dir;
@@ -170,7 +170,7 @@ TEST_SUITE("extreme")
 
 	// ================================================================ 路径与名字
 
-	TEST_CASE("超深路径：内存 300 层、归档 200 层、本机 100 层")
+	TEST_CASE("very deep paths: 300 levels in memory, 200 in archives, 100 native")
 	{
 		std::string rel;
 		for (int i = 0; i < 300; ++i)
@@ -197,7 +197,7 @@ TEST_SUITE("extreme")
 		dir.mkdir("native");
 		REQUIRE(fs.mountNative("/n", dir.sub("native")) != 0);
 		// 本机全路径约 300+ 字节，超过 Windows MAX_PATH（260），需要 \\?\ 长路径前缀
-		INFO("本机路径长度 " << dir.sub("native/" + nrel + "/leaf").size());
+		INFO("native path length " << dir.sub("native/" + nrel + "/leaf").size());
 		REQUIRE(fs.createDirs("/n/" + nrel) == Error::OK);
 		REQUIRE(fs.writeFile("/n/" + nrel + "/leaf", "ndeep") == Error::OK);
 		CHECK(readAll(fs, "/n/" + nrel + "/leaf") == "ndeep");
@@ -205,7 +205,7 @@ TEST_SUITE("extreme")
 		CHECK(listNames(fs, "/n").empty());
 	}
 
-	TEST_CASE("最长路径：归档路径 4096 字节可以写入和读取，4097 字节被拒绝")
+	TEST_CASE("longest path: 4096-byte archive paths work, 4097 bytes are rejected")
 	{
 		std::string p;
 		while (p.size() < 4096)
@@ -233,7 +233,7 @@ TEST_SUITE("extreme")
 		CHECK(readAll(fs, longPath) == "long");
 	}
 
-	TEST_CASE("255 字节名字：所有后端可用；本机 256 字节名字失败但不崩溃")
+	TEST_CASE("255-byte names work on all backends; a 256-byte native name fails without crashing")
 	{
 		const std::string n255(255, 'x');
 		test::TempDir dir;
@@ -252,7 +252,7 @@ TEST_SUITE("extreme")
 		CHECK(listNames(fs, "/n") == Names{n255});
 	}
 
-	TEST_CASE("Unicode：中文、日文、韩文、emoji、组合字符（NFC 与 NFD 是不同的名字）、全角空格")
+	TEST_CASE("Unicode: Chinese, Japanese, Korean, emoji, combining characters (NFC and NFD are different names), full-width space")
 	{
 		const char* names[] = {"资源/图片.png", "日本語/ファイル.txt", "한국어/파일", "emoji/😀👍🏽.bin",
 							   "nfc/\xC3\xA9", "nfc/e\xCC\x81", ("space/a\xE3\x80\x80" "b")};
@@ -287,7 +287,7 @@ TEST_SUITE("extreme")
 			CHECK(readAll(fs, std::string("/m/") + n) == n);
 	}
 
-	TEST_CASE("大小写：归档写入端拒绝只有大小写不同的路径；内存后端视为不同文件；查找按字节匹配")
+	TEST_CASE("case: the archive writer rejects paths differing only in case; memory treats them as different; lookups match bytes")
 	{
 		ArchiveWriter w;
 		REQUIRE(w.addData("Dir/File.txt", test::bytes("1")) == Error::OK);
@@ -307,7 +307,7 @@ TEST_SUITE("extreme")
 		CHECK(listNames(fs, "/m") == (Names{"X", "x"}));
 	}
 
-	TEST_CASE("特殊路径写法在所有入口上的行为一致")
+	TEST_CASE("special path spellings behave the same in every entry point")
 	{
 		VirtualFileSystem fs;
 		REQUIRE(fs.mountMemory("/m") != 0);
@@ -350,7 +350,7 @@ TEST_SUITE("extreme")
 
 	// ================================================================ 挂载点边界
 
-	TEST_CASE("挂载点在底层的文件之下：通往挂载点的路径始终是目录")
+	TEST_CASE("mount point below a lower-layer file: the path to the mount point is always a directory")
 	{
 		VirtualFileSystem fs;
 		auto lower = MemoryBackend::create();
@@ -369,7 +369,7 @@ TEST_SUITE("extreme")
 		CHECK(fs.removeFile("/a") == Error::IS_DIR);
 	}
 
-	TEST_CASE("同一个后端挂在多个挂载点：两处看到同一份数据")
+	TEST_CASE("one backend at several mount points: both see the same data")
 	{
 		VirtualFileSystem fs;
 		auto mem = MemoryBackend::create();
@@ -383,7 +383,7 @@ TEST_SUITE("extreme")
 		CHECK(readAll(fs, "/x/g") == "shared");
 	}
 
-	TEST_CASE("单文件挂载在归档文件之上：遮蔽归档中的同名文件，可写，子路径 NOT_DIR")
+	TEST_CASE("single-file mount over an archive file: shadows it, writable, sub-paths NOT_DIR")
 	{
 		test::TempDir dir;
 		REQUIRE(test::buildArchive(dir.sub("a.vfs"), {{"cfg/game.ini", test::bytes("archive"), {}},
@@ -405,7 +405,7 @@ TEST_SUITE("extreme")
 
 	// ================================================================ 本机目录的外部变化
 
-	TEST_CASE("挂载期间磁盘被外部修改：删除、替换、文件变目录，VFS 立即看到最新状态")
+	TEST_CASE("external disk changes while mounted: delete, replace, file becomes directory; the VFS sees them immediately")
 	{
 		test::TempDir dir;
 		dir.write("root/f.txt", "v1");
@@ -423,12 +423,12 @@ TEST_SUITE("extreme")
 		// 平台不支持替换打开中的文件时（见 test::nativeReplaceOpenFile），外部工具也只能等句柄关闭，测试同样先关闭
 		if (!test::nativeReplaceOpenFile())
 		{
-			MESSAGE("本机文件系统不支持替换打开中的文件，先关闭流再做外部替换");
+			MESSAGE("native file system cannot replace an open file; closing the stream before the external replace");
 			open.reset();
 		}
 		dir.write("tmp.txt", "v2-longer");
 		Error re = vfs::native::renamePath(dir.sub("tmp.txt"), dir.sub("root/f.txt"));
-		REQUIRE_MESSAGE(re == Error::OK, "外部替换文件失败: " << re << "（流是否仍打开: " << (open != nullptr) << "）");
+		REQUIRE_MESSAGE(re == Error::OK, "external file replace failed: " << re << " (stream still open: " << (open != nullptr) << ")");
 		CHECK(readAll(fs, "/n/f.txt") == "v2-longer");
 		CHECK(fs.fileSize("/n/f.txt") == 9);
 #if !defined(_WIN32)
@@ -458,7 +458,7 @@ TEST_SUITE("extreme")
 		CHECK(err != Error::OK);
 	}
 
-	TEST_CASE("只读的本机目录（chmod 0555）：读取正常，写入返回 PERMISSION_DENIED")
+	TEST_CASE("read-only native directory (chmod 0555): reads work, writes return PERMISSION_DENIED")
 	{
 #if defined(_WIN32)
 		return;
@@ -498,7 +498,7 @@ TEST_SUITE("extreme")
 
 	// ================================================================ 归档损坏
 
-	TEST_CASE("归档逐区域损坏：header / 数据区 / 索引 / footer 各自报告正确的错误")
+	TEST_CASE("archive corruption by region: header / data / index / footer each report the right error")
 	{
 		FileWriteOptions x, z;
 		x.encrypt = true;
@@ -584,7 +584,7 @@ TEST_SUITE("extreme")
 		}
 	}
 
-	TEST_CASE("伪造的条目：超大尺寸、越界偏移、非法类型、乱序路径都被拒绝，不做巨量分配")
+	TEST_CASE("forged entries: huge sizes, out-of-range offsets, invalid types and unsorted paths are rejected without huge allocations")
 	{
 		FileWriteOptions z;
 		z.compress = true;
@@ -663,7 +663,7 @@ TEST_SUITE("extreme")
 		}
 	}
 
-	TEST_CASE("密钥：缺少、长度错误、内容错误、正确；失败时不改变挂载表")
+	TEST_CASE("keys: missing, wrong length, wrong content, correct; failures leave the mount table unchanged")
 	{
 		test::TempDir dir;
 		ArchiveWriteOptions o;
@@ -702,7 +702,7 @@ TEST_SUITE("extreme")
 
 	// ================================================================ 故障注入
 
-	TEST_CASE("故障注入：读失败时 readFile / copyFile / moveFile 返回 IO_ERROR，源保持不变")
+	TEST_CASE("fault injection: read failures make readFile / copyFile / moveFile return IO_ERROR and keep the source")
 	{
 		test::FaultConfig cfg;
 		auto mem = MemoryBackend::create();
@@ -723,7 +723,7 @@ TEST_SUITE("extreme")
 		CHECK(cfg.injected.load() >= 3);
 	}
 
-	TEST_CASE("故障注入：copy-up 读失败或写失败时，写入层不留下半个文件或临时文件")
+	TEST_CASE("fault injection: failed copy-up reads or writes leave no partial or temp files in the write layer")
 	{
 		test::FaultConfig lowerCfg;
 		test::FaultConfig upperCfg;
@@ -764,7 +764,7 @@ TEST_SUITE("extreme")
 		CHECK(s->size() == 300000);
 	}
 
-	TEST_CASE("故障注入：写失败 / 短写 / close 失败时 writeFile 与 writeFileAtomic 的行为")
+	TEST_CASE("fault injection: writeFile and writeFileAtomic on write failure / short write / close failure")
 	{
 		test::FaultConfig cfg;
 		auto mem = MemoryBackend::create();
@@ -804,7 +804,7 @@ TEST_SUITE("extreme")
 			CHECK(n.find(".tmp") == std::string::npos);
 	}
 
-	TEST_CASE("故障注入：stat / list / open / mkdir / remove 的错误原样传播，不被当作“不存在”")
+	TEST_CASE("fault injection: stat / list / open / mkdir / remove errors propagate unchanged, not as \"missing\"")
 	{
 		test::FaultConfig cfg;
 		auto mem = MemoryBackend::create();
@@ -849,7 +849,7 @@ TEST_SUITE("extreme")
 
 	// ================================================================ 句柄与大文件
 
-	TEST_CASE("句柄耗尽：本机与归档流在打开失败时返回错误，关闭后恢复")
+	TEST_CASE("handle exhaustion: native and archive streams fail cleanly and recover after closing")
 	{
 #if defined(_WIN32)
 		return;   // Windows 的句柄上限很高，这里不模拟
@@ -896,7 +896,7 @@ TEST_SUITE("extreme")
 #endif
 	}
 
-	TEST_CASE("内存后端同时打开 5000 个流")
+	TEST_CASE("memory backend with 5000 open streams")
 	{
 		VirtualFileSystem fs;
 		REQUIRE(fs.mountMemory("/m") != 0);
@@ -913,7 +913,7 @@ TEST_SUITE("extreme")
 		CHECK(fs.unmount(fs.mounts()[0].id, UnmountFlags::FailIfBusy) == Error::BUSY);
 	}
 
-	TEST_CASE("超过 4 GB 的稀疏文件（慢）：本机流 resize / seek / 读写 4 GB 以上的偏移" * doctest::skip(!test::slowEnabled()))
+	TEST_CASE("sparse file over 4 GB (slow): native stream resize / seek / read / write beyond 4 GB" * doctest::skip(!test::slowEnabled()))
 	{
 		test::TempDir dir;
 		dir.mkdir("n");
@@ -949,7 +949,7 @@ TEST_SUITE("extreme")
 		CHECK(r->read(buf, 4) == 4);
 	}
 
-	TEST_CASE("大文件（慢）：300 MB 文件经内存后端与归档（压缩 / 加密）往返" * doctest::skip(!test::slowEnabled()))
+	TEST_CASE("large file (slow): 300 MB round trip through memory and archive (compressed / encrypted)" * doctest::skip(!test::slowEnabled()))
 	{
 		const size_t size = 300u << 20;
 		std::vector<uint8_t> data(size);
@@ -969,7 +969,7 @@ TEST_SUITE("extreme")
 		CHECK(fs.fileSize("/m/big") == static_cast<int64_t>(size));
 	}
 
-	TEST_CASE("单次读写长度上限：请求超过 VFS_MAX_IO_CHUNK 时只处理上限字节数，不溢出 int")
+	TEST_CASE("per-call I/O limit: requests above VFS_MAX_IO_CHUNK are capped without int overflow")
 	{
 		VirtualFileSystem fs;
 		std::shared_ptr<MemoryBackend> mem;

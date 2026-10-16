@@ -31,10 +31,10 @@ int runVerify(const VerifyOptions& options, std::ostream& out, std::ostream& err
 	});
 	if (e != Error::OK && bad == 0)
 	{
-		err << "错误: " << errorMessage(e) << "\n";
+		err << "error: " << errorMessage(e) << "\n";
 		return exitCodeFor(e);
 	}
-	out << "header: OK，index: OK，文件: " << ok << " 通过，" << bad << " 失败\n";
+	out << "header: OK, index: OK, files: " << ok << " passed, " << bad << " failed\n";
 	return bad == 0 ? 0 : static_cast<int>(ExitCode::INTEGRITY);
 }
 

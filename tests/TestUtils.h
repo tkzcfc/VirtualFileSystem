@@ -161,7 +161,7 @@ public:
 			s += '=';
 			s += std::to_string(n);
 		}
-		return s.empty() ? "<空>" : s;
+		return s.empty() ? "<empty>" : s;
 	}
 
 private:
@@ -188,7 +188,7 @@ public:
 
 	FailureLog& operator++()
 	{
-		add("<无详情>");
+		add("<no details>");
 		return *this;
 	}
 
@@ -203,8 +203,8 @@ public:
 	void expectEq(const std::string& got, const std::string& want, const std::string& what)
 	{
 		if (got != want)
-			add(what + " -> 读到 " + std::to_string(got.size()) + " 字节 \"" + got.substr(0, 40) + "\"，期望 " +
-				std::to_string(want.size()) + " 字节 \"" + want.substr(0, 40) + "\"");
+			add(what + " -> got " + std::to_string(got.size()) + " bytes \"" + got.substr(0, 40) + "\", expected " +
+				std::to_string(want.size()) + " bytes \"" + want.substr(0, 40) + "\"");
 	}
 
 	size_t load() const
@@ -216,7 +216,7 @@ public:
 	std::string str() const
 	{
 		std::lock_guard<std::mutex> lock(m_mutex);
-		std::string s = std::to_string(m_count) + " 次失败";
+		std::string s = std::to_string(m_count) + " failure(s)";
 		for (const auto& d : m_details)
 			s += "\n  " + d;
 		if (m_count > m_details.size())

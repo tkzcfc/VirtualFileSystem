@@ -11,7 +11,7 @@ int runExtract(const ExtractOptions& options, std::ostream& out, std::ostream& e
 {
 	if (options.outputDir.empty() || options.paths.empty())
 	{
-		err << "错误: 需要至少一个路径和 -o 输出目录\n";
+		err << "error: at least one path and -o <output dir> are required\n";
 		return static_cast<int>(ExitCode::USAGE);
 	}
 	std::shared_ptr<const ArchiveIndex> index;
@@ -30,7 +30,7 @@ int runExtract(const ExtractOptions& options, std::ostream& out, std::ostream& e
 		std::string path;
 		if (Path::normalizeRelative(raw, path) != Error::OK)
 		{
-			err << "错误: 非法路径: " << raw << "\n";
+			err << "error: invalid path: " << raw << "\n";
 			return static_cast<int>(ExitCode::USAGE);
 		}
 		// 文件：直接提取；目录（含根目录 ""）：提取其下所有条目
@@ -48,7 +48,7 @@ int runExtract(const ExtractOptions& options, std::ostream& out, std::ostream& e
 		}
 		else
 		{
-			err << "错误: 归档中没有: " << raw << "\n";
+			err << "error: not in archive: " << raw << "\n";
 			return static_cast<int>(ExitCode::IO);
 		}
 		for (const ArchiveEntry* entry : targets)
@@ -56,14 +56,14 @@ int runExtract(const ExtractOptions& options, std::ostream& out, std::ostream& e
 			e = writeEntryToDisk(*index, *entry, options.outputDir, options.force, true, stream.get());
 			if (e != Error::OK)
 			{
-				err << "错误: 提取失败: " << entry->path << " (" << errorName(e) << ")\n";
+				err << "error: extract failed: " << entry->path << " (" << errorName(e) << ")\n";
 				return e == Error::CORRUPTED ? static_cast<int>(ExitCode::INTEGRITY) : exitCodeFor(e);
 			}
 			out << "  " << entry->path << "\n";
 			++count;
 		}
 	}
-	out << "已提取 " << count << " 项到 " << options.outputDir << "\n";
+	out << "extracted " << count << " item(s) to " << options.outputDir << "\n";
 	return 0;
 }
 

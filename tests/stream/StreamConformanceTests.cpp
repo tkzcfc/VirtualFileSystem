@@ -200,7 +200,7 @@ std::vector<uint8_t> sampleContent(size_t size)
 
 TEST_SUITE("stream")
 {
-	TEST_CASE_TEMPLATE("只读：size / read / EOF", Fx, VFS_READ_FIXTURES)
+	TEST_CASE_TEMPLATE("read-only: size / read / EOF", Fx, VFS_READ_FIXTURES)
 	{
 		Fx fx;
 		const auto content = sampleContent(10000);
@@ -221,7 +221,7 @@ TEST_SUITE("stream")
 		CHECK(s->read(buf, 0) == 0);
 	}
 
-	TEST_CASE_TEMPLATE("只读：seek 的三种 origin、越过 EOF、负位置", Fx, VFS_READ_FIXTURES)
+	TEST_CASE_TEMPLATE("read-only: seek with all three origins, past EOF, negative positions", Fx, VFS_READ_FIXTURES)
 	{
 		Fx fx;
 		const auto content = sampleContent(5000);
@@ -254,7 +254,7 @@ TEST_SUITE("stream")
 		CHECK(s->size() == 5000);
 	}
 
-	TEST_CASE_TEMPLATE("只读：随机 seek + read 与原始内容一致", Fx, VFS_READ_FIXTURES)
+	TEST_CASE_TEMPLATE("read-only: random seek + read matches the original", Fx, VFS_READ_FIXTURES)
 	{
 		Fx fx;
 		const auto content = sampleContent(70000);
@@ -279,7 +279,7 @@ TEST_SUITE("stream")
 		}
 	}
 
-	TEST_CASE_TEMPLATE("只读：空文件", Fx, VFS_READ_FIXTURES)
+	TEST_CASE_TEMPLATE("read-only: empty file", Fx, VFS_READ_FIXTURES)
 	{
 		Fx fx;
 		fx.prepare({});
@@ -291,7 +291,7 @@ TEST_SUITE("stream")
 		CHECK(s->seek(0, SEEK_END) == 0);
 	}
 
-	TEST_CASE_TEMPLATE("只读：READ 模式下 write 失败，内容不变", Fx, VFS_READ_FIXTURES)
+	TEST_CASE_TEMPLATE("read-only: write fails in READ mode and content is unchanged", Fx, VFS_READ_FIXTURES)
 	{
 		Fx fx;
 		const auto content = sampleContent(100);
@@ -304,7 +304,7 @@ TEST_SUITE("stream")
 		CHECK(test::readStream(*s) == content);
 	}
 
-	TEST_CASE_TEMPLATE("close 之后所有操作返回 EBADF", Fx, VFS_READ_FIXTURES)
+	TEST_CASE_TEMPLATE("every operation after close returns EBADF", Fx, VFS_READ_FIXTURES)
 	{
 		Fx fx;
 		fx.prepare(sampleContent(10));
@@ -324,7 +324,7 @@ TEST_SUITE("stream")
 		s->close();
 	}
 
-	TEST_CASE_TEMPLATE("同一文件的多个流位置互相独立", Fx, VFS_READ_FIXTURES)
+	TEST_CASE_TEMPLATE("multiple streams on one file have independent positions", Fx, VFS_READ_FIXTURES)
 	{
 		Fx fx;
 		const auto content = sampleContent(1000);
@@ -341,7 +341,7 @@ TEST_SUITE("stream")
 		CHECK(std::memcmp(y, content.data(), 10) == 0);
 	}
 
-	TEST_CASE_TEMPLATE("写入：WRITE 创建新文件并截断已有文件", Fx, VFS_WRITE_FIXTURES)
+	TEST_CASE_TEMPLATE("write: WRITE creates new files and truncates existing ones", Fx, VFS_WRITE_FIXTURES)
 	{
 		Fx fx;
 		fx.removeFile();
@@ -370,7 +370,7 @@ TEST_SUITE("stream")
 		CHECK(test::str(fx.contents()) == "new");
 	}
 
-	TEST_CASE_TEMPLATE("写入：APPEND 保留原内容，每次写都追加到末尾", Fx, VFS_WRITE_FIXTURES)
+	TEST_CASE_TEMPLATE("write: APPEND keeps the content and every write appends at the end", Fx, VFS_WRITE_FIXTURES)
 	{
 		Fx fx;
 		fx.prepare(test::bytes("abc"));
@@ -396,7 +396,7 @@ TEST_SUITE("stream")
 		CHECK(test::str(fx.contents()) == "x");
 	}
 
-	TEST_CASE_TEMPLATE("写入：OVERLAPPED 不截断、可原地覆盖、可读", Fx, VFS_WRITE_FIXTURES)
+	TEST_CASE_TEMPLATE("write: OVERLAPPED does not truncate, overwrites in place, readable", Fx, VFS_WRITE_FIXTURES)
 	{
 		Fx fx;
 		fx.prepare(test::bytes("0123456789"));
@@ -419,7 +419,7 @@ TEST_SUITE("stream")
 		CHECK(s->size() == 0);
 	}
 
-	TEST_CASE_TEMPLATE("写入：seek 越过 EOF 后写入，空洞以 0 填充", Fx, VFS_WRITE_FIXTURES)
+	TEST_CASE_TEMPLATE("write: writing after seeking past EOF fills the hole with zeros", Fx, VFS_WRITE_FIXTURES)
 	{
 		Fx fx;
 		fx.removeFile();
@@ -436,7 +436,7 @@ TEST_SUITE("stream")
 		CHECK(test::str(fx.contents()) == expect);
 	}
 
-	TEST_CASE_TEMPLATE("写入：resize 截断与扩展，位置不变", Fx, VFS_WRITE_FIXTURES)
+	TEST_CASE_TEMPLATE("write: resize truncates and extends without moving the position", Fx, VFS_WRITE_FIXTURES)
 	{
 		Fx fx;
 		fx.prepare(test::bytes("0123456789"));
@@ -454,7 +454,7 @@ TEST_SUITE("stream")
 		CHECK(test::str(fx.contents()) == std::string("0123\0\0", 6));
 	}
 
-	TEST_CASE_TEMPLATE("写入：大数据分块写入后完整读回", Fx, VFS_WRITE_FIXTURES)
+	TEST_CASE_TEMPLATE("write: large data written in chunks reads back intact", Fx, VFS_WRITE_FIXTURES)
 	{
 		Fx fx;
 		fx.removeFile();
@@ -474,7 +474,7 @@ TEST_SUITE("stream")
 		CHECK(fx.contents() == data);
 	}
 
-	TEST_CASE_TEMPLATE("READ 打开不存在的文件失败", Fx, VFS_WRITE_FIXTURES)
+	TEST_CASE_TEMPLATE("opening a missing file for READ fails", Fx, VFS_WRITE_FIXTURES)
 	{
 		Fx fx;
 		fx.removeFile();
@@ -484,7 +484,7 @@ TEST_SUITE("stream")
 
 TEST_SUITE("stream")
 {
-	TEST_CASE("NativeFileStream：拒绝打开目录、可移动")
+	TEST_CASE("NativeFileStream: refuses to open directories; movable")
 	{
 		test::TempDir dir;
 		dir.mkdir("d");
@@ -503,7 +503,7 @@ TEST_SUITE("stream")
 		CHECK(moved.size() == 3);
 	}
 
-	TEST_CASE("归档流与内存流的 open() 直接调用返回 ENOTSUP")
+	TEST_CASE("calling open() directly on archive and memory streams returns ENOTSUP")
 	{
 		test::TempDir dir;
 		REQUIRE(test::buildArchive(dir.sub("a.vfs"), {{"f", test::bytes("x"), {}}}) == Error::OK);
@@ -516,7 +516,7 @@ TEST_SUITE("stream")
 		CHECK(errno == ENOTSUP);
 	}
 
-	TEST_CASE("归档只能以 READ 打开")
+	TEST_CASE("archives can only be opened for READ")
 	{
 		test::TempDir dir;
 		REQUIRE(test::buildArchive(dir.sub("a.vfs"), {{"f", test::bytes("x"), {}}}) == Error::OK);

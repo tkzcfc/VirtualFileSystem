@@ -75,7 +75,7 @@ Error resolveKey(const KeySource& source, std::vector<uint8_t>& key, std::ostrea
 		NativeFileStream fs;
 		if (!fs.open(source.keyFile, IFileStream::Mode::READ))
 		{
-			err << "错误: 无法读取密钥文件 " << source.keyFile << "\n";
+			err << "error: cannot read key file " << source.keyFile << "\n";
 			return native::errorFromErrno(errno);
 		}
 		std::string content(256, '\0');
@@ -89,15 +89,15 @@ Error resolveKey(const KeySource& source, std::vector<uint8_t>& key, std::ostrea
 		}
 		if (parseHexKey(content, key))
 			return Error::OK;
-		err << "错误: 密钥文件必须是 32 字节原始数据或 64 个 hex 字符\n";
+		err << "error: key file must contain 32 raw bytes or 64 hex characters\n";
 		return Error::KEY_INVALID;
 	}
 	if (!source.keyHex.empty())
 	{
-		err << "警告: --key-hex 会出现在 shell 历史和进程列表中，建议使用 --key-file 或环境变量 VFS_KEY\n";
+		err << "warning: --key-hex is visible in shell history and process lists; prefer --key-file or the VFS_KEY environment variable\n";
 		if (parseHexKey(source.keyHex, key))
 			return Error::OK;
-		err << "错误: --key-hex 必须是 64 个 hex 字符\n";
+		err << "error: --key-hex must be 64 hex characters\n";
 		return Error::KEY_INVALID;
 	}
 	if (source.useEnv)
@@ -107,7 +107,7 @@ Error resolveKey(const KeySource& source, std::vector<uint8_t>& key, std::ostrea
 		{
 			if (parseHexKey(env, key))
 				return Error::OK;
-			err << "错误: 环境变量 VFS_KEY 必须是 64 个 hex 字符\n";
+			err << "error: environment variable VFS_KEY must be 64 hex characters\n";
 			return Error::KEY_INVALID;
 		}
 	}
@@ -144,7 +144,7 @@ int openArchive(const ArchiveArgs& args, std::shared_ptr<const ArchiveIndex>& in
 	index = ArchiveReader::open(args.archive, options, &e);
 	if (!index)
 	{
-		err << "错误: 无法打开归档 " << args.archive << ": " << errorMessage(e) << " (" << errorName(e) << ")\n";
+		err << "error: cannot open archive " << args.archive << ": " << errorMessage(e) << " (" << errorName(e) << ")\n";
 		return exitCodeFor(e);
 	}
 	return static_cast<int>(ExitCode::OK);

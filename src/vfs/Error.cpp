@@ -90,41 +90,41 @@ const char* errorMessage(Error err)
 	switch (err)
 	{
 	case Error::OK:
-		return "成功";
+		return "success";
 	case Error::NOT_FOUND:
-		return "文件或目录不存在";
+		return "no such file or directory";
 	case Error::EXISTS:
-		return "已经存在";
+		return "already exists";
 	case Error::NOT_DIR:
-		return "不是目录";
+		return "not a directory";
 	case Error::IS_DIR:
-		return "是目录";
+		return "is a directory";
 	case Error::NOT_EMPTY:
-		return "目录非空";
+		return "directory not empty";
 	case Error::READ_ONLY:
-		return "只读";
+		return "read-only";
 	case Error::CROSS_DEVICE:
-		return "不能跨后端移动";
+		return "cannot move across backends";
 	case Error::BUSY:
-		return "资源忙（挂载点或仍有打开的流）";
+		return "resource busy (mount point or open streams)";
 	case Error::INVALID_PATH:
-		return "路径不合法";
+		return "invalid path";
 	case Error::PERMISSION_DENIED:
-		return "没有权限";
+		return "permission denied";
 	case Error::IO_ERROR:
-		return "IO 错误";
+		return "I/O error";
 	case Error::UNSUPPORTED:
-		return "不支持的操作";
+		return "operation not supported";
 	case Error::CORRUPTED:
-		return "归档已损坏";
+		return "archive corrupted";
 	case Error::VERSION_MISMATCH:
-		return "归档版本不匹配";
+		return "archive version mismatch";
 	case Error::KEY_REQUIRED:
-		return "需要密钥";
+		return "key required";
 	case Error::KEY_INVALID:
-		return "密钥错误";
+		return "invalid key";
 	}
-	return "未知错误";
+	return "unknown error";
 }
 
 NS_VFS_END

@@ -18,7 +18,7 @@ std::string norm(std::string_view in)
 
 TEST_SUITE("path")
 {
-	TEST_CASE("normalize：基本形式")
+	TEST_CASE("normalize: basic forms")
 	{
 		CHECK(norm("") == "/");
 		CHECK(norm("/") == "/");
@@ -30,13 +30,13 @@ TEST_SUITE("path")
 		CHECK(norm("/a/./b/.") == "/a/b"); // 去掉 '.'
 	}
 
-	TEST_CASE("normalize：反斜杠等价于斜杠")
+	TEST_CASE("normalize: backslash is equivalent to slash")
 	{
 		CHECK(norm("\\a\\b") == "/a/b");
 		CHECK(norm("a\\b/c\\") == "/a/b/c");
 	}
 
-	TEST_CASE("normalize：按字面消解 ..，越过根报错")
+	TEST_CASE("normalize: resolves .. lexically; going above the root is an error")
 	{
 		CHECK(norm("/a/b/../c") == "/a/c");
 		CHECK(norm("/a/../..") == "<INVALID_PATH>");
@@ -48,7 +48,7 @@ TEST_SUITE("path")
 		CHECK(norm("/.../x") == "/.../x");
 	}
 
-	TEST_CASE("normalize：拒绝 NUL 与控制字符")
+	TEST_CASE("normalize: rejects NUL and control characters")
 	{
 		CHECK(norm(std::string_view("/a\0b", 4)) == "<INVALID_PATH>");
 		CHECK(norm("/a\nb") == "<INVALID_PATH>");
@@ -56,14 +56,14 @@ TEST_SUITE("path")
 		CHECK(norm("/a\x7f") == "<INVALID_PATH>");
 	}
 
-	TEST_CASE("normalize：UTF-8 原样保留、大小写敏感")
+	TEST_CASE("normalize: UTF-8 is preserved as is; case-sensitive")
 	{
 		CHECK(norm("/资源/图片/../配置.json") == "/资源/配置.json");
 		CHECK(norm("/日本語/한국어/emoji😀.txt") == "/日本語/한국어/emoji😀.txt");
 		CHECK(norm("/A/b") != norm("/a/b"));
 	}
 
-	TEST_CASE("normalizeRelative 与 isNormalizedRelative")
+	TEST_CASE("normalizeRelative and isNormalizedRelative")
 	{
 		std::string out;
 		CHECK(Path::normalizeRelative("/a/b/", out) == Error::OK);
@@ -83,7 +83,7 @@ TEST_SUITE("path")
 		CHECK_FALSE(Path::isNormalizedRelative("a\\b"));
 	}
 
-	TEST_CASE("isUnder：按路径段比较")
+	TEST_CASE("isUnder: compares whole path segments")
 	{
 		std::string_view rel;
 		CHECK(Path::isUnder("/a/b", "/", rel));
@@ -119,7 +119,7 @@ TEST_SUITE("path")
 		CHECK(Path::parentRelative("a") == "");
 	}
 
-	TEST_CASE("isPortableComponent：Windows 保留名与非法字符")
+	TEST_CASE("isPortableComponent: Windows reserved names and invalid characters")
 	{
 		CHECK(Path::isPortableComponent("file.txt"));
 		CHECK(Path::isPortableComponent("console"));

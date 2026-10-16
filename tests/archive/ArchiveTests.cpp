@@ -85,7 +85,7 @@ void fixHeaderChecksum(std::vector<uint8_t>& data, size_t base = 0)
 
 TEST_SUITE("archive")
 {
-	TEST_CASE("往返：所有加密/压缩组合的内容、大小、列表都正确")
+	TEST_CASE("round trip: content, sizes and listings are correct for every encryption/compression combination")
 	{
 		test::TempDir dir;
 		const auto files = sampleFiles();
@@ -133,7 +133,7 @@ TEST_SUITE("archive")
 		CHECK(err == Error::NOT_DIR);
 	}
 
-	TEST_CASE("可复现：相同输入（任意添加顺序）生成逐字节相同的文件")
+	TEST_CASE("reproducible: same input (any add order) produces byte-identical files")
 	{
 		test::TempDir dir;
 		auto files = sampleFiles();
@@ -151,7 +151,7 @@ TEST_SUITE("archive")
 		CHECK(test::readNative(dir.sub("3.vfs")) != a);
 	}
 
-	TEST_CASE("对齐：每个数据块起点按 alignment 对齐；1 表示不对齐；非 2 的幂被拒绝")
+	TEST_CASE("alignment: every data block starts aligned; 1 means unaligned; non-powers of two are rejected")
 	{
 		test::TempDir dir;
 		const auto files = sampleFiles();
@@ -182,7 +182,7 @@ TEST_SUITE("archive")
 		}
 	}
 
-	TEST_CASE("去重：相同内容只存一份；不同加密方式不共享；可关闭")
+	TEST_CASE("dedup: identical content is stored once; different encryption is not shared; can be disabled")
 	{
 		test::TempDir dir;
 		const auto content = test::randomBytes(10000, 11);
@@ -216,7 +216,7 @@ TEST_SUITE("archive")
 		CHECK(stats2.archiveSize > stats.archiveSize + 3 * content.size() - 100);
 	}
 
-	TEST_CASE("空目录：默认不保留，addDir 显式添加的空目录保留；非空目录的 addDir 被合并")
+	TEST_CASE("empty directories: dropped by default, kept when added with addDir; addDir of non-empty dirs is merged")
 	{
 		test::TempDir dir;
 		ArchiveWriteStats stats;
@@ -237,7 +237,7 @@ TEST_SUITE("archive")
 		CHECK_FALSE(any);
 	}
 
-	TEST_CASE("空归档也是合法的")
+	TEST_CASE("an empty archive is valid")
 	{
 		test::TempDir dir;
 		REQUIRE(test::buildArchive(dir.sub("empty.vfs"), {}) == Error::OK);
@@ -249,7 +249,7 @@ TEST_SUITE("archive")
 		CHECK(b->verifyAll() == Error::OK);
 	}
 
-	TEST_CASE("索引密钥：默认派生并存储；外部密钥不存储时需要提供；错误密钥报 KEY_INVALID")
+	TEST_CASE("index key: derived and stored by default; external unstored keys must be supplied; wrong keys give KEY_INVALID")
 	{
 		test::TempDir dir;
 		const auto files = sampleFiles();
@@ -303,7 +303,7 @@ TEST_SUITE("archive")
 		CHECK(test::buildArchive(dir.sub("bad.vfs"), files, badKey) == Error::KEY_INVALID);
 	}
 
-	TEST_CASE("XOR：加密文件的数据区不含明文；fileKeyLength 生效")
+	TEST_CASE("XOR: encrypted file data contains no plaintext; fileKeyLength is honoured")
 	{
 		test::TempDir dir;
 		const auto content = textContent(100, 9);
@@ -325,7 +325,7 @@ TEST_SUITE("archive")
 		}
 	}
 
-	TEST_CASE("LZ4：压缩条目的 storedSize 更小；压不小时存原文")
+	TEST_CASE("LZ4: compressed entries have a smaller storedSize; incompressible data is stored raw")
 	{
 		test::TempDir dir;
 		const auto text = textContent(2000, 3);
@@ -343,7 +343,7 @@ TEST_SUITE("archive")
 		CHECK(readEntryVia(*b, "n.bin") == noise);
 	}
 
-	TEST_CASE("addFile 从本机文件流式写入（大文件、加密）与 addData 结果相同")
+	TEST_CASE("addFile streams from a native file (large, encrypted) with the same result as addData")
 	{
 		test::TempDir dir;
 		const auto big = test::randomBytes(3 * 1024 * 1024 + 17, 21);
@@ -369,7 +369,7 @@ TEST_SUITE("archive")
 		CHECK_FALSE(dir.exists("missing.vfs"));
 	}
 
-	TEST_CASE("写入到 IFileStream，并从内存来源挂载")
+	TEST_CASE("write to an IFileStream and mount from an in-memory source")
 	{
 		auto mem = MemoryBackend::create();
 		auto out = mem->open("a.vfs", IFileStream::Mode::WRITE, nullptr);
@@ -386,7 +386,7 @@ TEST_SUITE("archive")
 		CHECK(test::readAll(fs, "/x.txt") == "in memory");
 	}
 
-	TEST_CASE("写入端错误：重复、大小写冲突、文件/目录冲突、非法路径")
+	TEST_CASE("writer errors: duplicates, case conflicts, file/directory conflicts, invalid paths")
 	{
 		test::TempDir dir;
 		CHECK(test::buildArchive(dir.sub("1.vfs"), {{"a.txt", {}, {}}, {"a.txt", {}, {}}}) == Error::EXISTS);
@@ -406,7 +406,7 @@ TEST_SUITE("archive")
 		CHECK(openOk(dir.sub("7.vfs"))->index()->findFile("x/y.txt") != nullptr);
 	}
 
-	TEST_CASE("附加到其他文件之后：通过 footer 自动定位，或显式 baseOffset")
+	TEST_CASE("appended to another file: located via the footer or an explicit baseOffset")
 	{
 		test::TempDir dir;
 		const auto files = sampleFiles();
@@ -435,7 +435,7 @@ TEST_SUITE("archive")
 		CHECK(openErr(tail) == Error::OK);
 	}
 
-	TEST_CASE("版本不匹配：只检查一个版本号")
+	TEST_CASE("version mismatch: only one version number is checked")
 	{
 		test::TempDir dir;
 		REQUIRE(test::buildArchive(dir.sub("a.vfs"), sampleFiles()) == Error::OK);
@@ -450,7 +450,7 @@ TEST_SUITE("archive")
 		}
 	}
 
-	TEST_CASE("损坏检测：header/索引任一字节翻转 → 打开失败；数据区翻转 → verify 失败")
+	TEST_CASE("corruption detection: any flipped header/index byte fails open; flipped data fails verify")
 	{
 		test::TempDir dir;
 		ArchiveWriteOptions o;
@@ -512,7 +512,7 @@ TEST_SUITE("archive")
 		CHECK(harmless <= 2);
 	}
 
-	TEST_CASE("损坏检测：截断到任意长度都安全失败")
+	TEST_CASE("corruption detection: truncation to any length fails safely")
 	{
 		test::TempDir dir;
 		REQUIRE(test::buildArchive(dir.sub("a.vfs"), sampleFiles()) == Error::OK);
@@ -532,7 +532,7 @@ TEST_SUITE("archive")
 		}
 	}
 
-	TEST_CASE("随机变异（替代 libFuzzer 的轻量模糊测试）：不崩溃、不越界")
+	TEST_CASE("random mutation (lightweight fuzzing instead of libFuzzer): no crash, no out-of-bounds")
 	{
 		test::TempDir dir;
 		REQUIRE(test::buildArchive(dir.sub("a.vfs"), sampleFiles()) == Error::OK);
@@ -583,7 +583,7 @@ TEST_SUITE("archive")
 		CHECK(opened > 0);
 	}
 
-	TEST_CASE("ArchiveHeader：serialize/parse 往返；未知 flags 被拒绝")
+	TEST_CASE("ArchiveHeader: serialize/parse round trip; unknown flags are rejected")
 	{
 		ArchiveHeader h;
 		h.flags = ArchiveFlags::IndexEncrypted;
@@ -610,7 +610,7 @@ TEST_SUITE("archive")
 		CHECK(p.parse(v.data()) == Error::CORRUPTED);
 	}
 
-	TEST_CASE("verify 回调报告每个文件；条目哈希为 XXH3-128 低 64 位")
+	TEST_CASE("verify callback reports every file; entry hash is the low 64 bits of XXH3-128")
 	{
 		test::TempDir dir;
 		const auto files = sampleFiles();
@@ -632,7 +632,7 @@ TEST_SUITE("archive")
 			CHECK(index->findFile(f.path)->hash == xxh3_128(f.content.data(), f.content.size()).low);
 	}
 
-	TEST_CASE("mtime：默认 0 保证可复现；显式指定时写入索引")
+	TEST_CASE("mtime: 0 by default for reproducibility; written to the index when specified")
 	{
 		test::TempDir dir;
 		FileWriteOptions o;

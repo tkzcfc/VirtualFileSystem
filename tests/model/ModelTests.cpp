@@ -598,7 +598,7 @@ void checkCoverage(std::initializer_list<const char*> required)
 
 TEST_SUITE("model")
 {
-	TEST_CASE("参考模型：单个内存后端，随机操作序列")
+	TEST_CASE("reference model: single memory backend, random operations")
 	{
 		for (uint32_t seed = 1; seed <= static_cast<uint32_t>(40 * test::scale()); ++seed)
 			runFuzz(Kind::Memory, seed, 300);
@@ -608,14 +608,14 @@ TEST_SUITE("model")
 					   "rename:NOT_EMPTY"});
 	}
 
-	TEST_CASE("参考模型：单个本机目录，随机操作序列")
+	TEST_CASE("reference model: single native directory, random operations")
 	{
 		for (uint32_t seed = 1; seed <= static_cast<uint32_t>(15 * test::scale()); ++seed)
 			runFuzz(Kind::Native, seed, 300);
 		checkCoverage({"write:OK", "rename:OK", "removeDir:OK", "createDirs:OK"});
 	}
 
-	TEST_CASE("参考模型：只读内存底层 + 可写内存上层，随机操作序列")
+	TEST_CASE("reference model: read-only memory lower + writable memory upper, random operations")
 	{
 		for (uint32_t seed = 1; seed <= static_cast<uint32_t>(40 * test::scale()); ++seed)
 			runFuzz(Kind::MemoryOverMemory, seed, 300);
@@ -623,14 +623,14 @@ TEST_SUITE("model")
 					   "removeDir:OK", "rename:OK", "rename:READ_ONLY", "createDir:OK"});
 	}
 
-	TEST_CASE("参考模型：归档底层 + 本机目录上层，随机操作序列")
+	TEST_CASE("reference model: archive lower + native upper, random operations")
 	{
 		for (uint32_t seed = 1; seed <= static_cast<uint32_t>(15 * test::scale()); ++seed)
 			runFuzz(Kind::NativeOverArchive, seed, 300);
 		checkCoverage({"write:OK", "append:OK", "removeFile:READ_ONLY", "rename:READ_ONLY", "rename:OK"});
 	}
 
-	TEST_CASE("参考模型（长序列）：每种配置 200 个种子 × 2000 步" * doctest::skip(!test::slowEnabled()))
+	TEST_CASE("reference model (long): 200 seeds × 2000 steps per configuration" * doctest::skip(!test::slowEnabled()))
 	{
 		for (Kind k : {Kind::Memory, Kind::Native, Kind::MemoryOverMemory, Kind::NativeOverArchive})
 			for (uint32_t seed = 1000; seed < 1200; ++seed)

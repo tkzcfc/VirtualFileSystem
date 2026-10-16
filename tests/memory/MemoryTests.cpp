@@ -7,7 +7,7 @@ using Names = std::vector<std::string>;
 
 TEST_SUITE("memory")
 {
-	TEST_CASE("addFile 自动创建父目录、覆盖时不影响已打开的流")
+	TEST_CASE("addFile creates parent directories; overwriting does not affect open streams")
 	{
 		auto b = MemoryBackend::create();
 		REQUIRE(b->addFile("a/b/c.txt", "v1") == Error::OK);
@@ -24,7 +24,7 @@ TEST_SUITE("memory")
 		CHECK(b->addFile("a/b", "x") == Error::IS_DIR);
 	}
 
-	TEST_CASE("两个写流共享同一份数据")
+	TEST_CASE("two write streams share the same data")
 	{
 		auto b = MemoryBackend::create();
 		auto w = b->open("f", IFileStream::Mode::WRITE, nullptr);
@@ -36,7 +36,7 @@ TEST_SUITE("memory")
 		CHECK(test::str(test::readStream(*r)) == "abc");
 	}
 
-	TEST_CASE("rename 规则（POSIX）")
+	TEST_CASE("rename rules (POSIX)")
 	{
 		auto b = MemoryBackend::create();
 		b->addFile("d1/f", "f");
@@ -56,7 +56,7 @@ TEST_SUITE("memory")
 		CHECK(st.size == 1);
 	}
 
-	TEST_CASE("readOnly：仍可用 addFile 预填，但流和目录操作被拒绝")
+	TEST_CASE("readOnly: addFile can still prefill, but stream and directory operations are rejected")
 	{
 		MemoryOptions o;
 		o.readOnly = true;
@@ -71,7 +71,7 @@ TEST_SUITE("memory")
 		CHECK(b->removeFile("f") == Error::READ_ONLY);
 	}
 
-	TEST_CASE("list 按字节序排序；根目录不能删除")
+	TEST_CASE("list is sorted by bytes; the root cannot be removed")
 	{
 		auto b = MemoryBackend::create();
 		b->addFile("b", "");

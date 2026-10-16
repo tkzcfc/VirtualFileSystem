@@ -30,13 +30,13 @@ int runKeygen(const KeygenOptions& options, std::ostream& out, std::ostream& err
 	NativeFileStream fs;
 	if (!fs.open(options.outputFile, IFileStream::Mode::WRITE))
 	{
-		err << "错误: 无法写入 " << options.outputFile << "\n";
+		err << "error: cannot write " << options.outputFile << "\n";
 		return static_cast<int>(ExitCode::IO);
 	}
 	hex.push_back('\n');
 	if (fs.write(hex.data(), static_cast<unsigned int>(hex.size())) != static_cast<int>(hex.size()))
 		return static_cast<int>(ExitCode::IO);
-	out << "已生成密钥: " << options.outputFile << "\n";
+	out << "key written: " << options.outputFile << "\n";
 	return 0;
 }
 

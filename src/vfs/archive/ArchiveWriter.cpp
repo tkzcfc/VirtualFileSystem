@@ -164,7 +164,7 @@ Error ArchiveWriter::addFile(std::string_view archivePath, std::string_view nati
 	Pending p;
 	Error e = Path::normalizeRelative(archivePath, p.path);
 	if (e != Error::OK || p.path.empty() || p.path.size() > MAX_PATH_LENGTH)
-		return fail(Error::INVALID_PATH, "非法的归档路径: " + std::string(archivePath));
+		return fail(Error::INVALID_PATH, "invalid archive path: " + std::string(archivePath));
 	p.type = EntryType::FILE;
 	p.nativePath = std::string(nativePath);
 	p.options = options;
@@ -177,7 +177,7 @@ Error ArchiveWriter::addData(std::string_view archivePath, std::vector<uint8_t> 
 	Pending p;
 	Error e = Path::normalizeRelative(archivePath, p.path);
 	if (e != Error::OK || p.path.empty() || p.path.size() > MAX_PATH_LENGTH)
-		return fail(Error::INVALID_PATH, "非法的归档路径: " + std::string(archivePath));
+		return fail(Error::INVALID_PATH, "invalid archive path: " + std::string(archivePath));
 	p.type = EntryType::FILE;
 	p.data = std::make_shared<std::vector<uint8_t>>(std::move(data));
 	p.options = options;
@@ -190,7 +190,7 @@ Error ArchiveWriter::addDir(std::string_view archivePath)
 	Pending p;
 	Error e = Path::normalizeRelative(archivePath, p.path);
 	if (e != Error::OK || p.path.size() > MAX_PATH_LENGTH)
-		return fail(Error::INVALID_PATH, "非法的归档路径: " + std::string(archivePath));
+		return fail(Error::INVALID_PATH, "invalid archive path: " + std::string(archivePath));
 	// 根目录不需要条目
 	if (p.path.empty())
 		return Error::OK;
@@ -214,7 +214,7 @@ Error ArchiveWriter::prepare(std::vector<Pending>& sorted)
 		{
 			if (unique.back().type == EntryType::DIR && p.type == EntryType::DIR)
 				continue;
-			return fail(Error::EXISTS, "重复的归档路径: " + p.path);
+			return fail(Error::EXISTS, "duplicate archive path: " + p.path);
 		}
 		unique.push_back(std::move(p));
 	}
@@ -226,7 +226,7 @@ Error ArchiveWriter::prepare(std::vector<Pending>& sorted)
 	{
 		auto res = folded.emplace(foldCase(p.path), p.path);
 		if (!res.second)
-			return fail(Error::EXISTS, "大小写冲突: " + res.first->second + " <-> " + p.path);
+			return fail(Error::EXISTS, "case conflict: " + res.first->second + " <-> " + p.path);
 	}
 
 	// 文件/目录冲突，以及去掉非空目录：排好序后，"a" 的子孙一定紧跟在 "a/..." 的位置附近，
@@ -242,7 +242,7 @@ Error ArchiveWriter::prepare(std::vector<Pending>& sorted)
 								   [](const Pending& a, const std::string& v) { return a.path < v; });
 		bool hasChildren = it != unique.end() && it->path.compare(0, prefix.size(), prefix) == 0;
 		if (p.type == EntryType::FILE && hasChildren)
-			return fail(Error::NOT_DIR, "路径既是文件又是目录: " + p.path);
+			return fail(Error::NOT_DIR, "path is both a file and a directory: " + p.path);
 		if (p.type == EntryType::DIR && hasChildren)
 			continue;   // 非空目录由文件路径推导，不写条目
 		result.push_back(p);
@@ -257,7 +257,7 @@ Error ArchiveWriter::write(std::string_view outPath, ArchiveWriteStats* stats)
 	std::string tmp = out + ".tmp";
 	NativeFileStream fs;
 	if (!fs.open(tmp, IFileStream::Mode::WRITE))
-		return fail(native::errorFromErrno(errno), "无法创建输出文件: " + tmp);
+		return fail(native::errorFromErrno(errno), "cannot create output file: " + tmp);
 
 	Error e = write(fs, stats);
 	fs.close();
@@ -271,7 +271,7 @@ Error ArchiveWriter::write(std::string_view outPath, ArchiveWriteStats* stats)
 	if (e != Error::OK)
 	{
 		native::removeFilePath(tmp);
-		return fail(e, "无法重命名到: " + out);
+		return fail(e, "cannot rename to: " + out);
 	}
 	return Error::OK;
 }
@@ -281,29 +281,29 @@ Error ArchiveWriter::write(IFileStream& out, ArchiveWriteStats* stats)
 	m_lastError.clear();
 	const uint32_t alignment = m_options.alignment;
 	if (alignment == 0 || (alignment & (alignment - 1)) != 0 || alignment > MAX_ALIGNMENT)
-		return fail(Error::UNSUPPORTED, "alignment 必须是 1..65536 之间的 2 的幂");
+		return fail(Error::UNSUPPORTED, "alignment must be a power of two in 1..65536");
 	if (m_options.fileKeyLength == 0 || m_options.fileKeyLength > MAX_FILE_KEY_SIZE)
-		return fail(Error::UNSUPPORTED, "文件 XOR key 长度必须在 1..32 之间");
+		return fail(Error::UNSUPPORTED, "file XOR key length must be in 1..32");
 	if (!m_options.indexKey.empty() && m_options.indexKey.size() != INDEX_KEY_SIZE)
-		return fail(Error::KEY_INVALID, "索引密钥必须是 32 字节");
+		return fail(Error::KEY_INVALID, "index key must be 32 bytes");
 
 	std::vector<Pending> items;
 	Error e = prepare(items);
 	if (e != Error::OK)
 		return e;
 	if (items.size() > UINT32_MAX)
-		return fail(Error::UNSUPPORTED, "条目过多");
+		return fail(Error::UNSUPPORTED, "too many entries");
 
 	ArchiveWriteStats st;
 	std::vector<ArchiveEntry> entries(items.size());
 
 	// 1. 占位 header + 对齐到数据区起点
 	if (out.seek(0, SEEK_SET) != 0)
-		return fail(Error::IO_ERROR, "输出流不支持 seek");
+		return fail(Error::IO_ERROR, "output stream does not support seek");
 	const uint64_t dataOffset = alignUp(HEADER_SIZE, alignment);
 	e = writeZeros(out, dataOffset);
 	if (e != Error::OK)
-		return fail(e, "写入失败");
+		return fail(e, "write failed");
 	uint64_t pos = dataOffset;
 
 	std::map<DedupKey, DedupValue> dedup;
@@ -340,7 +340,7 @@ Error ArchiveWriter::write(IFileStream& out, ArchiveWriteStats* stats)
 			{
 				e = readNativeFile(item.nativePath, content);
 				if (e != Error::OK)
-					return fail(e, "无法读取文件: " + item.nativePath);
+					return fail(e, "cannot read file: " + item.nativePath);
 				data = &content;
 			}
 			size = data->size();
@@ -350,13 +350,13 @@ Error ArchiveWriter::write(IFileStream& out, ArchiveWriteStats* stats)
 		{
 			file = std::make_unique<NativeFileStream>();
 			if (!file->open(item.nativePath, IFileStream::Mode::READ))
-				return fail(native::errorFromErrno(errno), "无法读取文件: " + item.nativePath);
+				return fail(native::errorFromErrno(errno), "cannot read file: " + item.nativePath);
 			Xxh3Stream hasher;
 			while (true)
 			{
 				int n = file->read(buffer.data(), static_cast<unsigned int>(buffer.size()));
 				if (n < 0)
-					return fail(Error::IO_ERROR, "读取失败: " + item.nativePath);
+					return fail(Error::IO_ERROR, "read failed: " + item.nativePath);
 				if (n == 0)
 					break;
 				hasher.update(buffer.data(), static_cast<size_t>(n));
@@ -417,7 +417,7 @@ Error ArchiveWriter::write(IFileStream& out, ArchiveWriteStats* stats)
 			uint64_t aligned = alignUp(pos, alignment);
 			e = writeZeros(out, aligned - pos);
 			if (e != Error::OK)
-				return fail(e, "写入失败");
+				return fail(e, "write failed");
 			pos = aligned;
 		}
 		entry.offset = pos;
@@ -438,7 +438,7 @@ Error ArchiveWriter::write(IFileStream& out, ArchiveWriteStats* stats)
 					xorCipher(buffer.data(), n, entry.key.data(), entry.keyLength, done);
 				e = writeAll(out, buffer.data(), n);
 				if (e != Error::OK)
-					return fail(e, "写入失败");
+					return fail(e, "write failed");
 				done += n;
 			}
 		}
@@ -446,7 +446,7 @@ Error ArchiveWriter::write(IFileStream& out, ArchiveWriteStats* stats)
 		{
 			// 大文件：第二遍流式读取、加密、写入，内存占用固定 1 MB
 			if (file->seek(0, SEEK_SET) != 0)
-				return fail(Error::IO_ERROR, "seek 失败: " + item.nativePath);
+				return fail(Error::IO_ERROR, "seek failed: " + item.nativePath);
 			uint64_t done = 0;
 			while (done < size)
 			{
@@ -458,12 +458,12 @@ Error ArchiveWriter::write(IFileStream& out, ArchiveWriteStats* stats)
 					xorCipher(buffer.data(), len, entry.key.data(), entry.keyLength, done);
 				e = writeAll(out, buffer.data(), len);
 				if (e != Error::OK)
-					return fail(e, "写入失败");
+					return fail(e, "write failed");
 				done += len;
 			}
 			// 两遍之间文件被修改：拒绝生成内容与哈希不一致的归档
 			if (done != size)
-				return fail(Error::IO_ERROR, "打包过程中文件被修改: " + item.nativePath);
+				return fail(Error::IO_ERROR, "file modified while packing: " + item.nativePath);
 		}
 		pos += entry.storedSize;
 		st.storedSize += entry.storedSize;
@@ -545,7 +545,7 @@ Error ArchiveWriter::write(IFileStream& out, ArchiveWriteStats* stats)
 
 	e = writeAll(out, index.data(), index.size());
 	if (e != Error::OK)
-		return fail(e, "写入索引失败");
+		return fail(e, "failed to write index");
 	pos += index.size();
 
 	// 5. footer：用于定位附加在其他文件后面的归档
@@ -554,17 +554,17 @@ Error ArchiveWriter::write(IFileStream& out, ArchiveWriteStats* stats)
 	ByteIO::writeU64LE(footer + F_ARCHIVE_SIZE, pos + FOOTER_SIZE);       // [8] archiveSize
 	e = writeAll(out, footer, FOOTER_SIZE);
 	if (e != Error::OK)
-		return fail(e, "写入 footer 失败");
+		return fail(e, "failed to write footer");
 	pos += FOOTER_SIZE;
 
 	// 6. 回填 header
 	uint8_t headerBuf[HEADER_SIZE];
 	h.serialize(headerBuf);
 	if (out.seek(0, SEEK_SET) != 0)
-		return fail(Error::IO_ERROR, "输出流不支持 seek");
+		return fail(Error::IO_ERROR, "output stream does not support seek");
 	e = writeAll(out, headerBuf, HEADER_SIZE);
 	if (e != Error::OK)
-		return fail(e, "写入 header 失败");
+		return fail(e, "failed to write header");
 	// 输出流原有内容可能更长（例如复用旧文件），截断到归档长度
 	if (out.size() > static_cast<int64_t>(pos))
 		out.resize(static_cast<int64_t>(pos));

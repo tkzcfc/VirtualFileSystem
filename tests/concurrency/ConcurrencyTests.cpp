@@ -17,7 +17,7 @@ constexpr int THREADS = 16;
 
 TEST_SUITE("concurrency")
 {
-	TEST_CASE("16 线程随机读同一个归档（每个流各自的句柄与位置）")
+	TEST_CASE("16 threads randomly read the same archive (each stream has its own handle and position)")
 	{
 		test::TempDir dir;
 		std::vector<test::ArchiveFile> files;
@@ -64,7 +64,7 @@ TEST_SUITE("concurrency")
 		CHECK(failures.load() == 0);
 	}
 
-	TEST_CASE("挂载/卸载与读取并发：已打开的流始终可读完，查询从不崩溃")
+	TEST_CASE("mount/unmount concurrent with reads: open streams always read to the end, queries never crash")
 	{
 		test::TempDir dir;
 		const auto content = test::randomBytes(100000, 5);
@@ -124,7 +124,7 @@ TEST_SUITE("concurrency")
 		CHECK(fs.mounts().size() == 1);
 	}
 
-	TEST_CASE("内存后端：并发写不同文件、并发读写同一文件、并发创建删除")
+	TEST_CASE("memory backend: concurrent writes to different files, concurrent read/write of one file, concurrent create/remove")
 	{
 		VirtualFileSystem fs;
 		std::shared_ptr<MemoryBackend> mem;
@@ -167,7 +167,7 @@ TEST_SUITE("concurrency")
 		CHECK(test::listNames(fs, "/").size() == THREADS + 1);
 	}
 
-	TEST_CASE("本机目录：多线程同时写不同文件、同时创建同一目录")
+	TEST_CASE("native directory: threads write different files and create the same directory concurrently")
 	{
 		test::TempDir dir;
 		VirtualFileSystem fs;

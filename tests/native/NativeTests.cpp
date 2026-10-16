@@ -8,7 +8,7 @@ using Names = std::vector<std::string>;
 
 TEST_SUITE("native")
 {
-	TEST_CASE("UTF-8 路径：中文、日文、emoji 文件名可读写和列出")
+	TEST_CASE("UTF-8 paths: Chinese, Japanese and emoji names can be written, read and listed")
 	{
 		test::TempDir dir;
 		dir.write("资源/图片/背景.png", "png-data");
@@ -24,7 +24,7 @@ TEST_SUITE("native")
 		CHECK(dir.read("セーブ/重命名.sav") == "save");
 	}
 
-	TEST_CASE("stat：类型、大小、mtime、可写")
+	TEST_CASE("stat: type, size, mtime, writable")
 	{
 		test::TempDir dir;
 		dir.write("f.bin", std::string(1234, 'x'));
@@ -43,7 +43,7 @@ TEST_SUITE("native")
 		CHECK(fs.stat("/n/none", st) == Error::NOT_FOUND);
 	}
 
-	TEST_CASE("拒绝不可移植的名字（Windows 保留名、冒号）")
+	TEST_CASE("non-portable names are rejected (Windows reserved names, colon)")
 	{
 		test::TempDir dir;
 		VirtualFileSystem fs;
@@ -55,7 +55,7 @@ TEST_SUITE("native")
 		CHECK(fs.writeFile("/console", "x") == Error::OK);
 	}
 
-	TEST_CASE("readOnly 选项：所有写操作返回 READ_ONLY")
+	TEST_CASE("readOnly option: every write operation returns READ_ONLY")
 	{
 		test::TempDir dir;
 		dir.write("f", "x");
@@ -69,7 +69,7 @@ TEST_SUITE("native")
 		CHECK(dir.read("f") == "x");
 	}
 
-	TEST_CASE("create：根目录不存在 / 是文件 / createRoot")
+	TEST_CASE("create: root missing / root is a file / createRoot")
 	{
 		test::TempDir dir;
 		Error err = Error::OK;
@@ -84,7 +84,7 @@ TEST_SUITE("native")
 		CHECK(dir.exists("made/deep"));
 	}
 
-	TEST_CASE("realPath 返回本机路径；虚拟目录返回空串")
+	TEST_CASE("realPath returns the native path; virtual directories return an empty string")
 	{
 		test::TempDir dir;
 		dir.write("a/b.txt", "x");
@@ -95,7 +95,7 @@ TEST_SUITE("native")
 		CHECK(fs.realPath("/x/y/none").empty());
 	}
 
-	TEST_CASE("删除打开中的文件遵循 OS 行为（自有 NativeFileStream 带 FILE_SHARE_DELETE）")
+	TEST_CASE("removing an open file follows OS behaviour (NativeFileStream uses FILE_SHARE_DELETE)")
 	{
 		test::TempDir dir;
 		dir.write("f", "data");
@@ -107,7 +107,7 @@ TEST_SUITE("native")
 		CHECK(test::str(test::readStream(*s)) == "data");
 	}
 
-	TEST_CASE("目录操作：createDir / removeDir / rename 覆盖已有文件")
+	TEST_CASE("directory operations: createDir / removeDir / rename over an existing file")
 	{
 		test::TempDir dir;
 		VirtualFileSystem fs;
@@ -125,7 +125,7 @@ TEST_SUITE("native")
 	}
 
 
-	TEST_CASE("exactCase：只差大小写的名字视为不存在，所有平台行为一致")
+	TEST_CASE("exactCase: names differing only in case are treated as missing, consistently on all platforms")
 	{
 		test::TempDir dir;
 		dir.write("Data/Hero.png", "hero");
@@ -171,7 +171,7 @@ TEST_SUITE("native")
 		}
 	}
 
-	TEST_CASE("exactCase 关闭（默认）：本机查找随文件系统的大小写规则")
+	TEST_CASE("exactCase off (default): native lookups follow the file system's case rules")
 	{
 		test::TempDir dir;
 		dir.write("Data/Hero.png", "hero");
@@ -188,7 +188,7 @@ TEST_SUITE("native")
 	}
 
 #if !defined(_WIN32)
-	TEST_CASE("followSymlinks=false：逃出根目录的符号链接被拒绝")
+	TEST_CASE("followSymlinks=false: symlinks escaping the root are rejected")
 	{
 		test::TempDir outside;
 		outside.write("secret.txt", "secret");

@@ -64,21 +64,21 @@ int runInfo(const InfoOptions& options, std::ostream& out, std::ostream& err)
 		return 0;
 	}
 
-	out << "归档:       " << options.archive.archive << "\n"
-		<< "格式版本:   " << h.version << "\n"
-		<< "归档大小:   " << index->archiveSize << " 字节（起始偏移 " << index->baseOffset << "）\n"
-		<< "对齐:       " << h.alignment << "\n"
-		<< "数据区:     偏移 " << h.dataOffset << "，大小 " << h.dataSize << "\n"
-		<< "索引区:     偏移 " << h.indexOffset << "，大小 " << h.indexSize << "，"
-		<< (indexEncrypted ? (keyStored ? "ChaCha20 加密（密钥存放在文件中）" : "ChaCha20 加密（外部密钥）") : "明文")
+	out << "Archive:        " << options.archive.archive << "\n"
+		<< "Format version: " << h.version << "\n"
+		<< "Archive size:   " << index->archiveSize << " bytes (base offset " << index->baseOffset << ")\n"
+		<< "Alignment:      " << h.alignment << "\n"
+		<< "Data:           offset " << h.dataOffset << ", size " << h.dataSize << "\n"
+		<< "Index:          offset " << h.indexOffset << ", size " << h.indexSize << ", "
+		<< (indexEncrypted ? (keyStored ? "ChaCha20-encrypted (key stored in archive)" : "ChaCha20-encrypted (external key)") : "plaintext")
 		<< "\n"
-		<< "条目:       " << h.entryCount << "（文件 " << files << "，空目录 " << dirs << "）\n"
-		<< "原始总大小: " << totalSize << " 字节\n"
-		<< "XOR 加密:   " << encrypted << " 个文件\n"
-		<< "LZ4 压缩:   " << compressed << " 个文件\n"
-		<< "去重共享:   " << shared << " 个条目\n"
-		<< "校验:       header XXH3-64 = " << std::hex << h.headerChecksum << "，index XXH3-64 = " << h.indexHash
-		<< std::dec << "（均已通过）\n";
+		<< "Entries:        " << h.entryCount << " (files " << files << ", empty dirs " << dirs << ")\n"
+		<< "Total size:     " << totalSize << " bytes\n"
+		<< "XOR-encrypted:  " << encrypted << " file(s)\n"
+		<< "LZ4-compressed: " << compressed << " file(s)\n"
+		<< "Deduplicated:   " << shared << " entr(ies)\n"
+		<< "Checksums:      header XXH3-64 = " << std::hex << h.headerChecksum << ", index XXH3-64 = " << h.indexHash
+		<< std::dec << " (all verified)\n";
 	return 0;
 }
 

@@ -55,7 +55,7 @@ std::string listArchive(const std::string& path)
 
 TEST_SUITE("tool")
 {
-	TEST_CASE("Glob::match：* ? ** [] 与转义")
+	TEST_CASE("Glob::match: * ? ** [] and escapes")
 	{
 		CHECK(Glob::match("*.lua", "main.lua"));
 		CHECK(Glob::match("*.lua", "a/b/main.lua"));      // 不含 '/' 的模式匹配文件名
@@ -81,7 +81,7 @@ TEST_SUITE("tool")
 		CHECK(Glob::match("中文/*.txt", "中文/说明.txt"));
 	}
 
-	TEST_CASE("Glob::evaluate：最后匹配的规则生效")
+	TEST_CASE("Glob::evaluate: the last matching rule wins")
 	{
 		std::vector<Rule> rules = {{"**/*.bin", true}, {"res/sub/**", false}};
 		bool matched = false;
@@ -93,7 +93,7 @@ TEST_SUITE("tool")
 		CHECK_FALSE(Glob::evaluate(rules, "x.lua", false));
 	}
 
-	TEST_CASE("hex 密钥解析")
+	TEST_CASE("hex key parsing")
 	{
 		std::vector<uint8_t> key;
 		CHECK(parseHexKey(std::string(64, 'a'), key));
@@ -105,7 +105,7 @@ TEST_SUITE("tool")
 		CHECK(toHex(key.data(), 2) == "ffff");
 	}
 
-	TEST_CASE("pack → list → cat → verify → unpack 往返；默认排除与空目录规则")
+	TEST_CASE("pack → list → cat → verify → unpack round trip; default excludes and empty-directory rules")
 	{
 		test::TempDir dir;
 		makeSource(dir);
@@ -161,7 +161,7 @@ TEST_SUITE("tool")
 		CHECK(runUnpack(uo, uout3, uerr3) == 0);
 	}
 
-	TEST_CASE("pack：两次打包结果逐字节相同；--empty-dirs、--prefix、--include")
+	TEST_CASE("pack: two runs produce byte-identical output; --empty-dirs, --prefix, --include")
 	{
 		test::TempDir dir;
 		makeSource(dir);
@@ -199,7 +199,7 @@ TEST_SUITE("tool")
 		CHECK(dout.str().find("main.lua") != std::string::npos);
 	}
 
-	TEST_CASE("pack/info/verify：外部密钥与错误码")
+	TEST_CASE("pack/info/verify: external keys and error codes")
 	{
 		test::TempDir dir;
 		makeSource(dir);
@@ -251,7 +251,7 @@ TEST_SUITE("tool")
 		CHECK(runInfo(bad, bout, berr) == static_cast<int>(ExitCode::IO));
 	}
 
-	TEST_CASE("extract：提取文件和目录")
+	TEST_CASE("extract: files and directories")
 	{
 		test::TempDir dir;
 		makeSource(dir);
@@ -271,7 +271,7 @@ TEST_SUITE("tool")
 		CHECK(runExtract(xo, o, e) != 0);
 	}
 
-	TEST_CASE("keygen：生成 64 个 hex 字符")
+	TEST_CASE("keygen: produces 64 hex characters")
 	{
 		KeygenOptions ko;
 		std::ostringstream o, e;

@@ -32,6 +32,9 @@
 #include <sys/types.h>
 #include <sys/utsname.h>
 #include <unistd.h>
+#if defined(__APPLE__)
+#include <sys/sysctl.h>
+#endif
 #endif
 
 USING_NS_VFS;
@@ -64,18 +67,18 @@ struct Options
 void printHelp()
 {
 	std::cout <<
-		"用法: vfs_bench [选项]\n"
-		"  --scale <x>        数据规模倍数，默认 1（小文件 10000 个 x 4KiB、中文件 200 个 x 256KiB、大文件 64MiB）\n"
-		"  --threads <list>   线程数列表，逗号分隔，N 表示硬件线程数，默认 1,2,4,8,N\n"
-		"  --iterations <n>   每个场景重复次数，取中位数，默认 3\n"
-		"  --filter <list>    只运行名字包含其中任一子串的场景（匹配 \"场景/目标\"，例如 read.small 或 archive-lz4）\n"
-		"  --csv <file>       额外输出 CSV\n"
-		"  --md <file>        额外输出 Markdown 表格\n"
-		"  --dir <path>       工作目录（数据集生成在这里），默认系统临时目录\n"
-		"  --keep             结束后保留工作目录\n"
-		"  --cold             每次迭代前清除数据文件的页缓存（posix_fadvise，仅 Linux；默认测热缓存）\n"
-		"  --list             列出所有场景与目标后退出\n"
-		"  -h, --help         显示帮助\n";
+		"Usage: vfs_bench [options]\n"
+		"  --scale <x>        dataset size multiplier, default 1 (10000 small files x 4KiB, 200 medium files x 256KiB, one 64MiB large file)\n"
+		"  --threads <list>   comma-separated thread counts, N = hardware threads, default 1,2,4,8,N\n"
+		"  --iterations <n>   repetitions per scenario (median is reported), default 3\n"
+		"  --filter <list>    only run cases whose \"scenario/target\" contains any of the substrings (e.g. read.small or archive-lz4)\n"
+		"  --csv <file>       also write CSV\n"
+		"  --md <file>        also write Markdown tables\n"
+		"  --dir <path>       working directory for the generated dataset, default: system temp dir\n"
+		"  --keep             keep the working directory afterwards\n"
+		"  --cold             drop the page cache of data files before each iteration (posix_fadvise, Linux only; default: warm cache)\n"
+		"  --list             list all scenarios and targets, then exit\n"
+		"  -h, --help         show this help\n";
 }
 
 int hardwareThreads()
@@ -127,7 +130,7 @@ bool parseArgs(int argc, char** argv, Options& opt)
 		{
 			if (i + 1 >= argc)
 			{
-				std::cerr << "选项 " << a << " 缺少参数\n";
+				std::cerr << "option " << a << " requires an argument\n";
 				return false;
 			}
 			v = argv[++i];
@@ -146,7 +149,7 @@ bool parseArgs(int argc, char** argv, Options& opt)
 			opt.scale = std::atof(v.c_str());
 			if (opt.scale <= 0)
 			{
-				std::cerr << "--scale 必须大于 0\n";
+				std::cerr << "--scale must be greater than 0\n";
 				return false;
 			}
 		}
@@ -154,7 +157,7 @@ bool parseArgs(int argc, char** argv, Options& opt)
 		{
 			if (!next(v) || !parseThreads(v, opt.threads))
 			{
-				std::cerr << "--threads 格式错误\n";
+				std::cerr << "invalid --threads value\n";
 				return false;
 			}
 		}
@@ -194,7 +197,7 @@ bool parseArgs(int argc, char** argv, Options& opt)
 			opt.list = true;
 		else
 		{
-			std::cerr << "未知选项: " << a << "\n";
+			std::cerr << "unknown option: " << a << "\n";
 			printHelp();
 			return false;
 		}
@@ -271,7 +274,7 @@ bool buildArchive(const Dataset& ds, const std::string& out, bool encrypt, bool 
 		return false;
 	Error e = writer.write(out);
 	if (e != Error::OK)
-		std::cerr << "打包失败 " << out << ": " << errorName(e) << " " << writer.lastError() << "\n";
+		std::cerr << "packing failed: " << out << ": " << errorName(e) << " " << writer.lastError() << "\n";
 	return e == Error::OK;
 }
 
@@ -287,7 +290,7 @@ bool buildDataset(const Options& opt, Dataset& ds)
 	stdfs::create_directories(stdfs::path(ds.root) / "medium", ec);
 	if (ec)
 	{
-		std::cerr << "无法创建工作目录 " << ds.root << ": " << ec.message() << "\n";
+		std::cerr << "cannot create working directory " << ds.root << ": " << ec.message() << "\n";
 		return false;
 	}
 	for (size_t i = 0; i < smallCount; ++i)
@@ -918,7 +921,7 @@ std::shared_ptr<MemoryBackend> memoryCopyOf(const Dataset& ds)
 bool checkMount(MountId id, const std::string& what)
 {
 	if (id == 0)
-		std::cerr << "挂载失败: " << what << "\n";
+		std::cerr << "mount failed: " << what << "\n";
 	return id != 0;
 }
 
@@ -1163,10 +1166,10 @@ std::vector<Scenario> makeScenarios(const Options& opt, const Dataset& ds)
 		};
 	};
 
-	sc.push_back({"read.small", false, false, true, "打开 + 读完 4KiB + 关闭，每线程读全部小文件", {}, readSet(&ds.small, 64 * KiB)});
-	sc.push_back({"read.medium", false, false, true, "打开 + 以 64KiB 分块读完 256KiB + 关闭", {}, readSet(&ds.medium, 64 * KiB)});
+	sc.push_back({"read.small", false, false, true, "open + read 4KiB + close; each thread reads every small file", {}, readSet(&ds.small, 64 * KiB)});
+	sc.push_back({"read.medium", false, false, true, "open + read 256KiB in 64KiB chunks + close", {}, readSet(&ds.medium, 64 * KiB)});
 
-	sc.push_back({"read.large.seq", false, false, true, "以 1MiB 分块顺序读完大文件，每线程一遍；延迟按块统计", {},
+	sc.push_back({"read.large.seq", false, false, true, "sequential read of the large file in 1MiB chunks, once per thread; latency per chunk", {},
 		[d](Target& tg) -> Work
 		{
 			return [&tg, d](int, int, ThreadStats& st)
@@ -1187,7 +1190,7 @@ std::vector<Scenario> makeScenarios(const Options& opt, const Dataset& ds)
 			};
 		}});
 
-	sc.push_back({"read.large.rand", false, false, true, "打开大文件一次，随机偏移 4KiB 读取；延迟按次统计（打开计入总时间）", {},
+	sc.push_back({"read.large.rand", false, false, true, "open the large file once, 4KiB reads at random offsets; latency per read (open counted in total time)", {},
 		[d, randReads](Target& tg) -> Work
 		{
 			return [&tg, d, randReads](int tid, int, ThreadStats& st)
@@ -1244,18 +1247,18 @@ std::vector<Scenario> makeScenarios(const Options& opt, const Dataset& ds)
 		};
 	};
 
-	sc.push_back({"meta.open", false, false, false, "只打开再关闭小文件（不读）", {},
+	sc.push_back({"meta.open", false, false, false, "open and close small files (no read)", {},
 		perSmall([](Target& tg, const std::string& rel) { return tg.openClose(rel); })});
-	sc.push_back({"meta.stat", false, true, false, "stat 已存在的小文件", {},
+	sc.push_back({"meta.stat", false, true, false, "stat existing small files", {},
 		perSmall([](Target& tg, const std::string& rel)
 		{
 			int64_t size = -1;
 			return tg.stat(rel, size) && size > 0;
 		})});
-	sc.push_back({"meta.miss", false, true, false, "exists 查询大目录中不存在的名字（分层组合要查完每一层）", {},
+	sc.push_back({"meta.miss", false, true, false, "exists() on names missing from a large directory (layered setups must check every layer)", {},
 		perSmall([](Target& tg, const std::string& rel) { return !tg.exists(rel + ".missing"); })});
 
-	sc.push_back({"meta.list", false, true, false, "列出含全部小文件的大目录，每线程 10 次；延迟按次统计", {},
+	sc.push_back({"meta.list", false, true, false, "list the large directory holding all small files, 10 times per thread; latency per listing", {},
 		[d](Target& tg) -> Work
 		{
 			return [&tg, d](int, int, ThreadStats& st)
@@ -1278,7 +1281,7 @@ std::vector<Scenario> makeScenarios(const Options& opt, const Dataset& ds)
 	auto resetArea = [](Target& tg, int threads) { return tg.resetWriteArea(threads); };
 	auto payload = std::make_shared<std::vector<uint8_t>>(makeContent(64 * KiB, 99));
 
-	sc.push_back({"write.create", true, false, true, "每线程在自己的目录里新建并写入 64KiB 文件", resetArea,
+	sc.push_back({"write.create", true, false, true, "each thread creates and writes 64KiB files in its own directory", resetArea,
 		[payload, writeFiles](Target& tg) -> Work
 		{
 			return [&tg, payload, writeFiles](int tid, int, ThreadStats& st)
@@ -1301,7 +1304,7 @@ std::vector<Scenario> makeScenarios(const Options& opt, const Dataset& ds)
 			};
 		}});
 
-	sc.push_back({"write.churn", true, false, false, "每线程循环：新建写入 4KiB 文件再删除（一次操作 = 创建 + 删除）", resetArea,
+	sc.push_back({"write.churn", true, false, false, "each thread loops: create + write 4KiB file, then delete it (one op = create + delete)", resetArea,
 		[payload, churnOps](Target& tg) -> Work
 		{
 			return [&tg, payload, churnOps](int tid, int, ThreadStats& st)
@@ -1384,14 +1387,13 @@ Row toRow(const Result& r, bool bytes)
 
 void printTableHeader()
 {
-	std::cout << std::left << std::setw(16) << "场景" << std::setw(22) << "目标" << std::right << std::setw(4) << "线程"
+	std::cout << std::left << std::setw(16) << "scenario" << std::setw(22) << "target" << std::right << std::setw(4) << "thr"
 			  << std::setw(10) << "ops/s" << std::setw(9) << "MiB/s" << std::setw(10) << "p50(us)" << std::setw(10) << "p99(us)"
 			  << std::setw(9) << "vs stdio" << "\n";
 }
 
 void printRow(const Row& r)
 {
-	// 中文表头的宽度对不齐没关系，数据行按 ASCII 对齐
 	std::cout << std::left << std::setw(16) << r.scenario << std::setw(22) << r.target << std::right << std::setw(4) << r.threads
 			  << std::setw(10) << r.opsps << std::setw(9) << r.mbps << std::setw(10) << r.p50 << std::setw(10) << r.p99
 			  << std::setw(9) << r.ratio << "\n";
@@ -1410,10 +1412,44 @@ std::string compilerInfo()
 #endif
 }
 
+#if defined(_WIN32)
+// 读注册表字符串值（HKLM），失败返回空串
+std::string regString(const wchar_t* subKey, const wchar_t* value)
+{
+	wchar_t buf[256];
+	DWORD size = sizeof(buf);
+	if (::RegGetValueW(HKEY_LOCAL_MACHINE, subKey, value, RRF_RT_REG_SZ, nullptr, buf, &size) != ERROR_SUCCESS)
+		return {};
+	int len = ::WideCharToMultiByte(CP_UTF8, 0, buf, -1, nullptr, 0, nullptr, nullptr);
+	std::string out(len > 1 ? static_cast<size_t>(len - 1) : 0, '\0');
+	if (len > 1)
+		::WideCharToMultiByte(CP_UTF8, 0, buf, -1, out.data(), len, nullptr, nullptr);
+	return out;
+}
+#endif
+
+std::string trim(std::string s)
+{
+	while (!s.empty() && (s.back() == ' ' || s.back() == '\t' || s.back() == '\n'))
+		s.pop_back();
+	size_t p = s.find_first_not_of(" \t");
+	return p == std::string::npos ? std::string() : s.substr(p);
+}
+
 std::string osInfo()
 {
 #if defined(_WIN32)
-	return "Windows";
+	// 产品名（注册表里 Windows 11 仍写作 "Windows 10"，以内部版本号为准）+ 版本号
+	const wchar_t* key = L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion";
+	std::string name = regString(key, L"ProductName");
+	std::string build = regString(key, L"CurrentBuildNumber");
+	std::string display = regString(key, L"DisplayVersion");
+	std::string s = name.empty() ? "Windows" : name;
+	if (!display.empty())
+		s += " " + display;
+	if (!build.empty())
+		s += " (build " + build + ")";
+	return s;
 #else
 	struct utsname u;
 	if (::uname(&u) == 0)
@@ -1429,13 +1465,23 @@ std::string cpuInfo()
 	std::string line;
 	while (std::getline(f, line))
 	{
-		if (line.rfind("model name", 0) == 0)
+		// x86 是 "model name"；部分 ARM 内核只有 "Hardware" / "CPU part"
+		if (line.rfind("model name", 0) == 0 || line.rfind("Hardware", 0) == 0)
 		{
 			auto p = line.find(':');
 			if (p != std::string::npos)
-				return line.substr(p + 2);
+				return trim(line.substr(p + 1));
 		}
 	}
+#elif defined(__APPLE__)
+	char buf[256];
+	size_t size = sizeof(buf);
+	if (::sysctlbyname("machdep.cpu.brand_string", buf, &size, nullptr, 0) == 0 && size > 0)
+		return trim(std::string(buf, strnlen(buf, size)));
+#elif defined(_WIN32)
+	std::string s = regString(L"HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0", L"ProcessorNameString");
+	if (!s.empty())
+		return trim(s);
 #endif
 	return "unknown";
 }
@@ -1471,37 +1517,37 @@ int main(int argc, char** argv)
 	if (opt.list)
 	{
 		scenarios = makeScenarios(opt, ds);
-		std::cout << "场景:\n";
+		std::cout << "Scenarios:\n";
 		for (auto& s : scenarios)
 			std::cout << "  " << std::left << std::setw(18) << s.name << s.desc << "\n";
-		std::cout << "读 / 元数据目标: base:stdio base:fstream base:posix|base:win32 vfs:native vfs:memory vfs:archive "
+		std::cout << "Read / metadata targets: base:stdio base:fstream base:posix|base:win32 vfs:native vfs:memory vfs:archive "
 					 "vfs:archive-xor vfs:archive-lz4 vfs:archive+native vfs:memory+archive vfs:3layer vfs:nested8\n"
-					 "写目标: base:stdio base:fstream base:posix|base:win32 vfs:native vfs:memory vfs:memory+archive\n";
+					 "Write targets: base:stdio base:fstream base:posix|base:win32 vfs:native vfs:memory vfs:memory+archive\n";
 		return 0;
 	}
 
 	std::cout << "# vfs_bench\n"
-			  << "日期: " << nowString() << "\n"
-			  << "系统: " << osInfo() << "\n"
-			  << "CPU: " << cpuInfo() << "，硬件线程 " << hardwareThreads() << "\n"
-			  << "编译器: " << compilerInfo() <<
+			  << "Date: " << nowString() << "\n"
+			  << "OS: " << osInfo() << "\n"
+			  << "CPU: " << cpuInfo() << ", hardware threads: " << hardwareThreads() << "\n"
+			  << "Compiler: " << compilerInfo() <<
 #if defined(NDEBUG)
-				 "（Release）"
+				 " (Release)"
 #else
-				 "（Debug，结果没有参考价值）"
+				 " (Debug: results are not meaningful)"
 #endif
 			  << "\n"
-			  << "缓存: " << (opt.cold ? "冷（每次迭代前 posix_fadvise DONTNEED，仅 Linux 生效）" : "热（先预跑一次）") << "\n"
-			  << "规模: " << opt.scale << "，迭代 " << opt.iterations << " 次取中位数，工作目录 " << opt.workDir << "\n\n";
+			  << "Cache: " << (opt.cold ? "cold (posix_fadvise DONTNEED before each iteration, Linux only)" : "warm (one warm-up run first)") << "\n"
+			  << "Scale: " << opt.scale << ", iterations: " << opt.iterations << " (median), working dir: " << opt.workDir << "\n\n";
 
 	auto t0 = Clock::now();
 	if (!buildDataset(opt, ds))
 		return 1;
 	scenarios = makeScenarios(opt, ds);
-	std::cout << "数据集: 小文件 " << ds.small.size() << " x " << ds.smallSize / KiB << "KiB，中文件 " << ds.medium.size() << " x "
-			  << ds.mediumSize / KiB << "KiB，大文件 " << ds.largeSize / MiB << "MiB；归档 plain "
+	std::cout << "Dataset: small files " << ds.small.size() << " x " << ds.smallSize / KiB << "KiB, medium files " << ds.medium.size() << " x "
+			  << ds.mediumSize / KiB << "KiB, large file " << ds.largeSize / MiB << "MiB; archives plain "
 			  << stdfs::file_size(ds.archivePlain) / MiB << "MiB / xor " << stdfs::file_size(ds.archiveXor) / MiB << "MiB / lz4 "
-			  << stdfs::file_size(ds.archiveLz4) / MiB << "MiB；生成耗时 "
+			  << stdfs::file_size(ds.archiveLz4) / MiB << "MiB; generated in "
 			  << fmt(std::chrono::duration<double>(Clock::now() - t0).count(), 1) << "s\n\n";
 
 	auto readTargets = makeReadTargets(opt, ds);
@@ -1576,7 +1622,7 @@ int main(int argc, char** argv)
 			  << fmt(static_cast<double>(r.ops) / r.seconds, 1) << "," << fmt(static_cast<double>(r.bytes) / MiB / r.seconds, 2) << ","
 			  << fmt(r.p50us, 3) << "," << fmt(r.p99us, 3) << "," << fmt(r.ratio, 4) << "," << (r.failed ? 1 : 0) << "\n";
 		}
-		std::cout << "\nCSV 已写入 " << opt.csvPath << "\n";
+		std::cout << "\nCSV written to " << opt.csvPath << "\n";
 	}
 	if (!opt.mdPath.empty())
 	{
@@ -1588,12 +1634,12 @@ int main(int argc, char** argv)
 			if (row.scenario != last)
 			{
 				last = row.scenario;
-				f << "\n### " << row.scenario << "\n\n| 目标 | 线程 | ops/s | MiB/s | p50 (µs) | p99 (µs) | vs stdio |\n|---|---:|---:|---:|---:|---:|---:|\n";
+				f << "\n### " << row.scenario << "\n\n| target | threads | ops/s | MiB/s | p50 (µs) | p99 (µs) | vs stdio |\n|---|---:|---:|---:|---:|---:|---:|\n";
 			}
 			f << "| " << row.target << " | " << row.threads << " | " << row.opsps << " | " << row.mbps << " | " << row.p50 << " | "
 			  << row.p99 << " | " << row.ratio << " |\n";
 		}
-		std::cout << "Markdown 已写入 " << opt.mdPath << "\n";
+		std::cout << "Markdown written to " << opt.mdPath << "\n";
 	}
 
 	bool anyFailed = false;

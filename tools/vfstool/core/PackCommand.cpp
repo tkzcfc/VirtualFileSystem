@@ -57,7 +57,7 @@ public:
 			children.push_back(*it);
 		if (ec)
 		{
-			m_err << "错误: 无法读取目录 " << native::fromFsPath(dir) << ": " << ec.message() << "\n";
+			m_err << "error: cannot read directory " << native::fromFsPath(dir) << ": " << ec.message() << "\n";
 			return native::errorFromCode(ec);
 		}
 
@@ -123,24 +123,24 @@ int runPack(const PackOptions& options, std::ostream& out, std::ostream& err)
 {
 	if (options.inputDir.empty() || (options.outputPath.empty() && !options.dryRun))
 	{
-		err << "错误: 需要源目录和 -o 输出文件\n";
+		err << "error: a source directory and -o <output file> are required\n";
 		return static_cast<int>(ExitCode::USAGE);
 	}
 	Stat st;
 	if (native::statPath(options.inputDir, st) != Error::OK || st.type != FileType::DIR)
 	{
-		err << "错误: 源目录不存在或不是目录: " << options.inputDir << "\n";
+		err << "error: source directory does not exist or is not a directory: " << options.inputDir << "\n";
 		return static_cast<int>(ExitCode::IO);
 	}
 	if (options.xorKeyLength < 16 || options.xorKeyLength > 32)
 	{
-		err << "错误: --xor-key-len 必须在 16..32 之间\n";
+		err << "error: --xor-key-len must be in 16..32\n";
 		return static_cast<int>(ExitCode::USAGE);
 	}
 	std::string prefix;
 	if (Path::normalizeRelative(options.prefix, prefix) != Error::OK)
 	{
-		err << "错误: 非法的 --prefix: " << options.prefix << "\n";
+		err << "error: invalid --prefix: " << options.prefix << "\n";
 		return static_cast<int>(ExitCode::USAGE);
 	}
 
@@ -155,7 +155,7 @@ int runPack(const PackOptions& options, std::ostream& out, std::ostream& err)
 		return exitCodeFor(e);
 	writeOptions.storeKey = options.storeKey;
 	if (options.noIndexEncrypt && !writeOptions.indexKey.empty())
-		err << "警告: 指定了 --no-index-encrypt，忽略索引密钥\n";
+		err << "warning: --no-index-encrypt given; ignoring the index key\n";
 
 	std::string outputCanonical;
 	if (!options.outputPath.empty())
@@ -187,13 +187,13 @@ int runPack(const PackOptions& options, std::ostream& out, std::ostream& err)
 		e = item.isDir ? writer.addDir(archivePath) : writer.addFile(archivePath, item.nativePath, item.options);
 		if (e != Error::OK)
 		{
-			err << "错误: " << writer.lastError() << "\n";
+			err << "error: " << writer.lastError() << "\n";
 			return exitCodeFor(e);
 		}
 	}
 	if (options.dryRun)
 	{
-		out << "dry-run: " << items.size() << " 项，未写入文件\n";
+		out << "dry-run: " << items.size() << " item(s), nothing written\n";
 		return static_cast<int>(ExitCode::OK);
 	}
 
@@ -201,15 +201,15 @@ int runPack(const PackOptions& options, std::ostream& out, std::ostream& err)
 	e = writer.write(options.outputPath, &stats);
 	if (e != Error::OK)
 	{
-		err << "错误: 打包失败: " << writer.lastError() << " (" << errorName(e) << ")\n";
+		err << "error: pack failed: " << writer.lastError() << " (" << errorName(e) << ")\n";
 		return e == Error::EXISTS || e == Error::NOT_DIR ? static_cast<int>(ExitCode::USAGE) : exitCodeFor(e);
 	}
 
-	out << "已打包 " << options.outputPath << "\n"
-		<< "  文件: " << stats.fileCount << "，空目录: " << stats.dirCount << "，去重: " << stats.dedupCount
-		<< "，XOR 加密: " << stats.encryptedCount << "，LZ4 压缩: " << stats.compressedCount << "\n"
-		<< "  原始大小: " << stats.totalSize << " 字节，存储数据（不含对齐填充）: " << stats.storedSize
-		<< " 字节，归档: " << stats.archiveSize << " 字节\n";
+	out << "packed " << options.outputPath << "\n"
+		<< "  files: " << stats.fileCount << ", empty dirs: " << stats.dirCount << ", deduplicated: " << stats.dedupCount
+		<< ", XOR-encrypted: " << stats.encryptedCount << ", LZ4-compressed: " << stats.compressedCount << "\n"
+		<< "  total size: " << stats.totalSize << " bytes, stored data (excluding alignment padding): " << stats.storedSize
+		<< " bytes, archive: " << stats.archiveSize << " bytes\n";
 	return static_cast<int>(ExitCode::OK);
 }
 

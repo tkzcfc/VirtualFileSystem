@@ -12,7 +12,7 @@ using namespace vfs;
 
 TEST_SUITE("crypto")
 {
-	TEST_CASE("ChaCha20：RFC 8439 block function 测试向量（§2.3.2 + 附录 A.1）")
+	TEST_CASE("ChaCha20: RFC 8439 block function test vectors (§2.3.2 + appendix A.1)")
 	{
 		const auto& vectors = rfc8439BlockVectors();
 		REQUIRE(vectors.size() == 6);
@@ -32,7 +32,7 @@ TEST_SUITE("crypto")
 		}
 	}
 
-	TEST_CASE("ChaCha20：RFC 8439 加密测试向量（§2.4.2 + 附录 A.2）")
+	TEST_CASE("ChaCha20: RFC 8439 encryption test vectors (§2.4.2 + appendix A.2)")
 	{
 		const auto& vectors = rfc8439EncryptVectors();
 		REQUIRE(vectors.size() == 4);
@@ -60,7 +60,7 @@ TEST_SUITE("crypto")
 		}
 	}
 
-	TEST_CASE("XOR：任意偏移解密结果与整段解密一致（属性测试）")
+	TEST_CASE("XOR: decrypting at any offset matches whole-buffer decryption (property test)")
 	{
 		const std::vector<uint8_t> plain = test::randomBytes(5000, 1);
 		for (size_t keyLen : {1u, 7u, 16u, 31u, 32u})
@@ -84,14 +84,14 @@ TEST_SUITE("crypto")
 		}
 	}
 
-	TEST_CASE("XOR：keyLen 为 0 时不修改数据")
+	TEST_CASE("XOR: keyLen 0 leaves the data unchanged")
 	{
 		std::vector<uint8_t> data = test::bytes("abc");
 		xorCipher(data.data(), data.size(), nullptr, 0, 5);
 		CHECK(test::str(data) == "abc");
 	}
 
-	TEST_CASE("LZ4：压缩/解压往返，损坏数据被拒绝")
+	TEST_CASE("LZ4: compress/decompress round trip; corrupted data is rejected")
 	{
 		std::string text;
 		for (int i = 0; i < 1000; ++i)
@@ -118,7 +118,7 @@ TEST_SUITE("crypto")
 		CHECK(packed == packed2);
 	}
 
-	TEST_CASE("XXH3：一次性与增量结果一致")
+	TEST_CASE("XXH3: one-shot and incremental results match")
 	{
 		std::vector<uint8_t> data = test::randomBytes(100000, 3);
 		Hash128 whole = xxh3_128(data.data(), data.size());
@@ -137,7 +137,7 @@ TEST_SUITE("crypto")
 		CHECK(xxh3_64("", 0) == 0x2D06800538D394C2ull);
 	}
 
-	TEST_CASE("ByteIO：固定小端")
+	TEST_CASE("ByteIO: always little-endian")
 	{
 		uint8_t buf[8];
 		ByteIO::writeU32LE(buf, 0x11223344u);
