@@ -47,6 +47,16 @@ Every backend (native, memory, LZ4 archives, layered mounts), every scenario, an
 
 ![Windows: speed relative to stdio](docs/images/bench/windows.svg)
 
+### Performance tips: what to avoid
+
+Measured on the five machines above (ratios vs `base:stdio`, 1 thread / 8 threads; details in [docs/benchmark.md](docs/benchmark.md)):
+
+- **Don't LZ4-compress large files.** A compressed entry is fully decompressed into memory when it is opened. Large-file sequential reads drop to 0.06-0.32x of stdio, 1-thread random reads to 0.07-0.42x, and 256 KiB files to 0.28-0.86x. *Instead:* compress only small text such as scripts and config (`--compress "*.lua"`); small LZ4 files still read 1.2-66x faster than stdio at 1 thread.
+- **Don't stack a native directory over an archive unless you need overrides.** Every lookup checks the native layer first, which is a real system call: median open/miss latency goes from 0.4 µs to about 11 µs on Windows and from 0.3 µs to about 15 µs on iOS. `archive+native` misses are 0.30-0.99x of stdio (iOS 1.1-1.8x). *Instead:* mount development override directories only in development builds, never an empty one in release.
+- **Keep layer stacks shallow.** With 9 layers on one path (`nested8`), opens are 0.24-1.09x and misses 0.18-0.88x of stdio (iOS 1 thread: 1.5x). *Instead:* use separate mount points, or pack layers into one archive.
+- **Native directory listing is slower than a raw `readdir`.** The VFS merges layers, deduplicates, sorts, and converts names: `vfs:native` `list` is 0.58-0.81x (about 1.0x on macOS/iOS at 8 threads). *Instead:* list from an archive (1.3-12.7x) or cache listings you reuse.
+- **Don't expect gains on random reads inside one large uncompressed file on Windows/Linux:** the archive is 0.86-1.0x of stdio there (2.3-3.4x on macOS/iOS). The big wins are opens, `stat`, lookups, and small files.
+
 ## Quick start
 
 ```cpp
