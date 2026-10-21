@@ -544,6 +544,14 @@ Error makeDir(std::string_view path)
 	});
 	if (code == ERROR_SUCCESS)
 		return Error::OK;
+	// 与 POSIX 一致（mount-rules.md §6）：失败时父目录已经被并发删除，报告 NOT_FOUND，
+	// 而不是删除挂起状态下常见的 ACCESS_DENIED
+	if (code != ERROR_ALREADY_EXISTS && code != ERROR_FILE_EXISTS)
+	{
+		std::string_view parent = parentOf(path);
+		if (!parent.empty() && vanished(parent))
+			return classifyMissing(path);
+	}
 	return errorForPath(code, path);
 }
 
@@ -934,6 +942,15 @@ Error renamePath(std::string_view from, std::string_view to)
 }
 
 #endif
+
+uint64_t processId()
+{
+#if defined(_WIN32)
+	return static_cast<uint64_t>(::GetCurrentProcessId());
+#else
+	return static_cast<uint64_t>(::getpid());
+#endif
+}
 
 // ---------------------------------------------------------------- 位置读
 

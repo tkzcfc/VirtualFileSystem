@@ -95,6 +95,11 @@ Error renamePath(std::string_view from, std::string_view to);
  *   同步句柄上的并发 ReadFile 会在内核里按文件对象串行化，重叠句柄不会。
  * 归档来源用它代替“每次打开文件都新开一个 OS 句柄”：打开归档内的文件不再有系统调用。
  */
+/**
+ * 当前进程 ID（用于生成进程间唯一的临时文件名）。
+ */
+uint64_t processId();
+
 class PositionalReader
 {
 public:

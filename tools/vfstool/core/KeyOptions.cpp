@@ -78,9 +78,21 @@ Error resolveKey(const KeySource& source, std::vector<uint8_t>& key, std::ostrea
 			err << "error: cannot read key file " << source.keyFile << "\n";
 			return native::errorFromErrno(errno);
 		}
-		std::string content(256, '\0');
-		int n = fs.read(content.data(), static_cast<unsigned int>(content.size()));
-		content.resize(n > 0 ? static_cast<size_t>(n) : 0);
+		// 读到 EOF（最多 4 KiB）：read 可能分多次返回，只读一次会把合法的密钥文件误判为格式错误
+		std::string content;
+		char buf[256];
+		while (content.size() < 4096)
+		{
+			int n = fs.read(buf, sizeof(buf));
+			if (n < 0)
+			{
+				err << "error: cannot read key file " << source.keyFile << "\n";
+				return Error::IO_ERROR;
+			}
+			if (n == 0)
+				break;
+			content.append(buf, static_cast<size_t>(n));
+		}
 		// 32 字节原始数据，或 64 个 hex 字符
 		if (content.size() == 32)
 		{

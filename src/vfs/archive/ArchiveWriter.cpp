@@ -1,4 +1,5 @@
 #include "ArchiveWriter.h"
+#include <atomic>
 #include "ArchiveReader.h"
 #include "ByteIO.h"
 #include "Compression.h"
@@ -254,7 +255,10 @@ Error ArchiveWriter::prepare(std::vector<Pending>& sorted)
 Error ArchiveWriter::write(std::string_view outPath, ArchiveWriteStats* stats)
 {
 	std::string out(outPath);
-	std::string tmp = out + ".tmp";
+	// 临时文件名带进程 ID 和进程内计数：两个进程（或线程）同时打包到同一路径时不会互相截断、互相删除临时文件
+	static std::atomic<uint64_t> s_counter{0};
+	std::string tmp = out + "." + std::to_string(native::processId()) + "-" +
+					  std::to_string(s_counter.fetch_add(1, std::memory_order_relaxed)) + ".tmp";
 	NativeFileStream fs;
 	if (!fs.open(tmp, IFileStream::Mode::WRITE))
 		return fail(native::errorFromErrno(errno), "cannot create output file: " + tmp);
@@ -474,9 +478,12 @@ Error ArchiveWriter::write(IFileStream& out, ArchiveWriteStats* stats)
 
 	// 3. 构建明文索引：Entry[n] + StringPool
 	const size_t entryCount = entries.size();
-	size_t poolSize = 0;
+	uint64_t poolSize = 0;
 	for (const auto& entry : entries)
 		poolSize += entry.path.size();
+	// 与读取端的上限一致（VFS_MAX_INDEX_SIZE）：否则会写出一个读不出来的归档
+	if (entryCount > UINT32_MAX || static_cast<uint64_t>(entryCount) * ENTRY_SIZE + poolSize > VFS_MAX_INDEX_SIZE)
+		return fail(Error::UNSUPPORTED, "index too large: " + std::to_string(entryCount) + " entries");
 	std::vector<uint8_t> index(entryCount * ENTRY_SIZE + poolSize, 0);
 	uint8_t* pool = index.data() + entryCount * ENTRY_SIZE;
 	uint32_t nameOffset = 0;

@@ -400,7 +400,8 @@ TEST_SUITE("archive")
 		CHECK(w.write(dir.sub("6.vfs")) == Error::EXISTS);
 		CHECK_FALSE(w.lastError().empty());
 		CHECK_FALSE(dir.exists("6.vfs"));
-		CHECK_FALSE(dir.exists("6.vfs.tmp"));
+		for (const auto& e : std::filesystem::directory_iterator(test::u8(dir.path())))
+			CHECK(e.path().filename().string().rfind("6.vfs", 0) != 0);   // 也没有留下 6.vfs.<pid>-<n>.tmp
 		// 前导 '/' 与反斜杠会被规范化
 		CHECK(test::buildArchive(dir.sub("7.vfs"), {{"/x\\y.txt", test::bytes("1"), {}}}) == Error::OK);
 		CHECK(openOk(dir.sub("7.vfs"))->index()->findFile("x/y.txt") != nullptr);

@@ -109,7 +109,12 @@ Error NativeBackend::toNative(std::string_view rel, std::string& out) const
 		std::error_code ec;
 		stdfs::path canon = stdfs::weakly_canonical(native::toFsPath(out), ec);
 		if (ec)
-			return Error::OK;
+		{
+			// 解析失败（权限、符号链接循环等）时无法确认路径仍在根目录之内：拒绝，而不是放行。
+			// 路径不存在不会走到这里（weakly_canonical 对不存在的部分按字面拼接）
+			Error ce = native::errorFromCode(ec);
+			return ce == Error::NOT_FOUND || ce == Error::NOT_DIR ? ce : Error::PERMISSION_DENIED;
+		}
 		std::string c = native::fromFsPath(canon.generic_u8string());
 		std::string_view relOut;
 		if (!Path::isUnder(c, m_canonicalRoot, relOut))

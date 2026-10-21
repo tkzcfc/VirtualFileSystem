@@ -1,6 +1,7 @@
 // vfstool keygen：生成 32 字节随机索引密钥（hex）
 #include "Commands.h"
 #include "vfs/native/NativeFileStream.h"
+#include "vfs/native/NativeUtils.h"
 #include <random>
 
 NS_VFS_BEGIN
@@ -34,8 +35,14 @@ int runKeygen(const KeygenOptions& options, std::ostream& out, std::ostream& err
 		return static_cast<int>(ExitCode::IO);
 	}
 	hex.push_back('\n');
-	if (fs.write(hex.data(), static_cast<unsigned int>(hex.size())) != static_cast<int>(hex.size()))
+	if (fs.write(hex.data(), static_cast<unsigned int>(hex.size())) != static_cast<int>(hex.size()) || fs.close() != 0)
+	{
+		// 不留下不完整的密钥文件
+		fs.close();
+		native::removeFilePath(options.outputFile);
+		err << "error: cannot write " << options.outputFile << "\n";
 		return static_cast<int>(ExitCode::IO);
+	}
 	out << "key written: " << options.outputFile << "\n";
 	return 0;
 }

@@ -3,6 +3,7 @@
 #include "vfs/native/NativeFileStream.h"
 #include "CLI11.hpp"
 #include <iostream>
+#include <new>
 #include <map>
 
 #if defined(_WIN32)
@@ -281,35 +282,49 @@ int main(int argc, char** argv)
 		return code == 0 ? 0 : static_cast<int>(ExitCode::USAGE);
 	}
 
-	if (packCmd->parsed())
+	// 命令内部的大块分配（整文件读入、解压）失败或 std::filesystem 抛出异常时，给出错误信息和退出码，而不是直接 terminate
+	try
 	{
-		pack.filterRules = orderedRules(packCmd, includeOpt, excludeOpt);
-		pack.encryptRules = orderedRules(packCmd, encryptOpt, noEncryptOpt);
-		pack.compressRules = orderedRules(packCmd, compressOpt, noCompressOpt);
-		return runPack(pack, std::cout, std::cerr);
+		if (packCmd->parsed())
+		{
+			pack.filterRules = orderedRules(packCmd, includeOpt, excludeOpt);
+			pack.encryptRules = orderedRules(packCmd, encryptOpt, noEncryptOpt);
+			pack.compressRules = orderedRules(packCmd, compressOpt, noCompressOpt);
+			return runPack(pack, std::cout, std::cerr);
+		}
+		if (unpackCmd->parsed())
+		{
+			unpack.filterRules = orderedRules(unpackCmd, unIncludeOpt, unExcludeOpt);
+			return runUnpack(unpack, std::cout, std::cerr);
+		}
+		if (infoCmd->parsed())
+			return runInfo(info, std::cout, std::cerr);
+		if (listCmd->parsed())
+			return runList(list, std::cout, std::cerr);
+		if (catCmd->parsed())
+		{
+	#if defined(_WIN32)
+			// stdout 切到二进制模式，避免 "\n" 被转换成 "\r\n"
+			_setmode(_fileno(stdout), _O_BINARY);
+	#endif
+			return runCat(cat, std::cout, std::cerr);
+		}
+		if (extractCmd->parsed())
+			return runExtract(extract, std::cout, std::cerr);
+		if (verifyCmd->parsed())
+			return runVerify(verify, std::cout, std::cerr);
+		if (keygenCmd->parsed())
+			return runKeygen(keygen, std::cout, std::cerr);
 	}
-	if (unpackCmd->parsed())
+	catch (const std::bad_alloc&)
 	{
-		unpack.filterRules = orderedRules(unpackCmd, unIncludeOpt, unExcludeOpt);
-		return runUnpack(unpack, std::cout, std::cerr);
+		std::cerr << "vfstool: out of memory\n";
+		return static_cast<int>(ExitCode::IO);
 	}
-	if (infoCmd->parsed())
-		return runInfo(info, std::cout, std::cerr);
-	if (listCmd->parsed())
-		return runList(list, std::cout, std::cerr);
-	if (catCmd->parsed())
+	catch (const std::exception& e)
 	{
-#if defined(_WIN32)
-		// stdout 切到二进制模式，避免 "\n" 被转换成 "\r\n"
-		_setmode(_fileno(stdout), _O_BINARY);
-#endif
-		return runCat(cat, std::cout, std::cerr);
+		std::cerr << "vfstool: " << e.what() << "\n";
+		return static_cast<int>(ExitCode::IO);
 	}
-	if (extractCmd->parsed())
-		return runExtract(extract, std::cout, std::cerr);
-	if (verifyCmd->parsed())
-		return runVerify(verify, std::cout, std::cerr);
-	if (keygenCmd->parsed())
-		return runKeygen(keygen, std::cout, std::cerr);
 	return static_cast<int>(ExitCode::USAGE);
 }
