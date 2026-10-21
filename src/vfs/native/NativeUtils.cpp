@@ -317,8 +317,33 @@ static Error errorForPath(DWORD code, std::string_view utf8Path, bool mustExist 
 	return errorFromWin32(code);
 }
 
+Error checkParentDir(std::string_view utf8Path, size_t rootLen)
+{
+	// 实测（Windows 11 / NTFS）：查询“中间目录不存在”的路径（ERROR_PATH_NOT_FOUND）在系统内部是串行的，
+	// 8 线程反而比单线程慢；而查询“存在的目录下不存在的名字”可以线性扩展。
+	// 叠加挂载里上层（本机覆盖目录）大多只镜像了少量子目录，未命中几乎都是前一种。
+	// 所以先确认父目录存在（多一次可扩展的查询），父目录不存在时自顶向下分类，不去碰叶子路径
+	if (rootLen == 0 || rootLen >= utf8Path.size())
+		return Error::OK;
+	std::string_view parent = parentOf(utf8Path);
+	if (parent.size() <= rootLen)
+		return Error::OK;   // 父目录就是后端根目录
+	DWORD attr = ::GetFileAttributesW(toWidePath(parent).c_str());
+	if (attr == INVALID_FILE_ATTRIBUTES)
+	{
+		DWORD c = ::GetLastError();
+		if (c == ERROR_FILE_NOT_FOUND || c == ERROR_PATH_NOT_FOUND)
+			return classifyMissing(utf8Path, rootLen);
+		return Error::OK;   // 其他错误交给实际操作报告
+	}
+	return (attr & FILE_ATTRIBUTE_DIRECTORY) ? Error::OK : Error::NOT_DIR;
+}
+
 Error statPath(std::string_view utf8Path, Stat& out, size_t rootLen)
 {
+	Error pe = checkParentDir(utf8Path, rootLen);
+	if (pe != Error::OK)
+		return pe;
 	std::wstring wpath = toWidePath(utf8Path);
 	WIN32_FILE_ATTRIBUTE_DATA data;
 	DWORD code = retryTransient([&]() -> unsigned long
@@ -785,6 +810,11 @@ Error renamePathOnce(std::string_view from, std::string_view to)
 } // namespace
 
 #else
+
+Error checkParentDir(std::string_view /*utf8Path*/, size_t /*rootLen*/)
+{
+	return Error::OK;
+}
 
 Error statPath(std::string_view utf8Path, Stat& out, size_t /*rootLen*/)
 {

@@ -48,6 +48,14 @@ Error errorFromErrno(int e);
 Error statPath(std::string_view utf8Path, Stat& out, size_t rootLen = 0);
 
 /**
+ * 只读查询前的父目录预检（Windows；其他平台总是返回 OK）。
+ * Windows 上查询“中间目录不存在”的路径在系统内部串行，多线程未命中时会成为瓶颈，
+ * 先确认父目录存在可以避开它。父目录不存在 → NOT_FOUND，父路径是文件 → NOT_DIR，否则 OK
+ * @param rootLen utf8Path 的前 rootLen 个字符是已知存在的后端根目录；为 0 时不做预检
+ */
+Error checkParentDir(std::string_view utf8Path, size_t rootLen);
+
+/**
  * 列目录：对每个子项调用 cb(name, type)，跳过 "." ".." 和特殊文件（设备、管道等）；cb 返回 false 停止。
  * 符号链接按它指向的类型报告。Windows 上直接用 FindFirstFileExW（支持长路径，不依赖各家 std::filesystem 的实现）。
  * @return OK / NOT_FOUND / NOT_DIR / 其他错误

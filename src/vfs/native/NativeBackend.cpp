@@ -210,6 +210,8 @@ std::unique_ptr<IFileStream> NativeBackend::open(std::string_view rel, IFileStre
 		if (e == Error::OK && last)
 			e = mode == IFileStream::Mode::READ ? Error::NOT_FOUND : Error::EXISTS;
 	}
+	if (e == Error::OK && mode == IFileStream::Mode::READ)
+		e = native::checkParentDir(full, m_root.size());   // Windows：避开“中间目录不存在”的串行查询
 	if (e != Error::OK)
 	{
 		setError(err, e);
