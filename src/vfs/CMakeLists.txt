@@ -7,6 +7,10 @@ file(GLOB_RECURSE VFS_SOURCES CONFIGURE_DEPENDS
 
 add_library(${lib_name} STATIC ${VFS_SOURCES})
 add_library(vfs::vfs ALIAS ${lib_name})
+# 32 位 Linux 上也使用 64 位文件偏移（NativeFileStream 直接使用 lseek / ftruncate）
+if(UNIX)
+    target_compile_definitions(${lib_name} PRIVATE _FILE_OFFSET_BITS=64)
+endif()
 
 # 使用方式：#include "vfs/VirtualFileSystem.h"
 target_include_directories(${lib_name} PUBLIC ${CMAKE_CURRENT_LIST_DIR}/..)

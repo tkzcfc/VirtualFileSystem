@@ -13,6 +13,7 @@ add_executable(vfs_tests
     crypto/CryptoTests.cpp
     tool/ToolTests.cpp
     concurrency/ConcurrencyTests.cpp
+    deadlock/DeadlockTests.cpp
     matrix/Envs.h
     matrix/MatrixTests.cpp
     stress/StressTests.cpp
@@ -30,7 +31,7 @@ find_package(Threads REQUIRED)
 target_link_libraries(vfs_tests PRIVATE Threads::Threads)
 
 # 每个 TEST_SUITE 注册成一个 ctest 用例，失败时容易定位
-foreach(suite path union native memory stream archive crypto tool concurrency matrix stress model extreme)
+foreach(suite path union native memory stream archive crypto tool concurrency deadlock matrix stress model extreme)
     add_test(NAME vfs.${suite} COMMAND vfs_tests --test-suite=${suite} --no-version)
 endforeach()
 

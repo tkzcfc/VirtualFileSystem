@@ -238,6 +238,9 @@ private:
 	// copy-up：把可见层 src 中的文件完整复制到写入层 dst，可能时写临时文件再 rename
 	static Error copyUp(const Layer& src, const Layer& dst);
 
+	// 写入层 mount 中相对路径 rel 对应的 copy-up 分段锁
+	std::recursive_mutex& copyUpLock(const MountEntry& mount, std::string_view rel) const;
+
 	// openFileStream 的一次尝试；与 FailIfBusy 卸载竞争时由 openFileStream 重试
 	std::unique_ptr<IFileStream> openOnce(std::string_view path, IFileStream::Mode mode, Error* err) const;
 
@@ -263,7 +266,11 @@ private:
 	struct SnapshotShard;
 
 	std::mutex m_modifyMutex;                      // 串行化挂载表的修改；m_table 只在它保护下读写
-	mutable std::mutex m_copyUpMutex;              // 串行化 copy-up，避免并发追加同一文件时互相覆盖
+	// copy-up 与“写入不在可见层”的打开按路径分段加锁（同一路径总是落在同一把锁上）：
+	// 并发追加同一只读文件时只复制一次，复制与其他线程在写入层创建同名文件不会互相覆盖；
+	// 不同路径的 copy-up 互不等待。用递归锁：后端或日志回调在锁内重入 VFS 打开同一路径时不会自锁
+	static constexpr size_t COPY_UP_STRIPES = 64;
+	mutable std::recursive_mutex m_copyUpLocks[COPY_UP_STRIPES];
 	std::shared_ptr<const MountTable> m_table;     // 当前快照（发布用的主引用）
 	std::unique_ptr<SnapshotShard[]> m_shards;     // 读取用的分片引用
 	std::atomic<MountId> m_nextId;                 // 下一个挂载 ID

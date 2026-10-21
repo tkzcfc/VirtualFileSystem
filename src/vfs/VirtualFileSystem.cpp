@@ -531,39 +531,28 @@ Error VirtualFileSystem::copyUp(const Layer& src, const Layer& dst)
 	const bool atomic = (dst.mount->backend->capabilities() & BackendCaps::Rename) != 0;
 	std::string target(dst.rel);
 	std::string tmp = atomic ? uniqueTempName(target, "vfs-copyup") : target;
-	auto out = dst.mount->backend->open(tmp, IFileStream::Mode::WRITE, &e);
-	if (!out)
-		return report(e);
-
-	std::vector<uint8_t> buf(COPY_BUFFER_SIZE);
-	while (true)
+	std::unique_ptr<IFileStream> out;
+	try
 	{
-		int n = in->read(buf.data(), static_cast<unsigned int>(buf.size()));
-		if (n < 0)
-		{
+		std::vector<uint8_t> buf(COPY_BUFFER_SIZE);   // 在创建临时文件之前分配：分配失败不会留下临时文件
+		out = dst.mount->backend->open(tmp, IFileStream::Mode::WRITE, &e);
+		if (!out)
+			return report(e);
+		e = copyStream(*in, *out);
+		if (e == Error::OK && out->close() != 0)
 			e = Error::IO_ERROR;
-			break;
-		}
-		if (n == 0)
-			break;
-		int done = 0;
-		while (done < n)
-		{
-			int w = out->write(buf.data() + done, static_cast<unsigned int>(n - done));
-			if (w <= 0)
-			{
-				e = Error::IO_ERROR;
-				break;
-			}
-			done += w;
-		}
-		if (e != Error::OK)
-			break;
 	}
+	catch (const std::bad_alloc&)
+	{
+		// 错误通过返回值报告（Error.h），不让异常穿过 VFS 接口
+		e = Error::IO_ERROR;
+	}
+	const bool created = out != nullptr;
 	out.reset();
 	if (e != Error::OK)
 	{
-		dst.mount->backend->removeFile(tmp);
+		if (created)
+			dst.mount->backend->removeFile(tmp);
 		return report(e);
 	}
 	if (atomic)
@@ -849,59 +838,82 @@ std::unique_ptr<IFileStream> VirtualFileSystem::openOnce(std::string_view rawPat
 	{
 		// 可见项所在的层可写，就写在原处
 		target = visible;
-	}
-	else
-	{
-		// 否则写入覆盖该路径的最高优先级可写挂载
-		target = chooseWriteTarget(layers);
-		if (target < 0)
-			return failStream(err, Error::READ_ONLY);
-		// 写入层比持有可见项的只读层低，写了也读不到，拒绝
-		if (found && target > visible)
-			return failStream(err, Error::READ_ONLY);
-		if (!found)
-		{
-			// 父目录必须在合并视图中存在（与 open(O_CREAT) 一致，不会凭空创建父目录）
-			std::string parent(Path::parent(path));
-			std::vector<Layer> parentLayers;
-			int parentVisible = -1;
-			Stat ps;
-			Error pe = resolve(*table, parent, parentLayers, parentVisible, ps);
-			if (pe != Error::OK)
-				return failStream(err, pe);
-			if (ps.type != FileType::DIR)
-				return failStream(err, Error::NOT_DIR);
-		}
-		const Layer& dst = layers[target];
-		// 路径正好是写入层的挂载点：后端根目录是目录
-		if (dst.rel.empty())
-			return failStream(err, Error::IS_DIR);
-		e = ensureParents(dst, Path::parentRelative(dst.rel));
-		if (e != Error::OK)
+		const Layer& layer = layers[target];
+		auto stream = layer.mount->backend->open(layer.rel, mode, &e);
+		if (!stream)
 			return failStream(err, e);
-		// APPEND/OVERLAPPED 修改只读层中的文件时，先把下层内容完整复制到写入层
-		if (found && (mode == IFileStream::Mode::APPEND || mode == IFileStream::Mode::OVERLAPPED))
+		bump();
+		setError(err, Error::OK);
+		return track(*layer.mount, std::move(stream));
+	}
+
+	// 否则写入覆盖该路径的最高优先级可写挂载
+	target = chooseWriteTarget(layers);
+	if (target < 0)
+		return failStream(err, Error::READ_ONLY);
+	// 写入层比持有可见项的只读层低，写了也读不到，拒绝
+	if (found && target > visible)
+		return failStream(err, Error::READ_ONLY);
+	if (!found)
+	{
+		// 父目录必须在合并视图中存在（与 open(O_CREAT) 一致，不会凭空创建父目录）
+		std::string parent(Path::parent(path));
+		std::vector<Layer> parentLayers;
+		int parentVisible = -1;
+		Stat ps;
+		Error pe = resolve(*table, parent, parentLayers, parentVisible, ps);
+		if (pe != Error::OK)
+			return failStream(err, pe);
+		if (ps.type != FileType::DIR)
+			return failStream(err, Error::NOT_DIR);
+	}
+	const Layer& dst = layers[target];
+	if (dst.rel.empty())
+	{
+		// 路径正好是写入层的挂载点：目录挂载的根是目录；单文件挂载的根就是那个文件，照常打开
+		Stat rs;
+		if (dst.mount->backend->stat("", rs) != Error::OK || rs.type == FileType::DIR)
+			return failStream(err, Error::IS_DIR);
+	}
+
+	// 写入层里的 copy-up、创建与打开在同一把（按路径分段的）锁内完成，直到流打开为止：
+	// - 多个线程同时追加同一个只读层文件时，只有第一个复制，其余线程在锁内看到写入层已有副本后直接打开它；
+	// - copy-up 的 rename 不会覆盖另一个线程刚在写入层创建（WRITE）的同名文件；
+	// - 复制完成之后、打开之前，副本不会被另一次 copy-up 替换
+	std::lock_guard<std::recursive_mutex> lock(copyUpLock(*dst.mount, dst.rel));
+	e = ensureParents(dst, Path::parentRelative(dst.rel));
+	if (e != Error::OK)
+	{
+		bump();   // 可能已经创建了一部分父目录
+		return failStream(err, e);
+	}
+	// APPEND/OVERLAPPED 修改只读层中的文件时，先把下层内容完整复制到写入层
+	if (found && (mode == IFileStream::Mode::APPEND || mode == IFileStream::Mode::OVERLAPPED))
+	{
+		Stat copied;
+		if (dst.mount->backend->stat(dst.rel, copied) != Error::OK || copied.type != FileType::FILE)
 		{
-			// 串行化 copy-up：多个线程同时追加同一个只读层文件时，只有第一个复制，
-			// 其余线程在锁内看到写入层已有副本后直接打开它，不会互相覆盖对方的追加内容
-			std::lock_guard<std::mutex> lock(m_copyUpMutex);
-			Stat copied;
-			if (dst.mount->backend->stat(dst.rel, copied) != Error::OK || copied.type != FileType::FILE)
+			e = copyUp(layers[visible], dst);
+			if (e != Error::OK)
 			{
-				e = copyUp(layers[visible], dst);
-				if (e != Error::OK)
-					return failStream(err, e);
+				bump();
+				return failStream(err, e);
 			}
 		}
 	}
-
-	const Layer& layer = layers[target];
-	auto stream = layer.mount->backend->open(layer.rel, mode, &e);
+	auto stream = dst.mount->backend->open(dst.rel, mode, &e);
+	// 即使打开失败，父目录或 copy-up 的副本也可能已经出现在写入层里：命名空间变了
+	bump();
 	if (!stream)
 		return failStream(err, e);
-	bump();
 	setError(err, Error::OK);
-	return track(*layer.mount, std::move(stream));
+	return track(*dst.mount, std::move(stream));
+}
+
+std::recursive_mutex& VirtualFileSystem::copyUpLock(const MountEntry& mount, std::string_view rel) const
+{
+	const size_t h = std::hash<std::string_view>()(rel) ^ (static_cast<size_t>(mount.id) * 0x9E3779B97F4A7C15ull);
+	return m_copyUpLocks[h % COPY_UP_STRIPES];
 }
 
 // ================================================================ 修改
@@ -1250,6 +1262,28 @@ Error VirtualFileSystem::rename(std::string_view rawFrom, std::string_view rawTo
 		}
 	}
 
+	if (toFound && toStat.type == FileType::DIR)
+	{
+		// 目录覆盖已有目录：写入层里的目标是否为空由后端原子地判断（POSIX rename）；
+		// 这里检查其他层：其他层里同名目录下有内容时，改名“成功”后那些内容会出现在移过来的目录里，
+		// 合并视图中的目标并不是空目录，按 rename(2) 返回 NOT_EMPTY
+		for (size_t i = 0; i < toLayers.size(); ++i)
+		{
+			if (static_cast<int>(i) == target)
+				continue;
+			bool nonEmpty = false;
+			Error le = toLayers[i].mount->backend->list(toLayers[i].rel, [&nonEmpty](const DirEntry&)
+			{
+				nonEmpty = true;
+				return false;
+			});
+			if (le != Error::OK && le != Error::NOT_FOUND && le != Error::NOT_DIR && le != Error::INVALID_PATH)
+				return report(le);
+			if (le == Error::OK && nonEmpty)
+				return report(Error::NOT_EMPTY);
+		}
+	}
+
 	const Layer& dst = toLayers[target];
 	// 只有源和目标落在同一个挂载上才能原子 rename，否则 EXDEV
 	if (dst.mount->id != src.mount->id)
@@ -1273,7 +1307,11 @@ Error VirtualFileSystem::moveFile(std::string_view from, std::string_view to) co
 	if (e != Error::CROSS_DEVICE && e != Error::UNSUPPORTED)
 		return report(e);
 	// 跨挂载：退化为复制 + 删除，只支持文件，不保证原子性
-	if (!isFile(from))
+	Stat st;
+	Error se = stat(from, st);
+	if (se != Error::OK)
+		return report(se);   // 源在 rename 之后被并发删除：报告 NOT_FOUND，而不是 CROSS_DEVICE
+	if (st.type != FileType::FILE)
 		return report(e);
 	e = copyFile(from, to);
 	if (e != Error::OK)

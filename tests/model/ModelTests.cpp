@@ -219,7 +219,7 @@ public:
 		if (from == to)
 			return Error::OK;
 		if (from.empty() || to.empty())
-			return Error::BUSY;
+			return Error::BUSY;   // 挂载点（VFS 层判断）
 		if (fl == 1)
 			return Error::READ_ONLY;
 		const bool fromDir = w.at(from).dir;
@@ -246,6 +246,11 @@ public:
 			if (pe != Error::OK)
 				return pe;
 		}
+		// 目标目录在只读层 B 里有内容：合并视图中目标不是空目录
+		if (toFound && fromDir)
+			for (const auto& kv : b)
+				if (isUnder(kv.first, to))
+					return Error::NOT_EMPTY;
 		ensureParents(to);
 		// 后端（POSIX）rename：只看 W 中的目标
 		if (w.count(to))

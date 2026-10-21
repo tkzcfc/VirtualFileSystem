@@ -143,9 +143,39 @@ Error errorFromWin32(unsigned long code);
 bool isTransientWin32(unsigned long code);
 
 /**
- * 对瞬时错误做有限次重试（总等待约 60ms）。fn 返回 Win32 错误码，0 表示成功。
+ * 当前线程休眠 ms 毫秒（Sleep 的薄包装，头文件里不包含 windows.h）。
  */
-unsigned long retryTransient(const std::function<unsigned long()>& fn);
+void sleepMs(unsigned long ms);
+
+/**
+ * 对瞬时错误做有限次重试。fn 返回 Win32 错误码，0 表示成功。
+ * 第一次不等待；之后 1、2、4、8、16、32ms，总共最多约 63ms。真正的权限错误（ACCESS_DENIED）也只多花这么多时间。
+ * SHARING_VIOLATION / LOCK_VIOLATION 一定是其他句柄造成的（杀毒软件、索引服务、本进程其他线程的并发操作），
+ * 不会是真正的权限问题，额外再等 3 次 64ms，总共约 255ms。
+ * 写成模板：成功路径（第一次就成功）只是一次内联调用，没有 std::function 的类型擦除和可能的堆分配。
+ */
+template <typename Fn>
+unsigned long retryTransient(Fn&& fn)
+{
+	static constexpr unsigned long delays[] = {0, 1, 2, 4, 8, 16, 32, 64, 64, 64};
+	constexpr size_t shortCount = 7;
+	constexpr unsigned long sharingViolation = 32;   // ERROR_SHARING_VIOLATION
+	constexpr unsigned long lockViolation = 33;      // ERROR_LOCK_VIOLATION
+	unsigned long code = fn();
+	if (code == 0 || !isTransientWin32(code))
+		return code;
+	for (size_t i = 1; i < sizeof(delays) / sizeof(delays[0]); ++i)
+	{
+		const bool sharing = code == sharingViolation || code == lockViolation;
+		if (i >= shortCount && !sharing)
+			break;
+		sleepMs(delays[i]);
+		code = fn();
+		if (!isTransientWin32(code))
+			break;
+	}
+	return code;
+}
 #endif
 
 } // namespace native

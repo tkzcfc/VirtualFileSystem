@@ -82,9 +82,9 @@ public:
 	virtual Error removeFile(std::string_view /*rel*/) { return Error::READ_ONLY; }
 
 	/**
-	 * 后端内原子改名。
+	 * 后端内原子改名。默认不支持（与 BackendCaps 不含 Rename 一致，返回 UNSUPPORTED）。
 	 */
-	virtual Error rename(std::string_view /*from*/, std::string_view /*to*/) { return Error::READ_ONLY; }
+	virtual Error rename(std::string_view /*from*/, std::string_view /*to*/) { return Error::UNSUPPORTED; }
 
 	/**
 	 * 返回本机路径（只有本机后端返回非空串），用于必须使用真实路径的模块。

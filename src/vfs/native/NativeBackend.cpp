@@ -132,9 +132,13 @@ Error NativeBackend::matchCase(std::string_view rel, bool& lastMismatch) const
 		if (end == std::string_view::npos)
 			end = rel.size();
 		std::string_view seg = rel.substr(start, end - start);
-		// 不存在或出错时不在这里判断，交给后续的实际操作报告
-		if (native::realName(dir, seg, actual) != Error::OK)
+		// 不存在时不在这里判断，交给后续的实际操作报告；其他错误（I/O、权限）原样返回：
+		// 确认不了大小写就不能当作“大小写一致”放行，否则 exactCase 会在出错时失效
+		Error re = native::realName(dir, seg, actual);
+		if (re == Error::NOT_FOUND || re == Error::NOT_DIR)
 			return Error::OK;
+		if (re != Error::OK)
+			return re;
 		if (actual != seg)
 		{
 			if (end == rel.size())
@@ -172,7 +176,10 @@ Error NativeBackend::stat(std::string_view rel, Stat& out) const
 		{
 			// 按字节匹配：任何一级只差大小写都视为不存在
 			bool last = false;
-			if (matchCase(rel, last) != Error::OK || last)
+			Error ce = matchCase(rel, last);
+			if (ce != Error::OK)
+				return ce;
+			if (last)
 				return Error::NOT_FOUND;
 		}
 		else if (m_options.strictCase)
@@ -225,7 +232,10 @@ Error NativeBackend::list(std::string_view relDir, const std::function<bool(cons
 	if (m_options.exactCase && !relDir.empty())
 	{
 		bool last = false;
-		if (matchCase(relDir, last) != Error::OK || last)
+		Error ce = matchCase(relDir, last);
+		if (ce != Error::OK)
+			return ce;
+		if (last)
 			return Error::NOT_FOUND;
 	}
 
@@ -272,7 +282,10 @@ Error NativeBackend::removeDir(std::string_view rel)
 	if (m_options.exactCase)
 	{
 		bool last = false;
-		if (matchCase(rel, last) != Error::OK || last)
+		Error ce = matchCase(rel, last);
+		if (ce != Error::OK)
+			return ce;   // 确认不了大小写（I/O、权限错误）时原样返回，不当作“不存在”
+		if (last)
 			return Error::NOT_FOUND;
 	}
 	Stat st;
@@ -295,7 +308,10 @@ Error NativeBackend::removeFile(std::string_view rel)
 	if (m_options.exactCase)
 	{
 		bool last = false;
-		if (matchCase(rel, last) != Error::OK || last)
+		Error ce = matchCase(rel, last);
+		if (ce != Error::OK)
+			return ce;   // 确认不了大小写（I/O、权限错误）时原样返回，不当作“不存在”
+		if (last)
 			return Error::NOT_FOUND;
 	}
 	Stat st;
@@ -311,8 +327,9 @@ Error NativeBackend::rename(std::string_view from, std::string_view to)
 {
 	if (m_options.readOnly)
 		return Error::READ_ONLY;
+	// 后端根目录不能作为改名的源或目标（与 MemoryBackend 一致，见 mount-rules.md §12）
 	if (from.empty() || to.empty())
-		return Error::BUSY;
+		return Error::INVALID_PATH;
 	std::string fullFrom, fullTo;
 	Error err = toNative(from, fullFrom);
 	if (err != Error::OK)
@@ -323,7 +340,10 @@ Error NativeBackend::rename(std::string_view from, std::string_view to)
 	if (m_options.exactCase)
 	{
 		bool last = false;
-		if (matchCase(from, last) != Error::OK || last)
+		err = matchCase(from, last);
+		if (err != Error::OK)
+			return err;
+		if (last)
 			return Error::NOT_FOUND;
 		err = matchCase(to, last);
 		if (err != Error::OK)

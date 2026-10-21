@@ -1,5 +1,6 @@
 #include "NativeUtils.h"
 #include <algorithm>
+#include <atomic>
 
 #if defined(_WIN32)
 #    ifndef WIN32_LEAN_AND_MEAN
@@ -131,12 +132,13 @@ std::wstring toWidePath(std::string_view utf8)
 	std::wstring wide;
 	if (!utf8.empty())
 	{
-		int len = ::MultiByteToWideChar(CP_UTF8, 0, utf8.data(), static_cast<int>(utf8.size()), nullptr, 0);
-		if (len > 0)
-		{
-			wide.resize(static_cast<size_t>(len));
-			::MultiByteToWideChar(CP_UTF8, 0, utf8.data(), static_cast<int>(utf8.size()), wide.data(), len);
-		}
+		// UTF-16 码元数不会超过 UTF-8 字节数：一次转换，不先求长度（热路径上省一次扫描）。
+		// MB_ERR_INVALID_CHARS：非法 UTF-8 得到空路径（随后的系统调用失败），而不是被替换成 U+FFFD，
+		// 否则两个不同的字节串可能落到同一个本机文件上
+		wide.resize(utf8.size());
+		int len = ::MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, utf8.data(), static_cast<int>(utf8.size()),
+										wide.data(), static_cast<int>(wide.size()));
+		wide.resize(len > 0 ? static_cast<size_t>(len) : 0);
 	}
 	for (auto& ch : wide)
 	{
@@ -217,27 +219,12 @@ bool isTransientWin32(unsigned long code)
 		   code == ERROR_DELETE_PENDING || code == ERROR_INVALID_NAME;
 }
 
-unsigned long retryTransient(const std::function<unsigned long()>& fn)
+void sleepMs(unsigned long ms)
 {
-	// 第一次不等待；之后 1、2、4、8、16、32ms，总共最多约 63ms。真正的权限错误（ACCESS_DENIED）也只多花这么多时间。
-	// SHARING_VIOLATION / LOCK_VIOLATION 一定是其他句柄造成的（杀毒软件、索引服务、本进程其他线程的并发操作），
-	// 不会是真正的权限问题，额外再等 3 次 64ms，总共约 255ms
-	static const DWORD delays[] = {0, 1, 2, 4, 8, 16, 32, 64, 64, 64};
-	const size_t shortCount = 7;
-	unsigned long code = ERROR_SUCCESS;
-	for (size_t i = 0; i < sizeof(delays) / sizeof(delays[0]); ++i)
-	{
-		const bool sharing = code == ERROR_SHARING_VIOLATION || code == ERROR_LOCK_VIOLATION;
-		if (i >= shortCount && !sharing)
-			break;
-		if (delays[i])
-			::Sleep(delays[i]);
-		code = fn();
-		if (!isTransientWin32(code))
-			break;
-	}
-	return code;
+	::Sleep(static_cast<DWORD>(ms));
 }
+
+static_assert(ERROR_SHARING_VIOLATION == 32 && ERROR_LOCK_VIOLATION == 33, "retryTransient 里写死的错误码");
 
 static int64_t fileTimeToUnix(const FILETIME& ft)
 {
@@ -353,6 +340,27 @@ Error statPath(std::string_view utf8Path, Stat& out, size_t rootLen)
 namespace
 {
 
+/**
+ * FindFirstFileExW 句柄的 RAII 包装：回调抛出异常、提前返回时也会 FindClose
+ */
+class FindHandle
+{
+public:
+	explicit FindHandle(HANDLE h) : m_h(h) {}
+	FindHandle(const FindHandle&) = delete;
+	FindHandle& operator=(const FindHandle&) = delete;
+	~FindHandle()
+	{
+		if (m_h != INVALID_HANDLE_VALUE)
+			::FindClose(m_h);
+	}
+	HANDLE get() const { return m_h; }
+	bool valid() const { return m_h != INVALID_HANDLE_VALUE; }
+
+private:
+	HANDLE m_h;
+};
+
 // 这些常量和结构在较老的 SDK / MinGW 头文件里可能没有，按文档的数值和布局自己定义
 constexpr int kFileDispositionInfoEx = 21;           // FILE_INFO_BY_HANDLE_CLASS::FileDispositionInfoEx
 constexpr int kFileRenameInfoEx = 22;                // FILE_INFO_BY_HANDLE_CLASS::FileRenameInfoEx
@@ -425,27 +433,31 @@ DWORD posixRename(const std::wstring& wfrom, const std::wstring& wto)
 	return code;
 }
 
+// 目录是否为空。枚举中途出错（权限、网络盘断开）时 code 为错误码、返回 false：不能把没枚举完的目录当成空目录
 bool dirIsEmpty(const std::wstring& wdir, DWORD& code)
 {
 	WIN32_FIND_DATAW fd;
-	HANDLE h = ::FindFirstFileExW((wdir + L"\\*").c_str(), FindExInfoBasic, &fd, FindExSearchNameMatch, nullptr, 0);
-	if (h == INVALID_HANDLE_VALUE)
+	FindHandle h(::FindFirstFileExW((wdir + L"\\*").c_str(), FindExInfoBasic, &fd, FindExSearchNameMatch, nullptr, 0));
+	if (!h.valid())
 	{
 		code = ::GetLastError();
 		return false;
 	}
-	bool empty = true;
 	do
 	{
 		if (std::wcscmp(fd.cFileName, L".") != 0 && std::wcscmp(fd.cFileName, L"..") != 0)
 		{
-			empty = false;
-			break;
+			code = ERROR_SUCCESS;
+			return false;
 		}
-	} while (::FindNextFileW(h, &fd));
-	::FindClose(h);
-	code = ERROR_SUCCESS;
-	return empty;
+	} while (::FindNextFileW(h.get(), &fd));
+	code = ::GetLastError();
+	if (code == ERROR_NO_MORE_FILES)
+	{
+		code = ERROR_SUCCESS;
+		return true;
+	}
+	return false;
 }
 
 } // namespace
@@ -456,10 +468,11 @@ Error realName(std::string_view dir, std::string_view name, std::string& actual)
 	full.push_back('/');
 	full.append(name);
 	WIN32_FIND_DATAW fd;
-	HANDLE h = ::FindFirstFileExW(toWidePath(full).c_str(), FindExInfoBasic, &fd, FindExSearchNameMatch, nullptr, 0);
-	if (h == INVALID_HANDLE_VALUE)
-		return errorForPath(::GetLastError(), full, true);
-	::FindClose(h);
+	{
+		FindHandle h(::FindFirstFileExW(toWidePath(full).c_str(), FindExInfoBasic, &fd, FindExSearchNameMatch, nullptr, 0));
+		if (!h.valid())
+			return errorForPath(::GetLastError(), full, true);
+	}
 	// cFileName 是长文件名；传入 8.3 短名时这里返回长名，按字节比较时自然判为不一致
 	int len = ::WideCharToMultiByte(CP_UTF8, 0, fd.cFileName, -1, nullptr, 0, nullptr, nullptr);
 	actual.assign(len > 0 ? static_cast<size_t>(len - 1) : 0, '\0');
@@ -470,27 +483,30 @@ Error realName(std::string_view dir, std::string_view name, std::string& actual)
 
 Error listDir(std::string_view path, const std::function<bool(const std::string& name, FileType type)>& cb)
 {
-	Stat st;
-	Error err = statPath(path, st);
-	if (err != Error::OK)
-		return err;
-	if (st.type != FileType::DIR)
-		return Error::NOT_DIR;
+	// 不预先 stat：目录存在时（常见情况）省掉一次 GetFileAttributesExW，只在 FindFirstFileExW 失败时再判断原因
 	std::wstring pattern = toWidePath(path);
 	if (!pattern.empty() && pattern.back() != L'\\')
 		pattern.push_back(L'\\');
 	pattern.push_back(L'*');
 	WIN32_FIND_DATAW fd;
-	HANDLE h = INVALID_HANDLE_VALUE;
+	HANDLE raw = INVALID_HANDLE_VALUE;
 	DWORD code = retryTransient([&]() -> unsigned long
 	{
-		h = ::FindFirstFileExW(pattern.c_str(), FindExInfoBasic, &fd, FindExSearchNameMatch, nullptr,
-							   FIND_FIRST_EX_LARGE_FETCH);
-		return h != INVALID_HANDLE_VALUE ? ERROR_SUCCESS : ::GetLastError();
+		raw = ::FindFirstFileExW(pattern.c_str(), FindExInfoBasic, &fd, FindExSearchNameMatch, nullptr,
+								 FIND_FIRST_EX_LARGE_FETCH);
+		return raw != INVALID_HANDLE_VALUE ? ERROR_SUCCESS : ::GetLastError();
 	});
-	if (h == INVALID_HANDLE_VALUE)
+	FindHandle h(raw);
+	if (!h.valid())
 	{
-		// 驱动器根目录没有 "." ".."，空的时候返回 FILE_NOT_FOUND
+		// 失败的原因可能是：不存在、是文件（ERROR_DIRECTORY / PATH_NOT_FOUND）、空的驱动器根目录（FILE_NOT_FOUND，
+		// 没有 "." ".."）。用 stat 区分，stat 成功说明对象还在
+		Stat st;
+		Error err = statPath(path, st);
+		if (err != Error::OK)
+			return err;
+		if (st.type != FileType::DIR)
+			return Error::NOT_DIR;
 		if (code == ERROR_FILE_NOT_FOUND)
 			return Error::OK;
 		return errorForPath(code, path, true);
@@ -500,15 +516,21 @@ Error listDir(std::string_view path, const std::function<bool(const std::string&
 		const wchar_t* n = fd.cFileName;
 		if ((n[0] == L'.' && n[1] == 0) || (n[0] == L'.' && n[1] == L'.' && n[2] == 0))
 			continue;
+		// 设备、管道等特殊对象不暴露给 VFS（与 POSIX 一致）
+		if (fd.dwFileAttributes & FILE_ATTRIBUTE_DEVICE)
+			continue;
 		const FileType type = (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) ? FileType::DIR : FileType::FILE;
 		int len = ::WideCharToMultiByte(CP_UTF8, 0, n, -1, nullptr, 0, nullptr, nullptr);
 		std::string name(len > 0 ? static_cast<size_t>(len - 1) : 0, '\0');
 		if (len > 1)
 			::WideCharToMultiByte(CP_UTF8, 0, n, -1, name.data(), len, nullptr, nullptr);
 		if (!cb(name, type))
-			break;
-	} while (::FindNextFileW(h, &fd));
-	::FindClose(h);
+			return Error::OK;
+	} while (::FindNextFileW(h.get(), &fd));
+	// FindNextFileW 失败不一定是枚举结束：中途的权限 / I/O 错误要报告，不能返回一份不完整的目录
+	code = ::GetLastError();
+	if (code != ERROR_NO_MORE_FILES)
+		return errorForPath(code, path, true);
 	return Error::OK;
 }
 
@@ -581,6 +603,32 @@ Error renamePath(std::string_view from, std::string_view to)
 
 namespace
 {
+// 同一目录下进程内、进程间都唯一的临时名：base.<tag>-<pid>-<n>.tmp。
+// 固定后缀在并发改名同一路径、或上次崩溃留下了同名文件时会冲突
+std::wstring uniqueSiblingName(const std::wstring& base, const wchar_t* tag)
+{
+	static std::atomic<unsigned long long> s_counter{0};
+	std::wstring name = base;
+	name += L'.';
+	name += tag;
+	name += L'-';
+	name += std::to_wstring(::GetCurrentProcessId());
+	name += L'-';
+	name += std::to_wstring(s_counter.fetch_add(1, std::memory_order_relaxed));
+	name += L".tmp";
+	return name;
+}
+
+// UTF-16 路径转回 UTF-8（只用于把内部生成的临时路径交给接受 UTF-8 的函数）
+std::string fromWidePath(const std::wstring& w)
+{
+	int len = ::WideCharToMultiByte(CP_UTF8, 0, w.c_str(), static_cast<int>(w.size()), nullptr, 0, nullptr, nullptr);
+	std::string s(len > 0 ? static_cast<size_t>(len) : 0, '\0');
+	if (len > 0)
+		::WideCharToMultiByte(CP_UTF8, 0, w.c_str(), static_cast<int>(w.size()), s.data(), len, nullptr, nullptr);
+	return s;
+}
+
 Error renamePathOnce(std::string_view from, std::string_view to)
 {
 	const std::wstring wfrom = toWidePath(from);
@@ -595,6 +643,7 @@ Error renamePathOnce(std::string_view from, std::string_view to)
 	if (fa == INVALID_FILE_ATTRIBUTES)
 		return errorForPath(faCode, from, true);
 	const bool fromDir = (fa & FILE_ATTRIBUTE_DIRECTORY) != 0;
+	std::wstring removedTarget;   // 目录覆盖空目录时，被临时改名让出位置的目标目录
 
 	// MoveFileExW 不能用目录替换目录，也不能用文件替换目录。按 POSIX rename(2) 的语义预先处理。
 	// 只差大小写的同一个名字（Windows 上是同一个文件）不做这些检查，单独处理
@@ -611,7 +660,7 @@ Error renamePathOnce(std::string_view from, std::string_view to)
 		// 只改大小写：某些实现（例如 Wine）把它当成改名到自身而什么也不做，借一个临时名字分两步完成
 		if (wfrom == wto)
 			return Error::OK;
-		const std::wstring wtmp = wfrom + L".vfs-case-tmp";
+		const std::wstring wtmp = uniqueSiblingName(wfrom, L"vfs-case");
 		DWORD code = retryTransient([&]() -> unsigned long
 		{
 			return ::MoveFileExW(wfrom.c_str(), wtmp.c_str(), 0) ? ERROR_SUCCESS : ::GetLastError();
@@ -624,8 +673,12 @@ Error renamePathOnce(std::string_view from, std::string_view to)
 		});
 		if (code != ERROR_SUCCESS)
 		{
-			::MoveFileExW(wtmp.c_str(), wfrom.c_str(), 0);   // 尽力恢复原名
-			return errorFromWin32(code);
+			// 改回原名，同样对瞬时错误重试；恢复也失败时文件留在临时名下，返回 IO_ERROR 让调用方知道状态不一致
+			DWORD restore = retryTransient([&]() -> unsigned long
+			{
+				return ::MoveFileExW(wtmp.c_str(), wfrom.c_str(), 0) ? ERROR_SUCCESS : ::GetLastError();
+			});
+			return restore == ERROR_SUCCESS ? errorFromWin32(code) : Error::IO_ERROR;
 		}
 		return Error::OK;
 	}
@@ -658,10 +711,19 @@ Error renamePathOnce(std::string_view from, std::string_view to)
 				return vanished(from) ? classifyMissing(from) : Error::NOT_EMPTY;
 			else
 			{
-				// 目录覆盖空目录：先删除目标（不是原子的，但结果与 POSIX 一致）
-				Error e = removeDirPath(to);
-				if (e != Error::OK && e != Error::NOT_FOUND)
-					return vanished(from) ? classifyMissing(from) : e;
+				// 目录覆盖空目录：MoveFileExW 不能替换目录。先把空的目标改到一个临时名让出位置，
+				// 改名成功后再删掉它；改名失败时把它改回来，保证失败时目标目录仍在（不是原子的，但不会丢目录）
+				removedTarget = uniqueSiblingName(wto, L"vfs-old");
+				DWORD c = retryTransient([&]() -> unsigned long
+				{
+					return ::MoveFileExW(wto.c_str(), removedTarget.c_str(), 0) ? ERROR_SUCCESS : ::GetLastError();
+				});
+				if (c != ERROR_SUCCESS)
+				{
+					removedTarget.clear();
+					if (c != ERROR_FILE_NOT_FOUND && c != ERROR_PATH_NOT_FOUND)
+						return vanished(from) ? classifyMissing(from) : errorForPath(c, to, true);
+				}
 			}
 		}
 	}
@@ -681,6 +743,22 @@ Error renamePathOnce(std::string_view from, std::string_view to)
 		}
 		return c;
 	});
+	if (!removedTarget.empty())
+	{
+		if (code == ERROR_SUCCESS)
+		{
+			// 让出位置的旧目标是空目录，删除失败（例如被其他进程占用）只会留下一个空的临时目录，不影响改名结果
+			removeDirPath(fromWidePath(removedTarget));
+		}
+		else
+		{
+			// 改名失败：把目标目录改回原名
+			retryTransient([&]() -> unsigned long
+			{
+				return ::MoveFileExW(removedTarget.c_str(), wto.c_str(), 0) ? ERROR_SUCCESS : ::GetLastError();
+			});
+		}
+	}
 	if (code == ERROR_SUCCESS)
 		return Error::OK;
 	if (code == ERROR_ALREADY_EXISTS || code == ERROR_FILE_EXISTS)

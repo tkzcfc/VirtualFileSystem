@@ -23,14 +23,11 @@
 #    else
 #        define VFS_O_CLOEXEC 0
 #    endif
-// Apple、Emscripten、BSD 的 off_t 本身就是 64 位，没有 lseek64
-#    if defined(__APPLE__) || defined(__EMSCRIPTEN__) || defined(__FreeBSD__) || defined(__OpenBSD__)
-#        define vfs_lseek64 ::lseek
-#        define vfs_ftruncate64 ::ftruncate
-#    else
-#        define vfs_lseek64 ::lseek64
-#        define vfs_ftruncate64 ::ftruncate64
-#    endif
+// 统一使用 lseek / ftruncate：库以 _FILE_OFFSET_BITS=64 编译（见 src/vfs/CMakeLists.txt），32 位 glibc 上 off_t 也是 64 位；
+// musl 1.2.4 起已经去掉了 lseek64 / ftruncate64，Apple、BSD 的 off_t 本来就是 64 位
+static_assert(sizeof(off_t) == 8, "need 64-bit off_t: build with _FILE_OFFSET_BITS=64");
+#    define vfs_lseek64 ::lseek
+#    define vfs_ftruncate64 ::ftruncate
 #endif
 
 NS_VFS_BEGIN
@@ -74,6 +71,29 @@ NativeFileStream::~NativeFileStream()
 }
 
 #if defined(_WIN32)
+
+namespace
+{
+// ReadFile / WriteFile / SetEndOfFile 失败时的 errno：磁盘满报告 ENOSPC（与 POSIX write 一致），
+// 权限、共享冲突是 EACCES，句柄无效是 EBADF，其余都是 I/O 错误
+int ioErrno(DWORD code)
+{
+	switch (code)
+	{
+	case ERROR_DISK_FULL:
+	case ERROR_HANDLE_DISK_FULL:
+		return ENOSPC;
+	case ERROR_ACCESS_DENIED:
+	case ERROR_SHARING_VIOLATION:
+	case ERROR_LOCK_VIOLATION:
+		return EACCES;
+	case ERROR_INVALID_HANDLE:
+		return EBADF;
+	default:
+		return EIO;
+	}
+}
+} // namespace
 
 bool NativeFileStream::open(std::string_view path, IFileStream::Mode mode)
 {
@@ -171,7 +191,7 @@ int NativeFileStream::read(void* buf, unsigned int size) const
 	DWORD bytesRead = 0;
 	if (::ReadFile(m_handle, buf, size, &bytesRead, nullptr))
 		return static_cast<int>(bytesRead);
-	errno = EACCES;
+	errno = ioErrno(::GetLastError());
 	return -1;
 }
 
@@ -195,12 +215,12 @@ int NativeFileStream::write(const void* buf, unsigned int size) const
 		ov.OffsetHigh = 0xFFFFFFFFu;
 		if (::WriteFile(m_handle, buf, size, &bytesWritten, &ov))
 			return static_cast<int>(bytesWritten);
-		errno = EACCES;
+		errno = ioErrno(::GetLastError());
 		return -1;
 	}
 	if (::WriteFile(m_handle, buf, size, &bytesWritten, nullptr))
 		return static_cast<int>(bytesWritten);
-	errno = EACCES;
+	errno = ioErrno(::GetLastError());
 	return -1;
 }
 
@@ -230,9 +250,10 @@ bool NativeFileStream::resize(int64_t newSize) const
 	if (seek(newSize, SEEK_SET) < 0)
 		return false;
 	bool ok = ::SetEndOfFile(m_handle) != FALSE;
+	const DWORD code = ok ? ERROR_SUCCESS : ::GetLastError();
 	seek(place, SEEK_SET);
 	if (!ok)
-		errno = EACCES;
+		errno = ioErrno(code);
 	return ok;
 }
 
@@ -311,7 +332,12 @@ int NativeFileStream::read(void* buf, unsigned int size) const
 	}
 	if (size > VFS_MAX_IO_CHUNK)
 		size = VFS_MAX_IO_CHUNK;
-	return static_cast<int>(::read(m_handle, buf, size));
+	// 被信号打断（EINTR）时重试，不把它当成 I/O 错误交给调用方
+	ssize_t n;
+	do
+		n = ::read(m_handle, buf, size);
+	while (n < 0 && errno == EINTR);
+	return static_cast<int>(n);
 }
 
 int NativeFileStream::write(const void* buf, unsigned int size) const
@@ -323,7 +349,11 @@ int NativeFileStream::write(const void* buf, unsigned int size) const
 	}
 	if (size > VFS_MAX_IO_CHUNK)
 		size = VFS_MAX_IO_CHUNK;
-	return static_cast<int>(::write(m_handle, buf, size));
+	ssize_t n;
+	do
+		n = ::write(m_handle, buf, size);
+	while (n < 0 && errno == EINTR);
+	return static_cast<int>(n);
 }
 
 int64_t NativeFileStream::size() const

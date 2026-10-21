@@ -600,4 +600,43 @@ TEST_SUITE("union")
 		CHECK(fs.removeFile("/config.json") == Error::BUSY);
 		CHECK(fs.realPath("/config.json") == dir.sub("cfg.json"));
 	}
+
+	TEST_CASE("return codes: backend root rename is INVALID_PATH, default rename UNSUPPORTED, merged non-empty target NOT_EMPTY")
+	{
+		// 直接调用后端：根目录（空相对路径）不能作为改名的源或目标，是参数错误而不是 BUSY
+		auto mem = MemoryBackend::create();
+		mem->addFile("a.txt", "a");
+		CHECK(mem->rename("", "x") == Error::INVALID_PATH);
+		CHECK(mem->rename("a.txt", "") == Error::INVALID_PATH);
+		test::TempDir dir;
+		dir.write("f.txt", "f");
+		auto native = NativeBackend::create(dir.path());
+		REQUIRE(native);
+		CHECK(native->rename("", "x") == Error::INVALID_PATH);
+		CHECK(native->rename("f.txt", "") == Error::INVALID_PATH);
+		// 不支持改名的后端（默认实现）：UNSUPPORTED，与能力位一致
+		VirtualFileSystem single;
+		single.mountFile("/cfg", dir.sub("f.txt"));
+		CHECK(single.mounts()[0].backend->rename("", "y") == Error::UNSUPPORTED);
+
+		// 经过 VFS：目标目录在写入层是空的，但只读层里同名目录有内容 → 合并视图非空，NOT_EMPTY，什么都不动
+		VirtualFileSystem fs;
+		auto lower = MemoryBackend::create();
+		lower->addFile("dest/hidden.txt", "h");
+		fs.mount("/", lower, MountOptions{0, MountFlags::ReadOnly});
+		std::shared_ptr<MemoryBackend> upper;
+		fs.mountMemory("/", MountOptions{10, MountFlags::WriteTarget}, &upper);
+		REQUIRE(fs.createDirs("/src/x") == Error::OK);
+		REQUIRE(fs.createDir("/dest2") == Error::OK);
+		REQUIRE(upper->createDir("dest") == Error::OK);
+		CHECK(fs.rename("/src", "/dest") == Error::NOT_EMPTY);
+		CHECK(fs.isDir("/src/x"));
+		CHECK(test::listNames(fs, "/dest") == std::vector<std::string>{"hidden.txt"});
+		// 合并视图为空的目标目录照常被替换
+		CHECK(fs.rename("/src", "/dest2") == Error::OK);
+		CHECK(fs.isDir("/dest2/x"));
+		// 跨挂载移动时源已不存在：NOT_FOUND（而不是 CROSS_DEVICE）
+		fs.mountMemory("/other");
+		CHECK(fs.moveFile("/missing.txt", "/other/m.txt") == Error::NOT_FOUND);
+	}
 }

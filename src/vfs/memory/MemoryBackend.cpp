@@ -434,9 +434,10 @@ Error MemoryBackend::rename(std::string_view from, std::string_view to)
 {
 	if (m_readOnly.load())
 		return Error::READ_ONLY;
-	// 后端根目录就是挂载点：与 VFS 改名挂载点一致，返回 BUSY（见 mount-rules.md §9、§11）
+	// 后端根目录不能作为改名的源或目标：这是非法参数而不是“忙”（VFS 层在调用后端之前就对挂载点返回 BUSY，
+	// 见 mount-rules.md §9、§12）
 	if (from.empty() || to.empty())
-		return Error::BUSY;
+		return Error::INVALID_PATH;
 	if (from == to)
 		return Error::OK;
 	// 不能把目录移到它自己的子树里（源不存在或是文件时，在下面查到源之后再报告 NOT_FOUND / NOT_DIR）
