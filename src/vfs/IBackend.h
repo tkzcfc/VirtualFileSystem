@@ -54,7 +54,8 @@ public:
 	 * @param rel  相对路径
 	 * @param mode 打开模式，语义见 IFileStream.h
 	 * @param err  可选的错误输出
-	 * @return 成功返回流对象（所有权交给调用方），失败返回 nullptr
+	 * @return 成功返回流对象（所有权交给调用方），失败返回 nullptr。
+	 *         rel 是目录时必须失败并返回 IS_DIR（VFS 在只有一层时直接 open、不先 stat，依赖这一点）
 	 */
 	virtual std::unique_ptr<IFileStream> open(std::string_view rel, IFileStream::Mode mode, Error* err) = 0;
 

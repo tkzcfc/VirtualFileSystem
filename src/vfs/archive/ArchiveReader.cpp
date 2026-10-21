@@ -1,4 +1,5 @@
 #include "ArchiveReader.h"
+#include <new>
 #include "ByteIO.h"
 #include "Compression.h"
 #include "../Path.h"
@@ -294,6 +295,17 @@ std::shared_ptr<const ArchiveIndex> ArchiveReader::open(std::shared_ptr<IArchive
 		return fail(Error::CORRUPTED);
 	if (h.indexSize > VFS_MAX_INDEX_SIZE || static_cast<uint64_t>(h.entryCount) * ENTRY_SIZE > h.indexSize)
 		return fail(Error::CORRUPTED);
+	{
+		// footer 必须紧跟在索引之后，magic 与 archiveSize 都要和 header 对得上（附加在其他文件后面时上面已经读过一次，
+		// 这里对两种情况统一检查）
+		uint8_t footer[FOOTER_SIZE];
+		e = readFully(*stream, base + static_cast<int64_t>(h.indexOffset + h.indexSize), footer, FOOTER_SIZE);
+		if (e != Error::OK)
+			return fail(e);
+		if (std::memcmp(footer + F_MAGIC, FOOTER_MAGIC, 8) != 0 ||
+			ByteIO::readU64LE(footer + F_ARCHIVE_SIZE) != h.indexOffset + h.indexSize + FOOTER_SIZE)
+			return fail(Error::CORRUPTED);
+	}
 
 	// 3. 读索引并做快速损坏检查（XXH3-64 覆盖存储的索引字节，不需要密钥）
 	std::vector<uint8_t> indexBuf(static_cast<size_t>(h.indexSize));
@@ -346,6 +358,9 @@ std::shared_ptr<const ArchiveIndex> ArchiveReader::open(std::shared_ptr<IArchive
 		entry.mtime = static_cast<int64_t>(ByteIO::readU64LE(p + E_MTIME));
 		entry.hash = ByteIO::readU64LE(p + E_HASH);
 		std::memcpy(entry.key.data(), p + E_KEY, entry.key.size());
+		// 保留字段必须为 0（format.md §4.1）：给以后的版本留出扩展空间，也拒绝被篡改的索引
+		if (ByteIO::readU32LE(p + E_RESERVED0) != 0 || ByteIO::readU64LE(p + E_RESERVED1) != 0)
+			return fail(Error::CORRUPTED);
 
 		if (type != static_cast<uint8_t>(EntryType::FILE) && type != static_cast<uint8_t>(EntryType::DIR))
 			return fail(Error::CORRUPTED);
@@ -413,20 +428,52 @@ Error ArchiveReader::readEntry(const ArchiveIndex& index, const ArchiveEntry& en
 	if (entry.storedSize > SIZE_MAX || entry.size > SIZE_MAX)
 		return Error::UNSUPPORTED;
 
-	std::unique_ptr<IFileStream> owned;
-	if (!stream)
+	// 条目大小已在打开时限制在 LZ4 的上限（约 2 GiB）以内，但仍可能超出可用内存：分配失败返回错误而不是抛出异常
+	try
 	{
-		Error e = Error::OK;
-		owned = index.source->openStream(&e);
-		if (!owned)
-			return e;
-		stream = owned.get();
+		return readEntryImpl(index, entry, out, stream);
 	}
+	catch (const std::bad_alloc&)
+	{
+		out.clear();
+		return Error::UNSUPPORTED;
+	}
+}
 
+Error ArchiveReader::readEntryImpl(const ArchiveIndex& index, const ArchiveEntry& entry, std::vector<uint8_t>& out,
+								   IFileStream* stream)
+{
 	std::vector<uint8_t> stored(static_cast<size_t>(entry.storedSize));
-	Error e = readFully(*stream, index.baseOffset + static_cast<int64_t>(entry.offset), stored.data(), stored.size());
-	if (e != Error::OK)
-		return e;
+	const int64_t offset = index.baseOffset + static_cast<int64_t>(entry.offset);
+	std::unique_ptr<IFileStream> owned;
+	Error e = Error::OK;
+	if (!stream && index.source->supportsReadAt())
+	{
+		// 位置读：不需要打开新的流
+		size_t got = 0;
+		while (got < stored.size())
+		{
+			int64_t n = index.source->readAt(stored.data() + got, stored.size() - got, static_cast<uint64_t>(offset) + got);
+			if (n < 0)
+				return Error::IO_ERROR;
+			if (n == 0)
+				return Error::CORRUPTED;   // 提前遇到末尾：归档被截断
+			got += static_cast<size_t>(n);
+		}
+	}
+	else
+	{
+		if (!stream)
+		{
+			owned = index.source->openStream(&e);
+			if (!owned)
+				return e;
+			stream = owned.get();
+		}
+		e = readFully(*stream, offset, stored.data(), stored.size());
+		if (e != Error::OK)
+			return e;
+	}
 	// 顺序与打包相反：先解密，再解压（打包时先压缩再加密）
 	if (entry.cipher == CipherType::XOR)
 		xorCipher(stored.data(), stored.size(), entry.key.data(), entry.keyLength, 0);
@@ -462,8 +509,9 @@ Error ArchiveReader::verify(const ArchiveIndex& index,
 		Error result = readEntry(index, entry, data, stream.get());
 		if (result == Error::OK && xxh3_128(data.data(), data.size()).low != entry.hash)
 			result = Error::CORRUPTED;
-		if (result != Error::OK)
-			overall = Error::CORRUPTED;
+		// 哈希不符或数据损坏报告 CORRUPTED；读失败（IO_ERROR 等）保留第一个真实错误，不混为“损坏”
+		if (result != Error::OK && overall == Error::OK)
+			overall = result;
 		if (cb)
 			cb(entry, result);
 	}

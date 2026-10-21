@@ -52,7 +52,8 @@ struct MountInfo
  */
 struct MountState
 {
-	std::atomic<int64_t> openStreams{0};   // 通过 VFS 打开、尚未关闭的流数量
+	std::atomic<int64_t> openStreams{0};   // 通过 VFS 打开、尚未关闭的流数量（remount 前后共用）
+	std::atomic<bool> closing{false};      // FailIfBusy 卸载正在检查：此时新打开的流放弃并重试，避免检查与计数之间的竞争
 };
 
 /**

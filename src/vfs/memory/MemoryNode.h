@@ -5,7 +5,7 @@
 #include "../Stat.h"
 #include <atomic>
 #include <map>
-#include <shared_mutex>
+#include "../SharedMutex.h"
 
 NS_VFS_BEGIN
 
@@ -16,21 +16,23 @@ NS_VFS_BEGIN
  */
 struct MemoryBuffer
 {
-	mutable std::shared_mutex mutex;
+	mutable SharedMutex mutex;
 	std::vector<uint8_t> data;
 	std::atomic<int64_t> mtime{0};   // Unix 秒，最后一次写入的时间
 };
 
 /**
  * 内存树节点：目录（children）或文件（buffer）。
- * 树结构由 MemoryBackend 的锁保护，节点本身不加锁。
+ * 锁：每个目录节点有自己的读写锁，保护 children（mtime 是原子量）。type 和 buffer 指针在创建后不再改变。
+ * 加锁顺序永远是祖先在前、后代在后（见 MemoryBackend）。
  */
 struct MemoryNode
 {
 	FileType type = FileType::DIR;
 	std::shared_ptr<MemoryBuffer> buffer;                                  // 仅文件
 	std::map<std::string, std::shared_ptr<MemoryNode>, std::less<>> children; // 仅目录，按名字排序
-	int64_t mtime = 0;                                                     // 仅目录
+	std::atomic<int64_t> mtime{0};                                         // 仅目录
+	mutable SharedMutex mutex;                                       // 仅目录：保护 children
 };
 
 /**

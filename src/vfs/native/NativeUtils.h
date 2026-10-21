@@ -38,9 +38,11 @@ Error errorFromErrno(int e);
 
 /**
  * 查询本机路径的元数据。不跟随 symlink 的检查由调用方负责。
+ * @param rootLen 可选：utf8Path 的前 rootLen 个字符是一个已知存在的目录（后端根目录）。
+ *                Windows 上未命中时据此从根往下区分 NOT_FOUND / NOT_DIR，通常只需一次额外调用
  * @return OK / NOT_FOUND / NOT_DIR（中间某一级是文件）/ 其他 IO 错误
  */
-Error statPath(std::string_view utf8Path, Stat& out);
+Error statPath(std::string_view utf8Path, Stat& out, size_t rootLen = 0);
 
 /**
  * 列目录：对每个子项调用 cb(name, type)，跳过 "." ".." 和特殊文件（设备、管道等）；cb 返回 false 停止。
@@ -85,6 +87,42 @@ Error removeFilePath(std::string_view path);
  * 目录覆盖空目录是“先删除目标再改名”，不是原子的。
  */
 Error renamePath(std::string_view from, std::string_view to);
+
+/**
+ * 只读共享句柄，支持多个线程同时做位置读（不经过共享的文件指针）。
+ * - POSIX：pread；
+ * - Windows：以 FILE_FLAG_OVERLAPPED 打开，ReadFile 带 OVERLAPPED 偏移、每个线程一个等待事件。
+ *   同步句柄上的并发 ReadFile 会在内核里按文件对象串行化，重叠句柄不会。
+ * 归档来源用它代替“每次打开文件都新开一个 OS 句柄”：打开归档内的文件不再有系统调用。
+ */
+class PositionalReader
+{
+public:
+	PositionalReader() = default;
+	~PositionalReader();
+	PositionalReader(const PositionalReader&) = delete;
+	PositionalReader& operator=(const PositionalReader&) = delete;
+
+	/**
+	 * 打开文件（只读，允许其他句柄读写、删除、改名）。失败返回 false，errno 已设置。
+	 */
+	bool open(std::string_view utf8Path);
+
+	bool isOpen() const;
+
+	/**
+	 * 从 offset 处读取最多 size 字节。线程安全。
+	 * @return 实际读取的字节数（到达文件末尾时可能少于 size，在末尾或之后返回 0），出错返回 -1（errno 已设置）
+	 */
+	int64_t readAt(void* buf, size_t size, uint64_t offset) const;
+
+private:
+#if defined(_WIN32)
+	void* m_handle = reinterpret_cast<void*>(static_cast<intptr_t>(-1));   // INVALID_HANDLE_VALUE
+#else
+	int m_fd = -1;
+#endif
+};
 
 #if defined(_WIN32)
 /**

@@ -43,7 +43,7 @@ VFS_DLL int toErrno(Error err);
 VFS_DLL const char* errorName(Error err);
 
 /**
- * 返回错误码的中文说明，用于 CLI 输出。
+ * 返回错误码的英文说明，用于 CLI 输出和日志。
  */
 VFS_DLL const char* errorMessage(Error err);
 

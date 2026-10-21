@@ -165,7 +165,7 @@ Error NativeBackend::stat(std::string_view rel, Stat& out) const
 	Error err = toNative(rel, full);
 	if (err != Error::OK)
 		return err;
-	err = native::statPath(full, out);
+	err = native::statPath(full, out, m_root.size());
 	if (err == Error::OK && !rel.empty())
 	{
 		if (m_options.exactCase)
@@ -209,6 +209,9 @@ std::unique_ptr<IFileStream> NativeBackend::open(std::string_view rel, IFileStre
 		setError(err, native::errorFromErrno(errno));
 		return nullptr;
 	}
+	// VFS 在单层时直接 open、不先 stat，所以大小写核对也要在这里做
+	if (m_options.strictCase && !m_options.exactCase && !rel.empty())
+		checkCase(rel);
 	setError(err, Error::OK);
 	return stream;
 }

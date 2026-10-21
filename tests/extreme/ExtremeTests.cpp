@@ -849,7 +849,7 @@ TEST_SUITE("extreme")
 
 	// ================================================================ 句柄与大文件
 
-	TEST_CASE("handle exhaustion: native and archive streams fail cleanly and recover after closing")
+	TEST_CASE("handle exhaustion: native streams fail cleanly and recover; archive streams use no OS handle")
 	{
 #if defined(_WIN32)
 		return;   // Windows 的句柄上限很高，这里不模拟
@@ -869,7 +869,21 @@ TEST_SUITE("extreme")
 		lim.rlim_cur = 256;
 		if (old.rlim_cur < lim.rlim_cur || ::setrlimit(RLIMIT_NOFILE, &lim) != 0)
 			return;
-		for (const char* p : {"/n/f.txt", "/a/f.txt"})
+		{
+			// 归档流通过挂载时打开的共享句柄做位置读，不消耗系统句柄
+			std::vector<std::unique_ptr<IFileStream>> streams;
+			for (int i = 0; i < 2000; ++i)
+			{
+				Error err = Error::OK;
+				auto s = fs.openFileStream("/a/f.txt", Mode::READ, &err);
+				INFO("archive stream #", i, " failed: ", errorName(err));
+				REQUIRE(s);
+				streams.push_back(std::move(s));
+			}
+			char buf[16];
+			CHECK(streams.back()->read(buf, sizeof(buf)) == 7);
+		}
+		for (const char* p : {"/n/f.txt"})
 		{
 			CAPTURE(p);
 			std::vector<std::unique_ptr<IFileStream>> streams;

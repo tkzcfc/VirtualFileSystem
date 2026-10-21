@@ -150,10 +150,16 @@ public:
 	static Error readEntry(const ArchiveIndex& index, const ArchiveEntry& entry, std::vector<uint8_t>& out,
 						   IFileStream* stream = nullptr);
 
+private:
+	static Error readEntryImpl(const ArchiveIndex& index, const ArchiveEntry& entry, std::vector<uint8_t>& out,
+							   IFileStream* stream);
+
+public:
+
 	/**
 	 * 离线校验每个文件的内容哈希（运行时默认不校验）。
 	 * @param cb 每个文件条目校验完成后回调（可为空）
-	 * @return 全部通过返回 OK；有文件不匹配返回 CORRUPTED
+	 * @return 全部通过返回 OK；有文件哈希不符或损坏返回 CORRUPTED；读取失败时返回第一个读取错误（例如 IO_ERROR）
 	 */
 	static Error verify(const ArchiveIndex& index,
 						const std::function<void(const ArchiveEntry& entry, Error result)>& cb = nullptr);

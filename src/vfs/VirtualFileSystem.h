@@ -226,13 +226,22 @@ private:
 	// 选择写入层：优先 WriteTarget 标志，其次最高优先级的可写层；没有返回 -1
 	static int chooseWriteTarget(const std::vector<Layer>& layers);
 
+	// 除第 keep 层以外，没有其他层把该路径提供为目录：OK；有则 READ_ONLY；无法确定时返回那一层的错误
+	static Error checkSingleLayerDir(const std::vector<Layer>& layers, int keep);
+
+	// 把 in 剩下的内容全部写入 out
+	static Error copyStream(IFileStream& in, IFileStream& out);
+
 	// 在写入层中创建相对父目录链
 	static Error ensureParents(const Layer& layer, std::string_view relParent);
 
 	// copy-up：把可见层 src 中的文件完整复制到写入层 dst，可能时写临时文件再 rename
 	static Error copyUp(const Layer& src, const Layer& dst);
 
-	// 包装后端返回的流：统计打开数量、保活后端
+	// openFileStream 的一次尝试；与 FailIfBusy 卸载竞争时由 openFileStream 重试
+	std::unique_ptr<IFileStream> openOnce(std::string_view path, IFileStream::Mode mode, Error* err) const;
+
+	// 包装后端返回的流：统计打开数量、保活后端。挂载正在被 FailIfBusy 卸载时返回空并要求重试
 	std::unique_ptr<IFileStream> track(const MountEntry& mount, std::unique_ptr<IFileStream> stream) const;
 
 	Error createDirIn(const MountTable& table, const std::string& path) const;
@@ -249,10 +258,14 @@ private:
 	void bump() const { m_generation.fetch_add(1, std::memory_order_acq_rel); }
 
 private:
-	mutable std::mutex m_mutex;                    // 只保护 m_table 指针的读取与交换
-	std::mutex m_modifyMutex;                      // 串行化挂载表的修改（复制在 m_mutex 之外进行）
+	// 快照分片：每个分片持有当前快照的一个独立引用（各自的控制块）和一把锁，线程按固定分片读取，
+	// 多线程查询时引用计数与锁都不在线程之间共享缓存行。定义在 .cpp
+	struct SnapshotShard;
+
+	std::mutex m_modifyMutex;                      // 串行化挂载表的修改；m_table 只在它保护下读写
 	mutable std::mutex m_copyUpMutex;              // 串行化 copy-up，避免并发追加同一文件时互相覆盖
-	std::shared_ptr<const MountTable> m_table;     // 当前快照
+	std::shared_ptr<const MountTable> m_table;     // 当前快照（发布用的主引用）
+	std::unique_ptr<SnapshotShard[]> m_shards;     // 读取用的分片引用
 	std::atomic<MountId> m_nextId;                 // 下一个挂载 ID
 	mutable std::atomic<uint64_t> m_generation;    // 变更计数
 };

@@ -4,7 +4,7 @@
 #include "../IBackend.h"
 #include "MemoryNode.h"
 #include <atomic>
-#include <shared_mutex>
+#include <mutex>
 
 NS_VFS_BEGIN
 
@@ -17,7 +17,9 @@ struct MemoryOptions
  * 内存后端。
  * - 节点是目录或带 shared_ptr<MemoryBuffer> 的文件；支持 mkdir/rmdir/rename/resize。
  * - 删除打开中的文件采用 unlink 语义：名字立即移除，数据由流继续持有。
- * 线程安全：树结构由一把读写锁保护；文件数据由各自缓冲区的锁保护。
+ * 线程安全：每个目录一把读写锁（只保护它的 children），查找时从根开始逐级“先锁子目录、再放父目录”下行，
+ * 不同目录下的创建、删除互不阻塞；rename 额外持有一把全局改名锁（同一时刻只有一个 rename 改变树的形状）。
+ * 文件数据由各自缓冲区的锁保护。
  */
 class VFS_DLL MemoryBackend : public IBackend
 {
@@ -63,14 +65,18 @@ public:
 
 private:
 
-	// 查找节点（调用方必须持有锁）。中间某一级是文件返回 NOT_DIR
-	Error findNode(std::string_view rel, std::shared_ptr<MemoryNode>& out) const;
+	class DirLock;
 
-	// 查找父目录节点和最后一段名字（调用方必须持有锁）
-	Error findParent(std::string_view rel, std::shared_ptr<MemoryNode>& parent, std::string_view& name) const;
+	/**
+	 * 逐级加锁下行到目录 dirRel，返回时 out 持有该目录的锁（exclusive 为 true 时是独占锁，否则共享锁）。
+	 * 中间各级只短暂持有共享锁（先锁子目录再放父目录）。
+	 * @param from 非空时从这个已被调用方锁住的目录开始（dirRel 相对于它，且不能为空），不会释放 from 的锁
+	 * @return OK；某一级不存在返回 NOT_FOUND；某一级（包括目标本身）是文件返回 NOT_DIR
+	 */
+	Error lockDir(std::string_view dirRel, bool exclusive, DirLock& out, MemoryNode* from = nullptr) const;
 
 private:
-	mutable std::shared_mutex m_mutex;     // 保护整棵树的结构
+	std::mutex m_renameMutex;              // 串行化 rename：改名期间树的形状不会被其他 rename 改变
 	std::shared_ptr<MemoryNode> m_root;    // 根目录节点
 	std::atomic<bool> m_readOnly;
 };

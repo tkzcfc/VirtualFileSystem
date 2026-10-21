@@ -69,7 +69,12 @@ std::unique_ptr<IFileStream> ArchiveBackend::open(std::string_view rel, IFileStr
 		return std::make_unique<MemoryFileStream>(std::move(buffer), IFileStream::Mode::READ);
 	}
 
-	// 未压缩：每次打开一个独立的来源流，读取时不需要任何锁
+	// 未压缩：来源支持位置读时直接按偏移读取（打开文件没有系统调用）；否则每次打开一个独立的来源流。读取时都不加锁
+	if (m_index->source->supportsReadAt())
+	{
+		setError(err, Error::OK);
+		return std::make_unique<ArchiveFileStream>(m_index, entry, nullptr);
+	}
 	Error e = Error::OK;
 	std::unique_ptr<IFileStream> file = m_index->source->openStream(&e);
 	if (!file)

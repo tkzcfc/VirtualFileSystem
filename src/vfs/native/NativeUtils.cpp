@@ -1,4 +1,5 @@
 #include "NativeUtils.h"
+#include <algorithm>
 
 #if defined(_WIN32)
 #    ifndef WIN32_LEAN_AND_MEAN
@@ -17,6 +18,7 @@
 #        include <cstring>
 #    endif
 #    include <sys/stat.h>
+#    include <fcntl.h>
 #    include <unistd.h>
 #    include <errno.h>
 #    include <cstdio>
@@ -247,9 +249,30 @@ static int64_t fileTimeToUnix(const FILETIME& ft)
 }
 
 // 路径不存在时区分“父目录不存在”（NOT_FOUND）和“某一级父路径是文件”（NOT_DIR）。
-// Windows 对两者都返回 ERROR_PATH_NOT_FOUND，这里逐级向上检查（只在未命中时发生）
-static Error classifyMissing(std::string_view utf8Path)
+// Windows 对两者都返回 ERROR_PATH_NOT_FOUND，只能逐级检查（只在未命中时发生）。
+// - rootLen > 0（已知前 rootLen 个字符是存在的后端根目录）：从根往下检查，第一个不存在的祖先 → NOT_FOUND，
+//   第一个是文件的祖先 → NOT_DIR。叠加挂载里上层目录只镜像了少量子目录，整棵子树都不存在是最常见的未命中，
+//   这样通常一次调用就能确定（自底向上要把每一级不存在的父目录都查一遍）；
+// - 否则自底向上，找到第一个存在的祖先
+static Error classifyMissing(std::string_view utf8Path, size_t rootLen = 0)
 {
+	if (rootLen > 0 && rootLen < utf8Path.size())
+	{
+		size_t pos = rootLen;
+		while (true)
+		{
+			size_t next = utf8Path.find_first_of("/\\", pos + 1);
+			if (next == std::string_view::npos)
+				break;
+			DWORD attr = ::GetFileAttributesW(toWidePath(utf8Path.substr(0, next)).c_str());
+			if (attr == INVALID_FILE_ATTRIBUTES)
+				return Error::NOT_FOUND;
+			if (!(attr & FILE_ATTRIBUTE_DIRECTORY))
+				return Error::NOT_DIR;
+			pos = next;
+		}
+		return Error::NOT_FOUND;
+	}
 	std::string_view p = utf8Path;
 	while (true)
 	{
@@ -287,11 +310,11 @@ static std::string_view parentOf(std::string_view utf8Path)
  *   （例如另一个线程正在改名同一个目录时，本次改名拿到 ACCESS_DENIED，等它完成后源已不存在）
  * - INVALID_NAME：名字已经过可移植性检查，出现时如果父目录已不存在，也是并发删除造成的
  */
-static Error errorForPath(DWORD code, std::string_view utf8Path, bool mustExist = false)
+static Error errorForPath(DWORD code, std::string_view utf8Path, bool mustExist = false, size_t rootLen = 0)
 {
 	t_lastOsError = static_cast<int>(code);
 	if (code == ERROR_PATH_NOT_FOUND || code == ERROR_DIRECTORY)
-		return classifyMissing(utf8Path);
+		return classifyMissing(utf8Path, rootLen);
 	if (mustExist && (code == ERROR_ACCESS_DENIED || code == ERROR_SHARING_VIOLATION ||
 					  code == ERROR_DELETE_PENDING || code == ERROR_INVALID_NAME))
 	{
@@ -307,7 +330,7 @@ static Error errorForPath(DWORD code, std::string_view utf8Path, bool mustExist 
 	return errorFromWin32(code);
 }
 
-Error statPath(std::string_view utf8Path, Stat& out)
+Error statPath(std::string_view utf8Path, Stat& out, size_t rootLen)
 {
 	std::wstring wpath = toWidePath(utf8Path);
 	WIN32_FILE_ATTRIBUTE_DATA data;
@@ -316,7 +339,7 @@ Error statPath(std::string_view utf8Path, Stat& out)
 		return ::GetFileAttributesExW(wpath.c_str(), GetFileExInfoStandard, &data) ? ERROR_SUCCESS : ::GetLastError();
 	});
 	if (code != ERROR_SUCCESS)
-		return errorForPath(code, utf8Path, true);
+		return errorForPath(code, utf8Path, true, rootLen);
 	out.type = (data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) ? FileType::DIR : FileType::FILE;
 	out.size = out.type == FileType::FILE
 				   ? static_cast<int64_t>((static_cast<uint64_t>(data.nFileSizeHigh) << 32) | data.nFileSizeLow)
@@ -677,7 +700,7 @@ Error renamePathOnce(std::string_view from, std::string_view to)
 
 #else
 
-Error statPath(std::string_view utf8Path, Stat& out)
+Error statPath(std::string_view utf8Path, Stat& out, size_t /*rootLen*/)
 {
 	std::string path(utf8Path);
 	struct stat st;
@@ -830,6 +853,166 @@ Error renamePath(std::string_view from, std::string_view to)
 	// 目录覆盖非空目录：Linux 返回 ENOTEMPTY，部分系统返回 EEXIST（POSIX 两者都允许），统一成 NOT_EMPTY
 	const int e = errno;
 	return e == EEXIST ? Error::NOT_EMPTY : errorFromErrno(e);
+}
+
+#endif
+
+// ---------------------------------------------------------------- 位置读
+
+#if defined(_WIN32)
+
+namespace
+{
+
+// 每个线程一个手动复位事件，供重叠 ReadFile 等待完成；线程退出时关闭
+struct ThreadEvent
+{
+	HANDLE handle = nullptr;
+	~ThreadEvent()
+	{
+		if (handle)
+			::CloseHandle(handle);
+	}
+	HANDLE get()
+	{
+		if (!handle)
+			handle = ::CreateEventW(nullptr, TRUE, FALSE, nullptr);
+		return handle;
+	}
+};
+
+thread_local ThreadEvent t_readEvent;
+
+} // namespace
+
+PositionalReader::~PositionalReader()
+{
+	if (m_handle != INVALID_HANDLE_VALUE)
+		::CloseHandle(m_handle);
+}
+
+bool PositionalReader::open(std::string_view utf8Path)
+{
+	std::wstring wpath = toWidePath(utf8Path);
+	HANDLE h = INVALID_HANDLE_VALUE;
+	DWORD code = retryTransient([&]() -> unsigned long
+	{
+		h = ::CreateFileW(wpath.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+						  nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED, nullptr);
+		return h != INVALID_HANDLE_VALUE ? ERROR_SUCCESS : ::GetLastError();
+	});
+	if (h == INVALID_HANDLE_VALUE)
+	{
+		t_lastOsError = static_cast<int>(code);
+		errno = code == ERROR_PATH_NOT_FOUND ? ENOENT : toErrno(errorFromWin32(code));
+		return false;
+	}
+	m_handle = h;
+	return true;
+}
+
+bool PositionalReader::isOpen() const
+{
+	return m_handle != INVALID_HANDLE_VALUE;
+}
+
+int64_t PositionalReader::readAt(void* buf, size_t size, uint64_t offset) const
+{
+	if (m_handle == INVALID_HANDLE_VALUE)
+	{
+		errno = EBADF;
+		return -1;
+	}
+	HANDLE ev = t_readEvent.get();
+	if (!ev)
+	{
+		errno = ENOMEM;
+		return -1;
+	}
+	const DWORD want = static_cast<DWORD>(std::min<size_t>(size, VFS_MAX_IO_CHUNK));
+	OVERLAPPED ov;
+	std::memset(&ov, 0, sizeof(ov));
+	ov.Offset = static_cast<DWORD>(offset & 0xFFFFFFFFu);
+	ov.OffsetHigh = static_cast<DWORD>(offset >> 32);
+	ov.hEvent = ev;
+	DWORD got = 0;
+	// 同步完成时 ReadFile 返回 TRUE；异步时返回 ERROR_IO_PENDING。两种情况都用 GetOverlappedResult 取结果
+	if (!::ReadFile(m_handle, buf, want, nullptr, &ov) && ::GetLastError() != ERROR_IO_PENDING)
+	{
+		DWORD c = ::GetLastError();
+		if (c == ERROR_HANDLE_EOF)
+			return 0;
+		t_lastOsError = static_cast<int>(c);
+		errno = toErrno(errorFromWin32(c));
+		return -1;
+	}
+	if (!::GetOverlappedResult(m_handle, &ov, &got, TRUE))
+	{
+		DWORD c = ::GetLastError();
+		if (c == ERROR_HANDLE_EOF)
+			return 0;
+		t_lastOsError = static_cast<int>(c);
+		errno = toErrno(errorFromWin32(c));
+		return -1;
+	}
+	return static_cast<int64_t>(got);
+}
+
+#else
+
+PositionalReader::~PositionalReader()
+{
+	if (m_fd != -1)
+		::close(m_fd);
+}
+
+bool PositionalReader::open(std::string_view utf8Path)
+{
+	std::string p(utf8Path);
+	int flags = O_RDONLY;
+#    if defined(O_CLOEXEC)
+	flags |= O_CLOEXEC;
+#    endif
+	int fd = ::open(p.c_str(), flags);
+	if (fd == -1)
+		return false;
+	struct stat st;
+	if (::fstat(fd, &st) == 0 && S_ISDIR(st.st_mode))
+	{
+		::close(fd);
+		errno = EISDIR;
+		return false;
+	}
+	m_fd = fd;
+	return true;
+}
+
+bool PositionalReader::isOpen() const
+{
+	return m_fd != -1;
+}
+
+int64_t PositionalReader::readAt(void* buf, size_t size, uint64_t offset) const
+{
+	if (m_fd == -1)
+	{
+		errno = EBADF;
+		return -1;
+	}
+	if (offset > static_cast<uint64_t>(INT64_MAX))
+	{
+		errno = EINVAL;
+		return -1;
+	}
+	const size_t want = std::min<size_t>(size, VFS_MAX_IO_CHUNK);
+	while (true)
+	{
+		ssize_t n = ::pread(m_fd, buf, want, static_cast<off_t>(offset));
+		if (n >= 0)
+			return static_cast<int64_t>(n);
+		if (errno != EINTR)
+			return -1;
+	}
 }
 
 #endif

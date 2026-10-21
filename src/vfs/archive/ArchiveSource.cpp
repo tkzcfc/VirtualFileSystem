@@ -2,8 +2,17 @@
 #include "../native/NativeFileStream.h"
 #include "../native/NativeUtils.h"
 #include "../memory/MemoryFileStream.h"
+#include <algorithm>
+#include <cstring>
+#include <mutex>
 
 NS_VFS_BEGIN
+
+int64_t IArchiveSource::readAt(void* /*buf*/, size_t /*size*/, uint64_t /*offset*/) const
+{
+	errno = ENOTSUP;
+	return -1;
+}
 
 FileArchiveSource::FileArchiveSource(std::string nativePath)
 	: m_nativePath(std::move(nativePath))
@@ -12,6 +21,25 @@ FileArchiveSource::FileArchiveSource(std::string nativePath)
 	Stat st;
 	if (native::statPath(m_nativePath, st) == Error::OK)
 		m_mtime = st.mtime;
+	auto reader = std::make_unique<native::PositionalReader>();
+	if (reader->open(m_nativePath))
+		m_reader = std::move(reader);
+}
+
+FileArchiveSource::~FileArchiveSource()
+{
+}
+
+bool FileArchiveSource::supportsReadAt() const
+{
+	return m_reader != nullptr;
+}
+
+int64_t FileArchiveSource::readAt(void* buf, size_t size, uint64_t offset) const
+{
+	if (!m_reader)
+		return IArchiveSource::readAt(buf, size, offset);
+	return m_reader->readAt(buf, size, offset);
 }
 
 std::unique_ptr<IFileStream> FileArchiveSource::openStream(Error* err) const
@@ -46,6 +74,19 @@ std::unique_ptr<IFileStream> MemoryArchiveSource::openStream(Error* err) const
 {
 	setError(err, Error::OK);
 	return std::make_unique<MemoryFileStream>(m_buffer, IFileStream::Mode::READ);
+}
+
+int64_t MemoryArchiveSource::readAt(void* buf, size_t size, uint64_t offset) const
+{
+	// 与 MemoryFileStream 一样取共享锁，即使有人违规修改缓冲区也不会读到越界内存
+	std::shared_lock<SharedMutex> lock(m_buffer->mutex);
+	const auto& data = m_buffer->data;
+	if (offset >= data.size())
+		return 0;
+	const size_t n = std::min<size_t>(size, data.size() - static_cast<size_t>(offset));
+	if (n)
+		std::memcpy(buf, data.data() + offset, n);
+	return static_cast<int64_t>(n);
 }
 
 NS_VFS_END

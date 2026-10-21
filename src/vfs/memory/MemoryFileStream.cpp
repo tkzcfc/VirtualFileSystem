@@ -1,4 +1,5 @@
 #include "MemoryFileStream.h"
+#include <new>
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
@@ -53,8 +54,8 @@ int64_t MemoryFileStream::seek(int64_t offset, int origin) const
 		errno = EINVAL;
 		return -1;
 	}
-	// 结果为负时按 POSIX 返回 EINVAL，位置保持不变
-	if ((offset < 0 && base + offset < 0) || (offset > 0 && base > INT64_MAX - offset))
+	// 结果为负时按 POSIX 返回 EINVAL，位置保持不变（判断本身不能溢出：-INT64_MIN 没有定义）
+	if ((offset < 0 && (offset == INT64_MIN || base < -offset)) || (offset > 0 && base > INT64_MAX - offset))
 	{
 		errno = EINVAL;
 		return -1;
@@ -73,7 +74,7 @@ int MemoryFileStream::read(void* buf, unsigned int size) const
 	if (size > VFS_MAX_IO_CHUNK)
 		size = VFS_MAX_IO_CHUNK;
 
-	std::shared_lock<std::shared_mutex> lock(m_buffer->mutex);
+	std::shared_lock<SharedMutex> lock(m_buffer->mutex);
 	const int64_t total = static_cast<int64_t>(m_buffer->data.size());
 	// 位置在 EOF 或之后：返回 0
 	if (m_pos >= total)
@@ -100,7 +101,7 @@ int MemoryFileStream::write(const void* buf, unsigned int size) const
 	if (size > VFS_MAX_IO_CHUNK)
 		size = VFS_MAX_IO_CHUNK;
 
-	std::unique_lock<std::shared_mutex> lock(m_buffer->mutex);
+	std::unique_lock<SharedMutex> lock(m_buffer->mutex);
 	auto& data = m_buffer->data;
 	// APPEND：与 O_APPEND 一致，每次写之前把位置移到当前末尾
 	if (m_mode == Mode::APPEND)
@@ -112,9 +113,19 @@ int MemoryFileStream::write(const void* buf, unsigned int size) const
 		errno = EFBIG;
 		return -1;
 	}
-	// seek 越过 EOF 后写入：resize 会用 0 填充空洞
+	// seek 越过 EOF 后写入：resize 会用 0 填充空洞。分配失败按 POSIX 风格返回错误，不让异常穿过流接口
 	if (end > data.size())
-		data.resize(static_cast<size_t>(end));
+	{
+		try
+		{
+			data.resize(static_cast<size_t>(end));
+		}
+		catch (const std::bad_alloc&)
+		{
+			errno = ENOMEM;
+			return -1;
+		}
+	}
 	if (size > 0)
 		std::memcpy(data.data() + m_pos, buf, size);
 	m_pos += size;
@@ -139,7 +150,7 @@ int64_t MemoryFileStream::size() const
 		errno = EBADF;
 		return -1;
 	}
-	std::shared_lock<std::shared_mutex> lock(m_buffer->mutex);
+	std::shared_lock<SharedMutex> lock(m_buffer->mutex);
 	return static_cast<int64_t>(m_buffer->data.size());
 }
 
@@ -155,8 +166,21 @@ bool MemoryFileStream::resize(int64_t newSize) const
 		errno = EINVAL;
 		return false;
 	}
-	std::unique_lock<std::shared_mutex> lock(m_buffer->mutex);
-	m_buffer->data.resize(static_cast<size_t>(newSize));
+	if (static_cast<uint64_t>(newSize) > m_buffer->data.max_size())
+	{
+		errno = EFBIG;
+		return false;
+	}
+	std::unique_lock<SharedMutex> lock(m_buffer->mutex);
+	try
+	{
+		m_buffer->data.resize(static_cast<size_t>(newSize));
+	}
+	catch (const std::bad_alloc&)
+	{
+		errno = ENOMEM;
+		return false;
+	}
 	m_buffer->mtime.store(currentUnixTime(), std::memory_order_relaxed);
 	// 与 ftruncate 一致：不移动当前位置
 	return true;
