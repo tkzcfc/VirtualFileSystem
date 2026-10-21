@@ -48,6 +48,23 @@ adb shell "cd /data/local/tmp/vfs && ./vfs_bench --dir /data/local/tmp/vfs --csv
 
 All tests, stress tests (scale 10), examples, and a vfstool pack/verify/unpack/cat round trip pass. Benchmark results: [benchmark.md](benchmark.md#android).
 
+### Test APK for AndroidAssetBackend
+
+`tests/android-apk/` is a minimal NativeActivity APK (no Java code, no Gradle) that runs `AndroidAssetBackend` against a real `AAssetManager`:
+probe and manifest modes, read / seek / size / stat / list, positional reads on uncompressed (fd + `pread`) and compressed assets,
+8-thread concurrent reads, Unicode file names, a `root` subdirectory, a `.vfs` archive stored uncompressed in the APK and mounted through `archiveSource()`,
+and layering with memory and native backends.
+
+```bash
+ANDROID_NDK=/path/to/ndk ANDROID_SDK=/path/to/sdk tests/android-apk/build.sh   # needs build-tools;35.0.0, platforms;android-35, JDK (keytool), python3
+adb install -r -t build-apk/vfs-asset-test.apk
+adb logcat -c && adb shell am start -W -n com.vfs.assettest/android.app.NativeActivity
+adb logcat -d -s VFSAPK:*                     # last line: "SUMMARY: PASS n/n" or "SUMMARY: FAIL k/n"
+adb shell run-as com.vfs.assettest cat files/result.txt
+```
+
+On the Redmi K80 (Android 16) all 111 checks pass.
+
 ### Assets inside an APK: AndroidAssetBackend
 
 APK `assets/` are not on the filesystem, so `mountNative` cannot reach them. `AndroidAssetBackend` is a read-only backend on top of `AAssetManager`:

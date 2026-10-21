@@ -8,3 +8,4 @@ out/
 cmake-build-*/
 *.vfs.tmp
 __pycache__/
+/build-apk/
