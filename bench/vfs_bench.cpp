@@ -356,6 +356,46 @@ void dropCaches(const Dataset& ds)
 #endif
 }
 
+stdfs::path utf8Path(const std::string& s)
+{
+	return stdfs::path(std::u8string(reinterpret_cast<const char8_t*>(s.data()), s.size()));
+}
+
+// Write the file's cached data to the device (outside any timed region)
+void flushFileToDisk(const stdfs::path& p)
+{
+#if VFS_PLATFORM_WINDOWS
+	HANDLE h = ::CreateFileW(p.c_str(), GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
+							 FILE_ATTRIBUTE_NORMAL, nullptr);
+	if (h == INVALID_HANDLE_VALUE)
+		return;
+	::FlushFileBuffers(h);
+	::CloseHandle(h);
+#elif VFS_PLATFORM_WASM
+	(void)p;   // node's fs has no fsync through NODERAWFS that is worth the cost; nothing to settle
+#else
+	int fd = ::open(p.c_str(), O_RDONLY);
+	if (fd < 0)
+		return;
+	::fsync(fd);
+	::close(fd);
+#endif
+}
+
+// Before each write-scenario iteration: push everything the previous iterations (or the dataset generation) left
+// in the OS write cache to the device, so no target inherits a dirty-page backlog from the one before it.
+// Without this, Windows throttles whichever target happens to run when the lazy writer falls behind
+// (single runs showed 0.04x-4.5x swings in write.large.seq between otherwise identical targets).
+void settleWrites(const std::string& dir)
+{
+	std::error_code ec;
+	for (stdfs::recursive_directory_iterator it(utf8Path(dir), ec), end; !ec && it != end; it.increment(ec))
+	{
+		if (it->is_regular_file(ec))
+			flushFileToDisk(it->path());
+	}
+}
+
 // ================================================================ Targets under test
 
 /**
@@ -1878,6 +1918,9 @@ int main(int argc, char** argv)
 			  << stdfs::file_size(ds.archivePlain) / MiB << "MiB / xor " << stdfs::file_size(ds.archiveXor) / MiB << "MiB / lz4 "
 			  << stdfs::file_size(ds.archiveLz4) / MiB << "MiB; generated in "
 			  << fmt(std::chrono::duration<double>(Clock::now() - t0).count(), 1) << "s\n\n";
+	// The dataset itself is several hundred MiB of fresh writes: get it out of the write cache before measuring
+	for (auto& f : ds.allNativeFiles)
+		flushFileToDisk(utf8Path(f));
 
 	auto readTargets = makeReadTargets(opt, ds);
 	auto writeTargets = makeWriteTargets(opt, ds);
@@ -1903,6 +1946,8 @@ int main(int argc, char** argv)
 				Work work = s.make(*tg);
 				auto runPrepared = [&]() -> Result
 				{
+					if (s.write)
+						settleWrites(opt.workDir + "/write");
 					if (s.prepare && !s.prepare(*tg, threads))
 					{
 						Result bad;
@@ -1911,6 +1956,8 @@ int main(int argc, char** argv)
 						bad.seconds = 1;
 						return bad;
 					}
+					if (s.write)
+						settleWrites(opt.workDir + "/write");   // also flush files the setup itself wrote (write.overwrite)
 					if (opt.cold && !s.write)
 						dropCaches(ds);
 					return runOnce(threads, work);

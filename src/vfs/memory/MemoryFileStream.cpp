@@ -118,6 +118,11 @@ int MemoryFileStream::write(const void* buf, unsigned int size) const
 	{
 		try
 		{
+			// Grow capacity geometrically (2x) ourselves: MSVC's vector grows by 1.5x, so a file written in
+			// chunks is copied many more times while it grows (a 64 MiB file written in 1 MiB chunks ran at
+			// about 1/3 of the speed of writing to the OS file cache on Windows).
+			if (end > data.capacity())
+				data.reserve(static_cast<size_t>(std::max<uint64_t>(end, std::min<uint64_t>(data.max_size(), uint64_t(data.capacity()) * 2))));
 			data.resize(static_cast<size_t>(end));
 		}
 		catch (const std::bad_alloc&)
