@@ -36,6 +36,7 @@ struct DedupKey
 	uint8_t cipher;
 	uint8_t compression;
 	uint8_t keyLength;
+	uint8_t blockLog2;
 
 	bool operator<(const DedupKey& o) const
 	{
@@ -47,7 +48,9 @@ struct DedupKey
 			return cipher < o.cipher;
 		if (compression != o.compression)
 			return compression < o.compression;
-		return keyLength < o.keyLength;
+		if (keyLength != o.keyLength)
+			return keyLength < o.keyLength;
+		return blockLog2 < o.blockLog2;
 	}
 };
 
@@ -71,6 +74,41 @@ void deriveFileKey(const Hash128& contentHash, uint8_t* key, uint32_t keyLen)
 		ByteIO::writeU64LE(bytes + 8, block.high);
 		std::memcpy(key + i, bytes, std::min<uint32_t>(16, keyLen - i));
 	}
+}
+
+// Block-compress data: out = block table (u64 LE end offset per block, bit 63 = raw) + blocks.
+// A block that does not shrink is stored raw. Output depends only on the input, so packing stays reproducible.
+bool compressBlocks(const uint8_t* data, uint64_t size, uint8_t log2, int level, std::vector<uint8_t>& out,
+					std::vector<uint8_t>& scratch)
+{
+	const uint64_t blockSize = uint64_t(1) << log2;
+	const uint64_t blocks = (size + blockSize - 1) / blockSize;
+	const uint64_t table = blocks * BLOCK_ENTRY_SIZE;
+	out.assign(static_cast<size_t>(table), 0);
+	uint64_t end = 0;
+	for (uint64_t b = 0; b < blocks; ++b)
+	{
+		const uint8_t* src = data + b * blockSize;
+		const size_t len = static_cast<size_t>(std::min<uint64_t>(blockSize, size - b * blockSize));
+		uint64_t item = 0;
+		if (Compression::lz4Compress(src, len, scratch, level) && scratch.size() < len)
+		{
+			out.insert(out.end(), scratch.begin(), scratch.end());
+			end += scratch.size();
+			item = end;
+		}
+		else
+		{
+			out.insert(out.end(), src, src + len);
+			end += len;
+			item = end | BLOCK_RAW_FLAG;
+		}
+		ByteIO::writeU64LE(out.data() + b * BLOCK_ENTRY_SIZE, item);
+		// Stop early once the result can no longer be smaller than the original
+		if (out.size() >= size)
+			return false;
+	}
+	return true;
 }
 
 uint64_t alignUp(uint64_t v, uint32_t alignment)
@@ -286,6 +324,8 @@ Error ArchiveWriter::write(IFileStream& out, ArchiveWriteStats* stats)
 	const uint32_t alignment = m_options.alignment;
 	if (alignment == 0 || (alignment & (alignment - 1)) != 0 || alignment > MAX_ALIGNMENT)
 		return fail(Error::UNSUPPORTED, "alignment must be a power of two in 1..65536");
+	if (m_options.blockLog2 < MIN_BLOCK_LOG2 || m_options.blockLog2 > MAX_BLOCK_LOG2)
+		return fail(Error::UNSUPPORTED, "LZ4 block size must be 4 KiB..4 MiB (log2 12..22)");
 	if (m_options.fileKeyLength == 0 || m_options.fileKeyLength > MAX_FILE_KEY_SIZE)
 		return fail(Error::UNSUPPORTED, "file XOR key length must be in 1..32");
 	if (!m_options.indexKey.empty() && m_options.indexKey.size() != INDEX_KEY_SIZE)
@@ -313,6 +353,7 @@ Error ArchiveWriter::write(IFileStream& out, ArchiveWriteStats* stats)
 	std::map<DedupKey, DedupValue> dedup;
 	std::vector<uint8_t> content;
 	std::vector<uint8_t> compressed;
+	std::vector<uint8_t> block;
 	std::vector<uint8_t> buffer(IO_BUFFER_SIZE);
 
 	// 2. Data region: write each item in path order
@@ -375,12 +416,16 @@ Error ArchiveWriter::write(IFileStream& out, ArchiveWriteStats* stats)
 		// 2.2 Storage method: compress first, then encrypt
 		const uint8_t* storedData = nullptr;
 		entry.compression = CompressionType::NONE;
-		if (item.options.compress && size > 0 && size <= Compression::lz4MaxInputSize())
+		if (item.options.compress && size > 0)
 		{
-			if (Compression::lz4Compress(data->data(), data->size(), compressed, m_options.compressionLevel) &&
-				compressed.size() < data->size())
+			const uint8_t log2 = item.options.blockLog2 ? item.options.blockLog2 : m_options.blockLog2;
+			if (log2 < MIN_BLOCK_LOG2 || log2 > MAX_BLOCK_LOG2)
+				return fail(Error::UNSUPPORTED, "LZ4 block size must be 4 KiB..4 MiB (log2 12..22) for: " + item.path);
+			if (compressBlocks(data->data(), size, log2, m_options.compressionLevel, compressed, block) &&
+				compressed.size() < size)
 			{
 				entry.compression = CompressionType::LZ4;
+				entry.blockLog2 = log2;
 				storedData = compressed.data();
 				entry.storedSize = compressed.size();
 				++st.compressedCount;
@@ -402,7 +447,7 @@ Error ArchiveWriter::write(IFileStream& out, ArchiveWriteStats* stats)
 
 		// 2.3 Dedup: data with the same content and the same storage method is written only once
 		DedupKey key{contentHash, size, static_cast<uint8_t>(entry.cipher), static_cast<uint8_t>(entry.compression),
-					 entry.keyLength};
+					 entry.keyLength, entry.blockLog2};
 		if (m_options.dedup && size > 0)
 		{
 			auto it = dedup.find(key);
@@ -495,6 +540,7 @@ Error ArchiveWriter::write(IFileStream& out, ArchiveWriteStats* stats)
 		p[E_CIPHER] = static_cast<uint8_t>(entry.cipher);                    // [1]  cipher
 		p[E_COMPRESSION] = static_cast<uint8_t>(entry.compression);          // [2]  compression
 		p[E_KEY_LENGTH] = entry.keyLength;                                   // [3]  keyLength
+		p[E_BLOCK_LOG2] = entry.blockLog2;                                   // [12] blockLog2
 		ByteIO::writeU32LE(p + E_NAME_OFFSET, nameOffset);                   // [4]  nameOffset
 		ByteIO::writeU32LE(p + E_NAME_LENGTH, static_cast<uint32_t>(entry.path.size())); // [8] nameLength
 		ByteIO::writeU64LE(p + E_OFFSET, entry.offset);                      // [16] offset

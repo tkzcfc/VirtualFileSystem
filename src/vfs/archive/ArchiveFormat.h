@@ -38,6 +38,15 @@ constexpr uint32_t DEFAULT_ALIGNMENT = 16;
 constexpr uint32_t MAX_ALIGNMENT = 65536;
 constexpr uint32_t MAX_PATH_LENGTH = 4096;
 
+// LZ4 entries are split into fixed-size blocks (2^blockLog2 bytes, the last one may be shorter), each compressed independently.
+constexpr uint8_t MIN_BLOCK_LOG2 = 12;       // 4 KiB
+constexpr uint8_t MAX_BLOCK_LOG2 = 22;       // 4 MiB
+constexpr uint8_t DEFAULT_BLOCK_LOG2 = 16;   // 64 KiB
+// Block table item (u64 LE): bits 0..62 = end offset of the block's stored bytes, relative to the end of the table; bit 63 = stored raw
+constexpr uint32_t BLOCK_ENTRY_SIZE = 8;
+constexpr uint64_t BLOCK_RAW_FLAG = 1ull << 63;
+constexpr uint64_t BLOCK_END_MASK = BLOCK_RAW_FLAG - 1;
+
 // ---- Header field offsets ----
 constexpr size_t H_MAGIC = 0;            // [0]   8  magic
 constexpr size_t H_VERSION = 8;          // [8]   u32 version
@@ -63,9 +72,10 @@ constexpr size_t E_COMPRESSION = 2;      // [2]  u8  compression (CompressionTyp
 constexpr size_t E_KEY_LENGTH = 3;       // [3]  u8  keyLength (1..32 when cipher=XOR, otherwise 0)
 constexpr size_t E_NAME_OFFSET = 4;      // [4]  u32 nameOffset (relative to the start of the StringPool)
 constexpr size_t E_NAME_LENGTH = 8;      // [8]  u32 nameLength (1..4096)
-constexpr size_t E_RESERVED0 = 12;       // [12] u32 reserved (0)
+constexpr size_t E_BLOCK_LOG2 = 12;      // [12] u8  blockLog2 (LZ4: MIN_BLOCK_LOG2..MAX_BLOCK_LOG2, otherwise 0)
+constexpr size_t E_RESERVED0 = 13;       // [13] 3   reserved (0)
 constexpr size_t E_OFFSET = 16;          // [16] u64 offset (start of stored data, relative to the archive start)
-constexpr size_t E_STORED_SIZE = 24;     // [24] u64 storedSize (stored byte count: after compression)
+constexpr size_t E_STORED_SIZE = 24;     // [24] u64 storedSize (stored byte count: after compression, including the LZ4 block table)
 constexpr size_t E_SIZE = 32;            // [32] u64 size (original byte count)
 constexpr size_t E_MTIME = 40;           // [40] i64 mtime (Unix seconds, 0=unknown)
 constexpr size_t E_HASH = 48;            // [48] u64 hash = low 64 bits of XXH3-128(original content)
@@ -102,7 +112,7 @@ enum class CipherType : uint8_t
 enum class CompressionType : uint8_t
 {
 	NONE = 0,
-	LZ4 = 1,    // LZ4 block; the whole file is decompressed into memory on open
+	LZ4 = 1,    // independent LZ4 blocks: stored data = block table (u64 per block) + blocks; blocks are decompressed on demand
 };
 
 NS_VFS_END

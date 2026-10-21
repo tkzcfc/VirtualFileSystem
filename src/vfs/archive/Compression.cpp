@@ -40,6 +40,11 @@ size_t lz4MaxInputSize()
 	return static_cast<size_t>(LZ4_MAX_INPUT_SIZE);
 }
 
+size_t lz4CompressBound(size_t size)
+{
+	return static_cast<size_t>(LZ4_compressBound(static_cast<int>(size)));
+}
+
 } // namespace Compression
 
 NS_VFS_END

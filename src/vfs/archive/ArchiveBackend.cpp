@@ -1,6 +1,5 @@
 #include "ArchiveBackend.h"
 #include "ArchiveFileStream.h"
-#include "../memory/MemoryFileStream.h"
 
 NS_VFS_BEGIN
 
@@ -54,22 +53,7 @@ std::unique_ptr<IFileStream> ArchiveBackend::open(std::string_view rel, IFileStr
 		return nullptr;
 	}
 
-	if (entry->compression != CompressionType::NONE)
-	{
-		// A compressed file cannot be read by offset as a stream: it is decompressed entirely into memory (suitable for small files such as configs and scripts)
-		auto buffer = std::make_shared<MemoryBuffer>();
-		Error e = ArchiveReader::readEntry(*m_index, *entry, buffer->data);
-		if (e != Error::OK)
-		{
-			setError(err, e);
-			return nullptr;
-		}
-		buffer->mtime.store(entry->mtime != 0 ? entry->mtime : m_index->sourceMtime);
-		setError(err, Error::OK);
-		return std::make_unique<MemoryFileStream>(std::move(buffer), IFileStream::Mode::READ);
-	}
-
-	// Uncompressed: when the source supports positional reads, read directly by offset (opening a file makes no system call); otherwise open an independent source stream each time. Neither path takes a lock while reading
+	// Uncompressed and block-LZ4 entries alike: when the source supports positional reads, read directly by offset (opening a file makes no system call); otherwise open an independent source stream each time. Neither path takes a lock while reading
 	if (m_index->source->supportsReadAt())
 	{
 		setError(err, Error::OK);

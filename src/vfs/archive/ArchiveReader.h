@@ -52,12 +52,22 @@ struct ArchiveEntry
 	CipherType cipher = CipherType::NONE;
 	CompressionType compression = CompressionType::NONE;
 	uint8_t keyLength = 0;
+	uint8_t blockLog2 = 0;                                // LZ4: log2 of the block size; otherwise 0
 	uint64_t offset = 0;                                  // Start of stored data (relative to the archive start)
 	uint64_t storedSize = 0;                              // Stored size in bytes
 	uint64_t size = 0;                                    // Original size in bytes
 	int64_t mtime = 0;
 	uint64_t hash = 0;                                    // Low 64 bits of XXH3-128(original content)
 	std::array<uint8_t, ArchiveFormat::MAX_FILE_KEY_SIZE> key{};
+
+	/// LZ4: block size in bytes.
+	uint64_t blockSize() const { return uint64_t(1) << blockLog2; }
+
+	/// LZ4: number of blocks (0 for an empty file).
+	uint64_t blockCount() const { return (size + blockSize() - 1) >> blockLog2; }
+
+	/// LZ4: size of the block table at the start of the stored data.
+	uint64_t blockTableSize() const { return blockCount() * ArchiveFormat::BLOCK_ENTRY_SIZE; }
 };
 
 /**
@@ -155,6 +165,27 @@ private:
 							   IFileStream* stream);
 
 public:
+
+	/**
+	 * Validate one decoded block-table item of an LZ4 entry and return the block's stored span.
+	 * @param entry LZ4 entry
+	 * @param block block number
+	 * @param prevEnd end offset of the previous block (0 for block 0), relative to the end of the table
+	 * @param item  table item (already decrypted)
+	 * @param start receives the stored start of the block, relative to the end of the table
+	 * @param len   receives the stored length of the block
+	 * @param raw   receives whether the block is stored uncompressed
+	 * @return false if the item is inconsistent (corrupted archive)
+	 */
+	static bool blockSpan(const ArchiveEntry& entry, uint64_t block, uint64_t prevEnd, uint64_t item, uint64_t& start,
+						  uint64_t& len, bool& raw);
+
+	/**
+	 * Decode one stored block into dst (exactly the block's original length).
+	 * @return false if the data is corrupt
+	 */
+	static bool decodeBlock(const ArchiveEntry& entry, uint64_t block, const uint8_t* src, size_t srcLen, bool raw,
+							uint8_t* dst);
 
 	/**
 	 * Offline check of each file's content hash (not checked by default at runtime).

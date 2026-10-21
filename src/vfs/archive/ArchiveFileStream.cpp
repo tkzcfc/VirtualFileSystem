@@ -1,6 +1,9 @@
 #include "ArchiveFileStream.h"
+#include "ByteIO.h"
 #include "../crypto/XorCipher.h"
 #include <algorithm>
+#include <cstring>
+#include <new>
 
 NS_VFS_BEGIN
 
@@ -13,6 +16,7 @@ ArchiveFileStream::ArchiveFileStream(std::shared_ptr<const ArchiveIndex> index, 
 	, m_dataStart(m_index->baseOffset + static_cast<int64_t>(entry->offset))
 	, m_pos(0)
 	, m_filePos(-1)
+	, m_curBlock(UINT64_MAX)
 {
 }
 
@@ -31,6 +35,9 @@ int ArchiveFileStream::close()
 {
 	m_file.reset();
 	m_open = false;
+	std::vector<uint64_t>().swap(m_blockTable);
+	std::vector<uint8_t>().swap(m_block);
+	std::vector<uint8_t>().swap(m_scratch);
 	return 0;
 }
 
@@ -82,6 +89,14 @@ int ArchiveFileStream::read(void* buf, unsigned int size) const
 	// The read length cannot exceed the remainder of the file or the per-call IO limit
 	size_t want = static_cast<size_t>(std::min<int64_t>(std::min<unsigned int>(size, VFS_MAX_IO_CHUNK), fileSize - m_pos));
 	uint8_t* out = static_cast<uint8_t*>(buf);
+	if (m_entry->compression == CompressionType::LZ4)
+	{
+		const int64_t n = readCompressed(out, want);
+		if (n < 0)
+			return -1;
+		m_pos += n;
+		return static_cast<int>(n);
+	}
 	const int64_t got64 = readSource(out, want, m_dataStart + m_pos);
 	if (got64 < 0)
 		return -1;
@@ -131,6 +146,92 @@ int64_t ArchiveFileStream::size() const
 bool ArchiveFileStream::isOpen() const
 {
 	return m_open;
+}
+
+bool ArchiveFileStream::readStored(uint8_t* out, size_t len, uint64_t storedOff) const
+{
+	size_t got = 0;
+	while (got < len)
+	{
+		const int64_t n = readSource(out + got, len - got, m_dataStart + static_cast<int64_t>(storedOff + got));
+		if (n < 0)
+			return false;
+		got += static_cast<size_t>(n);
+	}
+	if (m_entry->cipher == CipherType::XOR)
+		xorCipher(out, len, m_entry->key.data(), m_entry->keyLength, storedOff);
+	return true;
+}
+
+bool ArchiveFileStream::loadBlock(uint64_t block) const
+{
+	if (block == m_curBlock)
+		return true;
+	try
+	{
+		const uint64_t blocks = m_entry->blockCount();
+		const uint64_t table = m_entry->blockTableSize();
+		if (m_blockTable.empty())
+		{
+			// Load and decrypt the whole table once: later block lookups are O(1)
+			std::vector<uint8_t> raw(static_cast<size_t>(table));
+			if (!readStored(raw.data(), raw.size(), 0))
+				return false;
+			m_blockTable.resize(static_cast<size_t>(blocks));
+			for (uint64_t b = 0; b < blocks; ++b)
+				m_blockTable[b] = ByteIO::readU64LE(raw.data() + b * ArchiveFormat::BLOCK_ENTRY_SIZE);
+		}
+		const uint64_t prevEnd = block == 0 ? 0 : (m_blockTable[block - 1] & ArchiveFormat::BLOCK_END_MASK);
+		uint64_t start = 0, len = 0;
+		bool raw = false;
+		// Each item is validated against its neighbor when used, so a corrupt table is caught without a full scan at open
+		if (block > 0 && (m_blockTable[block - 1] & ArchiveFormat::BLOCK_END_MASK) == 0)
+		{
+			errno = EIO;
+			return false;
+		}
+		if (!ArchiveReader::blockSpan(*m_entry, block, prevEnd, m_blockTable[block], start, len, raw))
+		{
+			errno = EIO;
+			return false;
+		}
+		m_curBlock = UINT64_MAX;
+		m_scratch.resize(static_cast<size_t>(len));
+		if (!readStored(m_scratch.data(), m_scratch.size(), table + start))
+			return false;
+		m_block.resize(static_cast<size_t>(m_entry->blockSize()));
+		if (!ArchiveReader::decodeBlock(*m_entry, block, m_scratch.data(), m_scratch.size(), raw, m_block.data()))
+		{
+			errno = EIO;
+			return false;
+		}
+		m_curBlock = block;
+		return true;
+	}
+	catch (const std::bad_alloc&)
+	{
+		errno = ENOMEM;
+		return false;
+	}
+}
+
+int64_t ArchiveFileStream::readCompressed(uint8_t* out, size_t want) const
+{
+	const uint8_t log2 = m_entry->blockLog2;
+	const uint64_t mask = m_entry->blockSize() - 1;
+	size_t done = 0;
+	while (done < want)
+	{
+		const uint64_t pos = static_cast<uint64_t>(m_pos) + done;
+		if (!loadBlock(pos >> log2))
+			return done > 0 ? static_cast<int64_t>(done) : -1;
+		const uint64_t inBlock = pos & mask;
+		const uint64_t blockLen = std::min<uint64_t>(m_entry->blockSize(), m_entry->size - ((pos >> log2) << log2));
+		const size_t n = static_cast<size_t>(std::min<uint64_t>(want - done, blockLen - inBlock));
+		std::memcpy(out + done, m_block.data() + inBlock, n);
+		done += n;
+	}
+	return static_cast<int64_t>(done);
 }
 
 int64_t ArchiveFileStream::readSource(uint8_t* out, size_t want, int64_t target) const

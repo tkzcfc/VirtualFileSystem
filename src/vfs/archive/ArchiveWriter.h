@@ -20,6 +20,7 @@ struct ArchiveWriteOptions
 	uint32_t fileKeyLength = ArchiveFormat::DEFAULT_FILE_KEY_SIZE;  // per-file XOR key length, 1..32
 	bool dedup = true;                                       // files with identical contents are stored once
 	int compressionLevel = 9;                                // LZ4 HC level 1..12
+	uint8_t blockLog2 = ArchiveFormat::DEFAULT_BLOCK_LOG2;   // default LZ4 block size as log2 (MIN_BLOCK_LOG2..MAX_BLOCK_LOG2)
 };
 
 /**
@@ -29,6 +30,7 @@ struct FileWriteOptions
 {
 	bool encrypt = false;    // XOR encryption
 	bool compress = false;   // LZ4 compression (if the compressed form is not smaller, store the original)
+	uint8_t blockLog2 = 0;   // LZ4 block size as log2 for this file; 0 = ArchiveWriteOptions::blockLog2
 	int64_t mtime = 0;       // mtime written into the index; default 0 keeps the output reproducible
 };
 

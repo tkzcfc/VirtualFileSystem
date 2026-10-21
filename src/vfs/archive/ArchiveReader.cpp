@@ -353,6 +353,7 @@ std::shared_ptr<const ArchiveIndex> ArchiveReader::open(std::shared_ptr<IArchive
 		uint8_t cipher = p[E_CIPHER];
 		uint8_t compression = p[E_COMPRESSION];
 		entry.keyLength = p[E_KEY_LENGTH];
+		entry.blockLog2 = p[E_BLOCK_LOG2];
 		uint32_t nameOffset = ByteIO::readU32LE(p + E_NAME_OFFSET);
 		uint32_t nameLength = ByteIO::readU32LE(p + E_NAME_LENGTH);
 		entry.offset = ByteIO::readU64LE(p + E_OFFSET);
@@ -362,7 +363,7 @@ std::shared_ptr<const ArchiveIndex> ArchiveReader::open(std::shared_ptr<IArchive
 		entry.hash = ByteIO::readU64LE(p + E_HASH);
 		std::memcpy(entry.key.data(), p + E_KEY, entry.key.size());
 		// Reserved fields must be 0 (format.md section 4.1): room for a later version, and a tampered index is rejected.
-		if (ByteIO::readU32LE(p + E_RESERVED0) != 0 || ByteIO::readU64LE(p + E_RESERVED1) != 0)
+		if (p[E_RESERVED0] != 0 || p[E_RESERVED0 + 1] != 0 || p[E_RESERVED0 + 2] != 0 || ByteIO::readU64LE(p + E_RESERVED1) != 0)
 			return fail(Error::CORRUPTED);
 
 		if (type != static_cast<uint8_t>(EntryType::FILE) && type != static_cast<uint8_t>(EntryType::DIR))
@@ -385,7 +386,7 @@ std::shared_ptr<const ArchiveIndex> ArchiveReader::open(std::shared_ptr<IArchive
 		if (entry.type == EntryType::DIR)
 		{
 			if (entry.offset != 0 || entry.storedSize != 0 || entry.size != 0 || entry.cipher != CipherType::NONE ||
-				entry.compression != CompressionType::NONE || entry.keyLength != 0)
+				entry.compression != CompressionType::NONE || entry.keyLength != 0 || entry.blockLog2 != 0)
 				return fail(Error::CORRUPTED);
 			continue;
 		}
@@ -402,13 +403,18 @@ std::shared_ptr<const ArchiveIndex> ArchiveReader::open(std::shared_ptr<IArchive
 			return fail(Error::CORRUPTED);
 		if (entry.compression == CompressionType::NONE && entry.storedSize != entry.size)
 			return fail(Error::CORRUPTED);
-		if (entry.compression == CompressionType::LZ4 &&
-			(entry.size > Compression::lz4MaxInputSize() || entry.storedSize > Compression::lz4MaxInputSize()))
+		if (entry.compression == CompressionType::NONE && entry.blockLog2 != 0)
 			return fail(Error::CORRUPTED);
-		// An LZ4 block's compression ratio is at most about 255:1. A claimed original size above that bound is forged
-		// and must be rejected here, or open would preallocate a huge buffer from size.
-		if (entry.compression == CompressionType::LZ4 && entry.size > entry.storedSize * 255 + 64)
-			return fail(Error::CORRUPTED);
+		if (entry.compression == CompressionType::LZ4)
+		{
+			// Block size in range, and the stored data must at least hold the block table plus one byte per block.
+			// Block spans themselves are checked when the table is read.
+			if (entry.blockLog2 < MIN_BLOCK_LOG2 || entry.blockLog2 > MAX_BLOCK_LOG2 || entry.size == 0)
+				return fail(Error::CORRUPTED);
+			const uint64_t blocks = entry.blockCount();
+			if (blocks > entry.storedSize / (BLOCK_ENTRY_SIZE + 1) || entry.storedSize - entry.blockTableSize() < blocks)
+				return fail(Error::CORRUPTED);
+		}
 	}
 
 	index->baseOffset = base;
@@ -484,15 +490,60 @@ Error ArchiveReader::readEntryImpl(const ArchiveIndex& index, const ArchiveEntry
 	if (entry.compression == CompressionType::LZ4)
 	{
 		out.resize(static_cast<size_t>(entry.size));
-		if (!Compression::lz4Decompress(stored.data(), stored.size(), out.data(), out.size()))
+		const uint64_t blocks = entry.blockCount();
+		const uint64_t table = entry.blockTableSize();
+		uint64_t prevEnd = 0;
+		for (uint64_t b = 0; b < blocks; ++b)
 		{
-			out.clear();
-			return Error::CORRUPTED;
+			uint64_t start = 0, len = 0;
+			bool raw = false;
+			const uint64_t item = ByteIO::readU64LE(stored.data() + b * BLOCK_ENTRY_SIZE);
+			if (!blockSpan(entry, b, prevEnd, item, start, len, raw) ||
+				!decodeBlock(entry, b, stored.data() + table + start, static_cast<size_t>(len), raw,
+							 out.data() + (b << entry.blockLog2)))
+			{
+				out.clear();
+				return Error::CORRUPTED;
+			}
+			prevEnd = start + len;
 		}
 	}
 	else
 		out = std::move(stored);
 	return Error::OK;
+}
+
+bool ArchiveReader::blockSpan(const ArchiveEntry& entry, uint64_t block, uint64_t prevEnd, uint64_t item,
+							  uint64_t& start, uint64_t& len, bool& raw)
+{
+	const uint64_t dataSize = entry.storedSize - entry.blockTableSize();
+	const uint64_t end = item & BLOCK_END_MASK;
+	const uint64_t rawLen = std::min<uint64_t>(entry.blockSize(), entry.size - (block << entry.blockLog2));
+	raw = (item & BLOCK_RAW_FLAG) != 0;
+	if (end <= prevEnd || end > dataSize)
+		return false;
+	// The last block must end exactly at the end of the stored data
+	if (block + 1 == entry.blockCount() && end != dataSize)
+		return false;
+	start = prevEnd;
+	len = end - prevEnd;
+	if (raw)
+		return len == rawLen;
+	return len <= Compression::lz4CompressBound(static_cast<size_t>(rawLen));
+}
+
+bool ArchiveReader::decodeBlock(const ArchiveEntry& entry, uint64_t block, const uint8_t* src, size_t srcLen, bool raw,
+								uint8_t* dst)
+{
+	const size_t rawLen = static_cast<size_t>(std::min<uint64_t>(entry.blockSize(), entry.size - (block << entry.blockLog2)));
+	if (raw)
+	{
+		if (srcLen != rawLen)
+			return false;
+		std::memcpy(dst, src, rawLen);
+		return true;
+	}
+	return Compression::lz4Decompress(src, srcLen, dst, rawLen);
 }
 
 Error ArchiveReader::verify(const ArchiveIndex& index,

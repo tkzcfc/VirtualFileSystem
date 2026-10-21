@@ -33,6 +33,11 @@ VFS_DLL bool lz4Decompress(const uint8_t* src, size_t size, uint8_t* dst, size_t
  */
 VFS_DLL size_t lz4MaxInputSize();
 
+/**
+ * Worst-case compressed size of size input bytes (size must not exceed lz4MaxInputSize()).
+ */
+VFS_DLL size_t lz4CompressBound(size_t size);
+
 } // namespace Compression
 
 NS_VFS_END
