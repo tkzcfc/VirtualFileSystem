@@ -1496,7 +1496,12 @@ std::string nowString()
 
 } // namespace
 
+#ifdef VFS_BENCH_IOS_HOST
+// iOS 上由 ios/IosMain.mm 提供 main，在 UIKit 启动完成后调用这里
+int vfs_bench_main(int argc, char** argv)
+#else
 int main(int argc, char** argv)
+#endif
 {
 	Options opt;
 	if (!parseArgs(argc, argv, opt))
