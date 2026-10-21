@@ -26,6 +26,11 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_L
     target_link_libraries(${lib_name} PUBLIC stdc++fs)
 endif()
 
+# Android：AndroidAssetBackend 使用 AAssetManager（libandroid）
+if(ANDROID)
+    target_link_libraries(${lib_name} PUBLIC android)
+endif()
+
 find_package(Threads REQUIRED)
 target_link_libraries(${lib_name} PUBLIC Threads::Threads)
 
