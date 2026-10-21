@@ -15,7 +15,16 @@
 - **确定性写入规则**：写入、copy-up、删除、`rmdir`、`rename` 的落点和错误都有明确定义，见 [挂载规则](docs/mount-rules.md)。
 - **线程安全**：挂载表采用 copy-on-write 快照，查询不加锁；挂载、卸载可以与读取并发进行；卸载是惰性的，已打开的流可以读完。
 - **`.vfs` 归档**：按文件可选 XOR 加密（支持随机 seek）和 LZ4 压缩，索引用 ChaCha20 加密，内容去重，数据对齐，header 与索引带损坏校验，**同一输入每次打包逐字节一致**。每个流独立持有句柄、按偏移读取，多线程读互不干扰。
-- **跨平台**：Windows（UTF-8 路径自动转 UTF-16，支持长路径）、Linux、macOS；只依赖标准库和 `3rd/` 中的 doctest、xxHash、LZ4、CLI11。
+- **跨平台**：Windows（UTF-8 路径自动转 UTF-16，支持长路径）、Linux、macOS、iOS、Android（含 APK 资源后端 `AndroidAssetBackend`）、WebAssembly（Emscripten）；只依赖标准库和 `3rd/` 中的 doctest、xxHash、LZ4、CLI11。
+
+| 平台 | 状态 |
+|---|---|
+| Windows / Linux / macOS | 全部测试 |
+| iOS | 真机与模拟器编译；模拟器运行全部测试 |
+| Android（API 24+） | arm64-v8a / x86_64 / armeabi-v7a 交叉编译；APK 资源后端 |
+| WebAssembly | Emscripten 构建，node 上运行全部测试 |
+
+各平台的构建方法与注意事项见 [平台支持](docs/platforms.md)。
 
 ## 快速上手
 
@@ -99,6 +108,7 @@ cd build && ctest --output-on-failure
 | `VFS_BUILD_BENCH` | OFF | 构建性能基准 `vfs_bench`，见 [性能基准](docs/benchmark.md) |
 | `VFS_WITH_AXMOL` | OFF | 使用 axmol 的 `ax::IFileStream`，见 [接入 axmol](docs/integration-axmol.md) |
 | `VFS_WARNINGS_AS_ERRORS` | OFF | 把编译警告当作错误 |
+| `VFS_WASM_THREADS` | ON | 仅 Emscripten：所有目标加 `-pthread`，见 [平台支持](docs/platforms.md#webassemblyemscripten) |
 
 作为子项目使用：
 
@@ -163,5 +173,6 @@ tools/vfstool/  命令行工具
 | [docs/format.md](docs/format.md) | `.vfs` 二进制格式规范 |
 | [docs/vfstool.md](docs/vfstool.md) | 命令行工具参考 |
 | [docs/benchmark.md](docs/benchmark.md) | 性能基准：构建运行方法、本机结果与开销分析 |
+| [docs/platforms.md](docs/platforms.md) | 平台支持：Android（APK 资源后端）、iOS、WebAssembly 的构建与注意事项 |
 | [docs/integration-axmol.md](docs/integration-axmol.md) | 接入 axmol 引擎 |
 | [docs/style.md](docs/style.md) | 代码风格 |

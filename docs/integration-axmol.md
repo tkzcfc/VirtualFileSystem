@@ -202,7 +202,20 @@ VfsFileUtils::install(fs, nativeUser);
 
 ## 3. 注意事项
 
-- **在 Android 上**，安装包内的资源不在本机文件系统中，`mountNative` 无法直接挂载 APK 内的目录。推荐把资源打成 `.vfs` 后放到可以按路径访问的位置（例如首次启动时解出到可写目录，或使用 OBB / 外部存储），或者实现一个基于 `AAssetManager` 的 `IBackend` / `IArchiveSource`。
+- **在 Android 上**，安装包内的资源不在本机文件系统中，`mountNative` 无法挂载 APK 内的目录，改用 `AndroidAssetBackend`（见 [平台支持](platforms.md#apk-内的资源androidassetbackend)），直接复用引擎已经设置好的 `AAssetManager`：
+
+  ```cpp
+  #if VFS_PLATFORM_ANDROID
+  #include "vfs/android/AndroidAssetBackend.h"
+  vfs::AndroidAssetBackend::setAssetManager(ax::FileUtilsAndroid::getAssetManager());
+  auto assets = vfs::AndroidAssetBackend::create();
+  // 引擎的资源根目录在 Android 上是 "assets/"，nativeRes + "game.vfs" 不是文件系统路径，改为：
+  fs->mount("/res", vfs::ArchiveBackend::create(assets->archiveSource("game.vfs")));
+  #endif
+  ```
+
+  `.vfs` 在 APK 中要保持未压缩（Gradle：`androidResources { noCompress += "vfs" }`），这样归档内的文件按偏移直接读取。
+  可写目录（`getNativeWritableAbsolutePath()`）是普通文件系统路径，照常用 `mountNative`。
 - **绕过 FileUtils 的模块**（例如某些平台的音频解码、视频播放、按本机路径打开文件的第三方库）看不到 VFS 中的文件。对这类资源，要么在 VFS 外保留本机副本，要么通过 `realPath()` 取得本机路径（只对本机后端上的文件有效）。`getNativeWritableAbsolutePath()` 返回真实目录，就是为这类模块准备的。
 - **全路径缓存**：`FileUtils` 会缓存 `fullPathForFilename` 的结果。挂载、卸载或 `remount` 之后调用 `FileUtils::purgeCachedEntries()`；可以用 `VirtualFileSystem::generation()` 判断是否发生了变化。
 - **线程**：VFS 的所有接口线程安全，单个流对象只能在一个线程中使用。`FileUtils` 自身的搜索路径缓存不是线程安全的，后台线程加载资源时应传入已经解析好的完整路径（与引擎的一般约定一致）。

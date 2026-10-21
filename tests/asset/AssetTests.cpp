@@ -380,3 +380,43 @@ TEST_SUITE("asset")
 		CHECK(test::listNames(fs, "/res/deep") == std::vector<std::string>{"only/"});
 	}
 }
+
+TEST_SUITE("asset")
+{
+	TEST_CASE("a .vfs archive stored in the assets can be mounted through archiveSource (descriptor or stream)")
+	{
+		test::TempDir dir;
+		REQUIRE(test::buildArchive(dir.sub("g.vfs"), {{"scripts/main.lua", test::bytes("print(42)"), {}}, {"big.bin", test::randomBytes(100000, 3), {}}}) == Error::OK);
+		auto archive = test::readNative(dir.sub("g.vfs"));
+		for (bool compressed : {false, true})
+		{
+			CAPTURE(compressed);
+			auto p = std::make_shared<MockProvider>(std::map<std::string, MockAsset>{{"game.vfs", MockAsset{archive, compressed, -1}}, {"dir/x", asset("x")}}, &dir);
+			auto b = AssetBackend::create(p);
+			REQUIRE(b);
+			Error err = Error::OK;
+			auto src = b->archiveSource("game.vfs", &err);
+			REQUIRE(src);
+			CHECK(err == Error::OK);
+#if VFS_PLATFORM_POSIX
+			CHECK(src->supportsReadAt() == !compressed);
+#endif
+			auto ab = ArchiveBackend::create(src, {}, &err);
+			REQUIRE(ab);
+			VirtualFileSystem fs;
+			REQUIRE(fs.mount("/res", ab) != 0);
+			CHECK(test::readAll(fs, "/res/scripts/main.lua") == "print(42)");
+			std::vector<uint8_t> big;
+			REQUIRE(fs.readFile("/res/big.bin", big) == Error::OK);
+			CHECK(big == test::randomBytes(100000, 3));
+			CHECK_FALSE(b->archiveSource("nope.vfs", &err));
+			CHECK(err == Error::NOT_FOUND);
+			CHECK_FALSE(b->archiveSource("dir", &err));
+			CHECK(err == Error::IS_DIR);
+		}
+		AssetBackend raw(std::make_shared<MockProvider>(std::map<std::string, MockAsset>{{"game.vfs", MockAsset{archive, true, -1}}}), "");
+		Error err = Error::OK;
+		CHECK_FALSE(raw.archiveSource("game.vfs", &err));
+		CHECK(err == Error::UNSUPPORTED);
+	}
+}

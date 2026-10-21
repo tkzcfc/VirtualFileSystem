@@ -4,6 +4,7 @@
 #pragma once
 
 #include "../IBackend.h"
+#include "../archive/ArchiveSource.h"
 #include <unordered_map>
 #include <unordered_set>
 
@@ -84,7 +85,7 @@ struct AssetOptions
  * 不经过 AAsset 的游标；压缩存放的资源用 IAssetFile::read/seek。
  * 线程安全：后端本身只有不可变的清单索引，可以无限并发。
  */
-class VFS_DLL AssetBackend : public IBackend
+class VFS_DLL AssetBackend : public IBackend, public std::enable_shared_from_this<AssetBackend>
 {
 public:
 
@@ -113,6 +114,14 @@ public:
 
 	/// 是否使用清单模式
 	bool hasManifest() const { return m_hasManifest; }
+
+	/**
+	 * 把资源中的一个 .vfs 归档包装成归档来源，用于 ArchiveBackend::create（例如 APK 内的 assets/game.vfs）。
+	 * POSIX 平台上资源未压缩存放时（Gradle：androidResources { noCompress += "vfs" }），来源持有一个描述符做位置读，
+	 * 打开归档内的文件不需要再打开资源；否则每个流打开一次资源（压缩存放的资源随机读很慢，不推荐）。
+	 * @return 资源不存在或是目录时返回 nullptr，err 为 NOT_FOUND / IS_DIR 等；后端不是由 shared_ptr 持有时返回 UNSUPPORTED
+	 */
+	std::shared_ptr<IArchiveSource> archiveSource(std::string_view rel, Error* err = nullptr);
 
 private:
 	// 后端相对路径 → 资源路径（加上 root 前缀）

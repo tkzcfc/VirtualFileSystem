@@ -188,7 +188,111 @@ private:
 	bool m_open = true;
 };
 
+/**
+ * 资源中的归档。描述符可用时位置读（pread 本身线程安全），否则每次 openStream 通过后端打开一个新的资源流
+ */
+class AssetArchiveSource : public IArchiveSource
+{
+public:
+	AssetArchiveSource(std::shared_ptr<AssetBackend> backend, std::string rel, std::string describe)
+		: m_backend(std::move(backend)), m_rel(std::move(rel)), m_describe(std::move(describe))
+	{
+	}
+
+	~AssetArchiveSource() override
+	{
+#if VFS_PLATFORM_POSIX
+		if (m_fd >= 0)
+			::close(m_fd);
+#endif
+	}
+
+	// 构造后、发布给其他线程之前调用一次
+	void attachDescriptor([[maybe_unused]] IAssetFile& file)
+	{
+#if VFS_PLATFORM_POSIX
+		int64_t start = 0, len = 0;
+		int fd = file.openFileDescriptor(start, len);
+		if (fd >= 0)
+		{
+			m_fd = fd;
+			m_start = start;
+			m_length = len;
+		}
+#endif
+	}
+
+	std::unique_ptr<IFileStream> openStream(Error* err) const override { return m_backend->open(m_rel, IFileStream::Mode::READ, err); }
+
+#if VFS_PLATFORM_POSIX
+	bool supportsReadAt() const override { return m_fd >= 0; }
+
+	int64_t readAt(void* buf, size_t size, uint64_t offset) const override
+	{
+		if (m_fd < 0)
+			return IArchiveSource::readAt(buf, size, offset);
+		if (offset >= static_cast<uint64_t>(m_length))
+			return 0;
+		size = static_cast<size_t>(std::min<uint64_t>(size, static_cast<uint64_t>(m_length) - offset));
+		ssize_t n;
+		do
+			n = ::pread(m_fd, buf, size, static_cast<off_t>(m_start + static_cast<int64_t>(offset)));
+		while (n < 0 && errno == EINTR);
+		return n;
+	}
+#endif
+
+	std::string describe() const override { return m_describe; }
+
+private:
+	std::shared_ptr<AssetBackend> m_backend;   // 保活后端（及其资源来源）
+	std::string m_rel;
+	std::string m_describe;
+#if VFS_PLATFORM_POSIX
+	int m_fd = -1;
+	int64_t m_start = 0;
+	int64_t m_length = 0;
+#endif
+};
+
 }   // namespace
+
+std::shared_ptr<IArchiveSource> AssetBackend::archiveSource(std::string_view rel, Error* err)
+{
+	std::string key;
+	if (Path::normalizeRelative(rel, key) != Error::OK)
+	{
+		if (err)
+			*err = Error::INVALID_PATH;
+		return nullptr;
+	}
+	Error e = Error::OK;
+	if (!open(key, IFileStream::Mode::READ, &e))   // 统一检查：不存在、是目录、清单外
+	{
+		if (err)
+			*err = e;
+		return nullptr;
+	}
+	auto file = m_provider->open(assetPath(key));
+	if (!file)
+	{
+		if (err)
+			*err = Error::IO_ERROR;
+		return nullptr;
+	}
+	auto self = weak_from_this().lock();
+	if (!self)
+	{
+		if (err)
+			*err = Error::UNSUPPORTED;
+		return nullptr;
+	}
+	auto source = std::make_shared<AssetArchiveSource>(std::move(self), key, "asset:" + assetPath(key));
+	source->attachDescriptor(*file);
+	if (err)
+		*err = Error::OK;
+	return source;
+}
 
 std::shared_ptr<AssetBackend> AssetBackend::create(std::shared_ptr<IAssetProvider> provider, const AssetOptions& options,
 												   Error* err)
