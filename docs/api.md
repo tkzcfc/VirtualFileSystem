@@ -204,7 +204,7 @@ Every built-in stream (`NativeFileStream`, `MemoryFileStream`, `ArchiveFileStrea
 | `nativeHandle` | OS handle | `-1` | `-1` | `-1` |
 | Calling `open()` directly | Supported | `false`, `ENOTSUP` | `false`, `ENOTSUP` | `false`, `ENOTSUP` |
 
-An LZ4-compressed archive file is decompressed entirely into memory when opened; later reads do not touch the disk.
+An LZ4-compressed archive file is stored as independent blocks (default 64 KiB): opening reads nothing, and each read decompresses only the blocks it touches (the stream caches the current block).
 
 ### Ownership and threads
 

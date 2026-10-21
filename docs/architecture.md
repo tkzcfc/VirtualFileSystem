@@ -12,7 +12,7 @@
    ┌──────────────┬───────┴──────┬───────────────┬──────────────┐
 NativeBackend  SingleFileBackend  MemoryBackend   ArchiveBackend   Custom IBackend
    │                 │                │               │
-NativeFileStream  NativeFileStream  MemoryFileStream  ArchiveFileStream / MemoryFileStream
+NativeFileStream  NativeFileStream  MemoryFileStream  ArchiveFileStream
 ```
 
 - **VirtualFileSystem** is the only entry point. It normalizes the caller's path into the `/a/b` form, finds every mount that covers that path (the layer stack), completes the query on the merged view, and decides which layer a write lands on according to the [mount rules](mount-rules.md).
@@ -64,8 +64,8 @@ A backend declares its capabilities through the `BackendCaps` bits returned by `
 | Implementation | Source | Notes |
 |---|---|---|
 | `NativeFileStream` | Native file | POSIX uses `open/lseek/read/write`; Windows uses `CreateFileW` (UTF-8 to UTF-16, a `\\?\` prefix added automatically for long paths, share mode open for read, write, and delete so the file can be deleted or replaced while open; `APPEND` uses an OVERLAPPED offset of `0xFFFFFFFF` for an atomic append; brief sharing conflicts are retried a limited number of times). Refuses to open a directory |
-| `MemoryFileStream` | Memory buffer | Files in the memory backend, and LZ4-compressed files in an archive (decompressed entirely when opened) |
-| `ArchiveFileStream` | Uncompressed file in an archive | Each stream holds its own source handle and reads by offset; an XOR file is decrypted on the fly from the offset within the file; sequential reads skip extra seeks |
+| `MemoryFileStream` | Memory buffer | Files in the memory backend |
+| `ArchiveFileStream` | File in an archive (plain, XOR, block-LZ4) | Reads by offset (positional reads on the shared source, or its own handle); an XOR file is decrypted on the fly from the offset within the stored data; an LZ4 file loads its block table on the first read and decompresses only the touched blocks, caching the current one |
 
 The stream returned by `VirtualFileSystem::openFileStream` is wrapped in a tracking wrapper: it holds a `shared_ptr` to the backend and maintains the open-stream count of its mount. Therefore:
 

@@ -43,6 +43,7 @@ vfstool pack <dir> -o <out.vfs> [options]
 | `--no-index-encrypt` | Do not encrypt the index (file names are visible in the clear) |
 | `--xor-key-len <n>` | Per-file XOR key length, 16..32, default 32 |
 | `--lz4-level <n>` | LZ4 HC level 1..12, default 9 |
+| `--block-size <size>` / `--block-size <glob>=<size>` | LZ4 block size: a power of two from 4K to 4M (`4096`, `64K`, `1M`, ...). Without a glob it sets the default (64K); with a glob it overrides matching files. Repeatable; the last matching rule wins |
 | `--keep-mtime` | Write the real mtime (default 0, so the archive is reproducible) |
 | `--empty-dirs` | Keep empty directories (omitted by default) |
 | `--no-dedup` | Disable content deduplication |
@@ -65,7 +66,7 @@ unpack checks each file's content hash by default; if the destination file alrea
 
 ```
 vfstool info   <archive> [--json]          # Version, entry count, size, alignment, flags, encrypt/compress/dedup statistics
-vfstool list   <archive> [glob] [-l] [--json]   # -l shows size, stored size, flags (D directory / E encrypted / C compressed), and the hash
+vfstool list   <archive> [glob] [-l] [--json]   # -l shows size, stored size, flags (D directory / E encrypted / C compressed), LZ4 block size, and the hash
 vfstool cat    <archive> <path>             # Raw bytes to stdout (switched to binary mode on Windows)
 vfstool verify <archive> [-v]               # Header, index, and each file's content hash
 vfstool keygen [-o key.txt]                 # Generate a 32-byte random key (64 hex characters)
@@ -76,6 +77,9 @@ vfstool keygen [-o key.txt]                 # Generate a 32-byte random key (64 
 ```bash
 # Compress scripts and config, encrypt binary assets, exclude temporary files
 vfstool pack assets -o game.vfs --compress "*.lua" --compress "*.json" --encrypt "**/*.png" --exclude "*.tmp"
+
+# Compress everything with 64K blocks, but use 1M blocks for large sequentially-read audio
+vfstool pack assets -o game.vfs --compress-all --block-size "*.ogg=1M"
 
 # External key (not stored in the file)
 vfstool keygen -o game.key

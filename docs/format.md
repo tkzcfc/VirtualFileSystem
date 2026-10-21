@@ -61,20 +61,21 @@ The plaintext index is `Entry[entryCount]` immediately followed by `StringPool`.
 |---:|---|---|---|
 | 0 | u8 | type | `1` FILE, `2` DIR (only for empty directories kept explicitly) |
 | 1 | u8 | cipher | `0` NONE, `1` XOR |
-| 2 | u8 | compression | `0` NONE, `1` LZ4 (block format) |
+| 2 | u8 | compression | `0` NONE, `1` LZ4 (independent blocks, see 5.2) |
 | 3 | u8 | keyLength | 1..32 when cipher=XOR, otherwise 0 |
 | 4 | u32 | nameOffset | offset of the path inside the StringPool |
 | 8 | u32 | nameLength | path length in bytes, 1..4096 |
-| 12 | u32 | reserved | 0 |
+| 12 | u8 | blockLog2 | LZ4: log2 of the block size, 12..22 (4 KiB..4 MiB); otherwise 0 |
+| 13 | u8[3] | reserved | 0 |
 | 16 | u64 | offset | start of stored data (relative to the archive start) |
-| 24 | u64 | storedSize | stored byte count (after compression) |
+| 24 | u64 | storedSize | stored byte count (after compression, including the LZ4 block table) |
 | 32 | u64 | size | original byte count |
 | 40 | i64 | mtime | Unix seconds; 0 = unknown (writers default to 0 so output is reproducible; runtime stat falls back to the archive file's own mtime) |
 | 48 | u64 | hash | low 64 bits of `XXH3-128(original content)` |
 | 56 | u64 | reserved | 0 |
 | 64 | u8[32] | key | XOR key; the first keyLength bytes are significant, the rest are 0 |
 
-Validation rules (the reader treats every field as untrusted input): type/cipher/compression are legal values; `[nameOffset, nameOffset+nameLength)` lies inside the StringPool; the path is normalized; entries are strictly sorted; the file data range `[offset, offset+storedSize)` lies inside the data region; when uncompressed, `storedSize == size`; when compressed, `size` does not exceed the LZ4 limit, and `size <= storedSize * 255 + 64` (the best LZ4 block ratio is about 255:1; anything beyond that is forged and is rejected before memory is allocated); the same path cannot be both a file and an ancestor of a directory. Data ranges of different entries **may overlap** (shared by dedup).
+Validation rules (the reader treats every field as untrusted input): type/cipher/compression are legal values; `[nameOffset, nameOffset+nameLength)` lies inside the StringPool; the path is normalized; entries are strictly sorted; the file data range `[offset, offset+storedSize)` lies inside the data region; when uncompressed, `storedSize == size`; when uncompressed, `blockLog2 == 0`; when compressed, `size > 0`, `blockLog2` is in 12..22, and `storedSize` holds at least the block table plus one byte per block (block spans are validated when the table is read, see 5.2); the same path cannot be both a file and an ancestor of a directory. Data ranges of different entries **may overlap** (shared by dedup).
 
 ### 4.2 StringPool
 
@@ -93,22 +94,26 @@ All paths are concatenated in entry order, with no trailing 0.
 
 After entries are sorted by path, data is written in that order. The start of each non-empty block is rounded up to `alignment` (pad with 0). An empty file takes no space (`offset` is the current position, `storedSize = 0`).
 
-### 5.2 Compression (LZ4)
+### 5.2 Compression (LZ4 blocks)
 
-- Optional per file, off by default, decided by pack rules. LZ4 HC (default level 9) compresses the whole file into one block.
-- If the compressed form is not smaller than the original, the original is stored (`compression = 0`).
-- At runtime, opening a compressed file **decompresses the whole file into memory** (`MemoryFileStream`); later random reads and writes happen in memory.
+- Optional per file, off by default, decided by pack rules. The file is split into blocks of `2^blockLog2` bytes (default 64 KiB; the last block may be shorter), and each block is compressed independently with LZ4 HC (default level 9).
+- Stored data of a compressed entry = **block table** + blocks. The table has one u64 (little-endian) per block, `blockCount = ceil(size / blockSize)`:
+  - bits 0..62: end offset of the block's stored bytes, relative to the end of the table (block `i` starts where block `i-1` ends; block 0 starts at 0);
+  - bit 63: the block is stored raw (it did not shrink); its stored length then equals its original length.
+- Reader checks per block: end offsets strictly increase, the last block ends exactly at `storedSize - tableSize`, a raw block's length equals its original length, and a compressed block is no longer than `LZ4_compressBound(blockLength)`. A violation or an LZ4 decode failure is reported as corruption (`EIO` from a stream read, `CORRUPTED` from verify/readEntry).
+- If the whole compressed form (table + blocks) is not smaller than the original, the original is stored (`compression = 0`, `blockLog2 = 0`).
+- At runtime a stream loads the table on its first read and then decompresses only the blocks a read touches, caching just the current block. Opening a file reads nothing; seeking is O(1).
 - Order: **compress first, then encrypt**.
 
 ### 5.3 XOR encryption
 
 - Optional per file. Key length is 1..32 (default 32; the CLI allows 16..32).
-- Stored byte `s[i] = p[i] ^ key[i % keyLength]`, where `i` is the offset inside the **stored data** (for a compressed file, the offset inside the compressed bytes). Decryption can therefore start at any position and random seek is supported.
+- Stored byte `s[i] = p[i] ^ key[i % keyLength]`, where `i` is the offset inside the **stored data** (for a compressed file, the offset inside the stored bytes, block table included). Decryption can therefore start at any position and random seek is supported.
 - The key is derived deterministically (so output is reproducible): `key[16k..16k+15] = LE128(XXH3-128(LE64(h.low) || LE64(h.high), seed = 0x5646532D4B455931 + 16k))`, `h = XXH3-128(original content)`. Readers do not depend on the derivation; they use only the key stored in the index.
 
 ### 5.4 Deduplication
 
-Files with the same content (XXH3-128 plus length) and the same storage mode (cipher, compression, keyLength) are written once; several entries point at the same `offset`. Because the XOR key is derived from the content, identical content encrypts to identical bytes, so encrypted files can be deduplicated too.
+Files with the same content (XXH3-128 plus length) and the same storage mode (cipher, compression, keyLength, blockLog2) are written once; several entries point at the same `offset`. Because the XOR key is derived from the content, identical content encrypts to identical bytes, so encrypted files can be deduplicated too.
 
 ## 6. Footer (16 bytes) and locating the start
 

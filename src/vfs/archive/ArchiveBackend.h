@@ -10,7 +10,7 @@ NS_VFS_BEGIN
  * Archive backend.
  * - On mount the index is read and parsed once; later stat/list run entirely in memory, O(1) or O(child count).
  * - Uncompressed files: each open creates an independent handle and reads by offset; XOR files are decrypted in place by position.
- * - LZ4 compressed files: open reads, decrypts, and decompresses the whole file into memory and returns a memory stream.
+ * - LZ4 compressed files: block-compressed; the stream decompresses only the blocks a read touches (see ArchiveFileStream).
  * - Read-only: opening for write returns READ_ONLY. To write, stack a writable Native/Memory layer above.
  * Thread safety: the index is immutable and may be used with unlimited concurrency.
  */
