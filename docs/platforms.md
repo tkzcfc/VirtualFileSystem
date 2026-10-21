@@ -6,7 +6,7 @@
 | Linux (GCC, Clang, libc++) | POSIX | — | All tests, plus a TSAN build |
 | macOS | POSIX + `getattrlist` (case check) | — | All tests |
 | iOS / iPadOS | Same as macOS (the app bundle and sandbox directories are ordinary files) | No dedicated backend | Device (arm64) and simulator builds with zero warnings; all tests on a device (iPhone 14 Pro, iOS 26.5) and on the simulator |
-| Android (API 24+) | POSIX (internal storage, external storage) | `AndroidAssetBackend`: mount `assets/` inside the APK | NDK r27 cross-compile arm64-v8a / x86_64 / armeabi-v7a with zero warnings; all tests on an x86_64 emulator (Android 14) |
+| Android (API 24+) | POSIX (internal storage, external storage) | `AndroidAssetBackend`: mount `assets/` inside the APK | NDK r27 cross-compile arm64-v8a / x86_64 / armeabi-v7a with zero warnings; all tests on an x86_64 emulator (Android 14) and on a real device (Redmi K80, Snapdragon 8 Gen 3, Android 16, arm64-v8a): vfs_tests, stress tests, examples, vfstool, vfs_bench |
 | WebAssembly (Emscripten) | POSIX over the Emscripten FS (MEMFS, NODEFS, NODERAWFS, and so on) | — | All tests under node (pthread build) |
 
 Platform detection uses `VFS_PLATFORM_WINDOWS / LINUX / ANDROID / MACOS / IOS / WASM` from `src/vfs/Platform.h`,
@@ -36,6 +36,17 @@ adb shell "cd /data/local/tmp && TMPDIR=/data/local/tmp ./vfs_tests"
 ```
 
 `vfstool.e2e` needs the host to run vfstool, so it is not run for a cross build.
+
+Real-device run (Redmi K80, Snapdragon 8 Gen 3, Android 16, 2026-10-21): build with `-DVFS_BUILD_BENCH=ON -DVFS_BUILD_EXAMPLES=ON`, push `vfs_tests`, `vfstool`, `vfs_bench`, and the `vfs_example_*` binaries to `/data/local/tmp/vfs`, `chmod 755`, then:
+
+```bash
+adb shell "cd /data/local/tmp/vfs && TMPDIR=/data/local/tmp ./vfs_tests"                                   # 504 test cases passed (4 skipped)
+adb shell "cd /data/local/tmp/vfs && TMPDIR=/data/local/tmp VFS_TEST_SCALE=10 ./vfs_tests --test-suite=stress*"
+adb shell "cd /data/local/tmp/vfs && for e in vfs_example_*; do ./\$e || echo FAIL \$e; done"
+adb shell "cd /data/local/tmp/vfs && ./vfs_bench --dir /data/local/tmp/vfs --csv android.csv --md android.md"
+```
+
+All tests, stress tests (scale 10), examples, and a vfstool pack/verify/unpack/cat round trip pass. Benchmark results: [benchmark.md](benchmark.md#android).
 
 ### Assets inside an APK: AndroidAssetBackend
 

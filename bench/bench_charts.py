@@ -6,23 +6,15 @@
 #   python3 bench/bench_charts.py --platform linux --input linux.csv --out docs/images/bench
 #
 # Output:
-#   <platform>-<scenario>.svg     one chart per scenario: two panels (1 thread, N threads, default 8),
-#                                 each with its own scale, bars sorted fastest first, labeled with ops/s and speedup vs base:stdio
+#   <platform>.svg   one heatmap per platform: two tables side by side (1 thread | N threads, default 8);
+#                    rows = targets, columns = scenarios, cell = speedup vs base:stdio (log-scale diverging color)
+#                    with the absolute ops/s below it
 import argparse
 import csv
 import html
 import os
 import re
 import sys
-
-DEFAULT_SCENARIOS = ["read.small", "read.large.rand", "meta.open", "meta.stat", "meta.miss", "write.churn"]
-# Targets shown in the bar chart (order is display order); missing ones are skipped.
-DEFAULT_TARGETS = ["base:stdio", "base:posix", "base:win32", "vfs:native", "vfs:memory", "vfs:archive",
-                   "vfs:archive-lz4", "vfs:archive+native", "vfs:memory+archive", "vfs:3layer"]
-BASELINES = ("base:stdio", "base:fstream", "base:posix", "base:win32")
-BASE_COLOR = "#a0a0a0"
-VFS_COLOR = "#4e79a7"
-
 
 def parse_number(text):
     """Parse a value of the form "1.23M" / "456.7k" / "789"."""
@@ -70,73 +62,101 @@ def fmt(v):
     return "%.0f" % v
 
 
-def panel(out, x0, y0, width, caption, items, ref):
-    """One panel: items = [(target, value)] sorted fastest-first; ref = base:stdio value (or None)."""
-    bar_h, gap, label_w, value_w = 20, 6, 150, 120
-    chart_w = width - label_w - value_w
-    vmax = max(v for _, v in items)
-    out.append('<text x="%d" y="%d" font-size="14" font-weight="bold">%s</text>' % (x0 + label_w, y0, html.escape(caption)))
-    top = y0 + 12
-    for i, (t, v) in enumerate(items):
-        y = top + i * (bar_h + gap)
-        base = t in BASELINES
-        out.append('<text x="%d" y="%d" text-anchor="end"%s>%s</text>' % (
-            x0 + label_w - 8, y + bar_h - 6, ' fill="#666"' if base else "", html.escape(t)))
-        w = max(1.0, chart_w * v / vmax)
-        out.append('<rect x="%d" y="%d" width="%.1f" height="%d" fill="%s"/>' % (x0 + label_w, y, w, bar_h, BASE_COLOR if base else VFS_COLOR))
-        text = fmt(v) + ("  (%.1fx)" % (v / ref) if ref else "")
-        out.append('<text x="%.1f" y="%d"%s>%s</text>' % (x0 + label_w + w + 5, y + bar_h - 6, ' fill="#666"' if base else "", html.escape(text)))
-    bottom = top + len(items) * (bar_h + gap)
-    out.append('<line x1="%d" y1="%d" x2="%d" y2="%d" stroke="#888"/>' % (x0 + label_w, top - 2, x0 + label_w, bottom))
-    if ref:
-        rx = x0 + label_w + chart_w * ref / vmax
-        out.append('<line x1="%.1f" y1="%d" x2="%.1f" y2="%d" stroke="#333" stroke-dasharray="4,3"/>' % (rx, top - 4, rx, bottom))
-        out.append('<text x="%.1f" y="%d" font-size="11" fill="#333" text-anchor="middle">stdio</text>' % (rx, bottom + 13))
-    return bottom + 16
+import math
+
+# Columns (scenarios) in display order, with short headers.
+SCENARIOS = [("read.small", "small read"), ("read.medium", "medium read"), ("read.large.seq", "large seq"),
+             ("read.large.rand", "large rand"), ("meta.open", "open"), ("meta.stat", "stat"),
+             ("meta.miss", "miss"), ("meta.list", "list"), ("write.create", "create"), ("write.churn", "churn")]
+# Rows (targets) in display order; missing ones are skipped.
+ROWS = ["base:stdio", "base:posix", "base:win32", "vfs:native", "vfs:memory", "vfs:archive", "vfs:archive-lz4",
+        "vfs:archive+native", "vfs:memory+archive", "vfs:3layer"]
+SLOW = (196, 64, 52)    # < 1x (slower than stdio)
+FAST = (27, 120, 80)    # > 1x (faster than stdio)
+CAP = 2.0               # color saturates at 100x / 0.01x (log10 = 2)
 
 
-def bar_chart(title, subtitle, panels, out_path):
-    """panels: [(caption, {target: value})]. Side-by-side horizontal bar panels, each with its own scale."""
-    panel_w, top = 560, 78
-    shown = [(c, d) for c, d in panels if d]
-    width = max(1, len(shown)) * panel_w + 20
+def cell_color(r):
+    t = max(-1.0, min(1.0, math.log10(r) / CAP))
+    end = FAST if t > 0 else SLOW
+    a = abs(t) ** 0.8
+    rgb = tuple(round(255 + (c - 255) * a) for c in end)
+    return "#%02x%02x%02x" % rgb, a > 0.55
+
+
+def heatmap(out, x0, y0, caption, data, threads, rows, cols, show_rows):
+    label_w = 150 if show_rows else 0
+    cw, ch, hh = 74, 40, 26
+    out.append('<text x="%.1f" y="%d" font-size="15" font-weight="bold" text-anchor="middle">%s</text>' % (x0 + label_w + cw * len(cols) / 2, y0, html.escape(caption)))
+    y = y0 + 10
+    for j, (_, lab) in enumerate(cols):
+        out.append('<text x="%.1f" y="%d" text-anchor="middle" font-size="12" fill="#333">%s</text>' % (x0 + label_w + cw * (j + 0.5), y + 16, html.escape(lab)))
+    y += hh
+    for i, t in enumerate(rows):
+        yy = y + i * ch
+        if show_rows:
+            out.append('<text x="%d" y="%.1f" text-anchor="end"%s>%s</text>' % (x0 + label_w - 8, yy + ch / 2 + 5, ' fill="#555"' if t.startswith("base:") else "", html.escape(t)))
+        for j, (sc, _) in enumerate(cols):
+            x = x0 + label_w + j * cw
+            v, ref = data.get((sc, t, threads)), data.get((sc, "base:stdio", threads))
+            if not v or not ref:
+                out.append('<rect x="%d" y="%d" width="%d" height="%d" fill="#f4f4f4" stroke="#fff"/>' % (x, yy, cw, ch))
+                out.append('<text x="%.1f" y="%.1f" text-anchor="middle" fill="#bbb">–</text>' % (x + cw / 2, yy + ch / 2 + 5))
+                continue
+            r = v / ref
+            color, dark = cell_color(r)
+            out.append('<rect x="%d" y="%d" width="%d" height="%d" fill="%s" stroke="#fff"/>' % (x, yy, cw, ch, color))
+            txt = ("%.0fx" % r) if r >= 99.5 else ("%.1fx" % r) if r >= 0.095 else ("%.2fx" % r)
+            out.append('<text x="%.1f" y="%.1f" text-anchor="middle" font-weight="bold" fill="%s">%s</text>' % (x + cw / 2, yy + 18, "#fff" if dark else "#111", txt))
+            out.append('<text x="%.1f" y="%.1f" text-anchor="middle" font-size="10.5" fill="%s">%s</text>' % (x + cw / 2, yy + 33, "#e8e8e8" if dark else "#666", fmt(v)))
+    return x0 + label_w + cw * len(cols), y + len(rows) * ch
+
+
+def render(title, subtitle, data, threads, out_path):
+    present = {(sc, t) for (sc, t, _) in data}
+    rows = [t for t in ROWS if any((sc, t) in present for sc, _ in SCENARIOS)]
+    cols = [(sc, lab) for sc, lab in SCENARIOS if (sc, "base:stdio") in present]
     out = []
-    bottom = top
-    for i, (caption, d) in enumerate(shown):
-        items = sorted(d.items(), key=lambda kv: -kv[1])
-        bottom = max(bottom, panel(out, 10 + i * panel_w, top, panel_w - 10, caption, items, d.get("base:stdio")))
-    height = bottom + 10
+    top = 92
+    x_end, bottom = heatmap(out, 10, top, "1 thread", data, 1, rows, cols, True)
+    x_end, bottom = heatmap(out, x_end + 30, top, "%d threads" % threads, data, threads, rows, cols, False)
+    width = x_end + 20
+    # Color bar legend.
+    ly = bottom + 24
+    stops = [0.01, 0.1, 0.5, 1, 2, 10, 100]
+    bw = 60
+    out.append('<text x="10" y="%d" font-size="12" fill="#333">Speedup vs base:stdio (log color scale):</text>' % (ly + 14))
+    for k, v in enumerate(stops):
+        c, dark = cell_color(v)
+        x = 260 + k * bw
+        out.append('<rect x="%d" y="%d" width="%d" height="20" fill="%s" stroke="#ddd"/>' % (x, ly, bw, c))
+        out.append('<text x="%.1f" y="%d" text-anchor="middle" font-size="11" fill="%s">%gx</text>' % (x + bw / 2, ly + 14, "#fff" if dark else "#111", v))
+    out.append('<text x="10" y="%d" font-size="11" fill="#666">Small grey number = absolute throughput in ops/s. "–" = target not run for that scenario (archive backends are read-only).</text>' % (ly + 42))
+    height = ly + 56
     head = ['<svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d" font-family="Segoe UI,Helvetica,Arial,sans-serif" font-size="13">' % (width, height),
             '<rect width="100%" height="100%" fill="white"/>',
-            '<text x="10" y="24" font-size="17" font-weight="bold">%s</text>' % html.escape(title),
-            '<text x="10" y="44" fill="#555">%s</text>' % html.escape(subtitle),
-            '<text x="10" y="62" font-size="12" fill="#555">Bars sorted fastest first; label = ops/s (speedup vs base:stdio at the same thread count). Grey = direct-API baselines.</text>']
+            '<text x="10" y="26" font-size="18" font-weight="bold">%s</text>' % html.escape(title),
+            '<text x="10" y="48" fill="#555">%s</text>' % html.escape(subtitle),
+            '<text x="10" y="68" font-size="12" fill="#555">Cell = throughput / base:stdio throughput for the same scenario and thread count; green is faster, red is slower.</text>']
     with open(out_path, "w", encoding="utf-8") as f:
         f.write("\n".join(head + out + ["</svg>"]) + "\n")
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Convert vfs_bench results to SVG bar charts")
-    ap.add_argument("--platform", required=True, help="platform name used in titles and file names, e.g. linux")
+    ap = argparse.ArgumentParser(description="Convert vfs_bench results to one SVG heatmap per platform")
+    ap.add_argument("--platform", required=True, help="platform name used in the title and file name, e.g. linux")
     ap.add_argument("--input", required=True, help="vfs_bench --csv output or Markdown tables")
     ap.add_argument("--out", required=True, help="output directory")
-    ap.add_argument("--threads", type=int, default=8, help="multi-thread column to compare against 1 thread (default 8)")
-    ap.add_argument("--label", default="", help="extra subtitle text, e.g. CPU model")
+    ap.add_argument("--threads", type=int, default=8, help="multi-thread table shown next to 1 thread (default 8)")
+    ap.add_argument("--label", default="", help="subtitle text, e.g. CPU, OS, compiler")
     args = ap.parse_args()
 
-    after = load(args.input)
-    if not after:
+    data = load(args.input)
+    if not data:
         sys.exit("no results found in " + args.input)
     os.makedirs(args.out, exist_ok=True)
-    n = args.threads
-    for sc in DEFAULT_SCENARIOS:
-        targets = [t for t in DEFAULT_TARGETS if (sc, t, 1) in after or (sc, t, n) in after]
-        if not targets:
-            continue
-        panels = [(cap, {t: after[(sc, t, th)] for t in targets if after.get((sc, t, th))})
-                  for cap, th in (("1 thread", 1), ("%d threads" % n, n))]
-        bar_chart("%s — %s (ops/s, higher is better)" % (args.platform, sc), args.label, panels,
-                  os.path.join(args.out, "%s-%s.svg" % (args.platform, sc)))
+    render("%s — speed relative to stdio (higher is better)" % args.platform, args.label, data, args.threads,
+           os.path.join(args.out, "%s.svg" % args.platform))
 
 
 if __name__ == "__main__":

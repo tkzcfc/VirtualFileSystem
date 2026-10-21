@@ -1,0 +1,571 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1690" height="568" font-family="Segoe UI,Helvetica,Arial,sans-serif" font-size="13">
+<rect width="100%" height="100%" fill="white"/>
+<text x="10" y="26" font-size="18" font-weight="bold">linux — speed relative to stdio (higher is better)</text>
+<text x="10" y="48" fill="#555">Intel Xeon KVM, 8 vCPU, Debian 13, GCC 14.2 Release</text>
+<text x="10" y="68" font-size="12" fill="#555">Cell = throughput / base:stdio throughput for the same scenario and thread count; green is faster, red is slower.</text>
+<text x="530.0" y="92" font-size="15" font-weight="bold" text-anchor="middle">1 thread</text>
+<text x="197.0" y="118" text-anchor="middle" font-size="12" fill="#333">small read</text>
+<text x="271.0" y="118" text-anchor="middle" font-size="12" fill="#333">medium read</text>
+<text x="345.0" y="118" text-anchor="middle" font-size="12" fill="#333">large seq</text>
+<text x="419.0" y="118" text-anchor="middle" font-size="12" fill="#333">large rand</text>
+<text x="493.0" y="118" text-anchor="middle" font-size="12" fill="#333">open</text>
+<text x="567.0" y="118" text-anchor="middle" font-size="12" fill="#333">stat</text>
+<text x="641.0" y="118" text-anchor="middle" font-size="12" fill="#333">miss</text>
+<text x="715.0" y="118" text-anchor="middle" font-size="12" fill="#333">list</text>
+<text x="789.0" y="118" text-anchor="middle" font-size="12" fill="#333">create</text>
+<text x="863.0" y="118" text-anchor="middle" font-size="12" fill="#333">churn</text>
+<text x="152" y="153.0" text-anchor="end" fill="#555">base:stdio</text>
+<rect x="160" y="128" width="74" height="40" fill="#ffffff" stroke="#fff"/>
+<text x="197.0" y="146.0" text-anchor="middle" font-weight="bold" fill="#111">1.0x</text>
+<text x="197.0" y="161.0" text-anchor="middle" font-size="10.5" fill="#666">336.6k</text>
+<rect x="234" y="128" width="74" height="40" fill="#ffffff" stroke="#fff"/>
+<text x="271.0" y="146.0" text-anchor="middle" font-weight="bold" fill="#111">1.0x</text>
+<text x="271.0" y="161.0" text-anchor="middle" font-size="10.5" fill="#666">21.6k</text>
+<rect x="308" y="128" width="74" height="40" fill="#ffffff" stroke="#fff"/>
+<text x="345.0" y="146.0" text-anchor="middle" font-weight="bold" fill="#111">1.0x</text>
+<text x="345.0" y="161.0" text-anchor="middle" font-size="10.5" fill="#666">6.5k</text>
+<rect x="382" y="128" width="74" height="40" fill="#ffffff" stroke="#fff"/>
+<text x="419.0" y="146.0" text-anchor="middle" font-weight="bold" fill="#111">1.0x</text>
+<text x="419.0" y="161.0" text-anchor="middle" font-size="10.5" fill="#666">951.0k</text>
+<rect x="456" y="128" width="74" height="40" fill="#ffffff" stroke="#fff"/>
+<text x="493.0" y="146.0" text-anchor="middle" font-weight="bold" fill="#111">1.0x</text>
+<text x="493.0" y="161.0" text-anchor="middle" font-size="10.5" fill="#666">696.8k</text>
+<rect x="530" y="128" width="74" height="40" fill="#ffffff" stroke="#fff"/>
+<text x="567.0" y="146.0" text-anchor="middle" font-weight="bold" fill="#111">1.0x</text>
+<text x="567.0" y="161.0" text-anchor="middle" font-size="10.5" fill="#666">668.0k</text>
+<rect x="604" y="128" width="74" height="40" fill="#ffffff" stroke="#fff"/>
+<text x="641.0" y="146.0" text-anchor="middle" font-weight="bold" fill="#111">1.0x</text>
+<text x="641.0" y="161.0" text-anchor="middle" font-size="10.5" fill="#666">1.40M</text>
+<rect x="678" y="128" width="74" height="40" fill="#ffffff" stroke="#fff"/>
+<text x="715.0" y="146.0" text-anchor="middle" font-weight="bold" fill="#111">1.0x</text>
+<text x="715.0" y="161.0" text-anchor="middle" font-size="10.5" fill="#666">308</text>
+<rect x="752" y="128" width="74" height="40" fill="#ffffff" stroke="#fff"/>
+<text x="789.0" y="146.0" text-anchor="middle" font-weight="bold" fill="#111">1.0x</text>
+<text x="789.0" y="161.0" text-anchor="middle" font-size="10.5" fill="#666">25.1k</text>
+<rect x="826" y="128" width="74" height="40" fill="#ffffff" stroke="#fff"/>
+<text x="863.0" y="146.0" text-anchor="middle" font-weight="bold" fill="#111">1.0x</text>
+<text x="863.0" y="161.0" text-anchor="middle" font-size="10.5" fill="#666">98.3k</text>
+<text x="152" y="193.0" text-anchor="end" fill="#555">base:posix</text>
+<rect x="160" y="168" width="74" height="40" fill="#e9f2ee" stroke="#fff"/>
+<text x="197.0" y="186.0" text-anchor="middle" font-weight="bold" fill="#111">1.3x</text>
+<text x="197.0" y="201.0" text-anchor="middle" font-size="10.5" fill="#666">430.3k</text>
+<rect x="234" y="168" width="74" height="40" fill="#e1ede8" stroke="#fff"/>
+<text x="271.0" y="186.0" text-anchor="middle" font-weight="bold" fill="#111">1.4x</text>
+<text x="271.0" y="201.0" text-anchor="middle" font-size="10.5" fill="#666">31.2k</text>
+<rect x="308" y="168" width="74" height="40" fill="#eff6f3" stroke="#fff"/>
+<text x="345.0" y="186.0" text-anchor="middle" font-weight="bold" fill="#111">1.2x</text>
+<text x="345.0" y="201.0" text-anchor="middle" font-size="10.5" fill="#666">7.6k</text>
+<rect x="382" y="168" width="74" height="40" fill="#dae9e2" stroke="#fff"/>
+<text x="419.0" y="186.0" text-anchor="middle" font-weight="bold" fill="#111">1.6x</text>
+<text x="419.0" y="201.0" text-anchor="middle" font-size="10.5" fill="#666">1.54M</text>
+<rect x="456" y="168" width="74" height="40" fill="#e5f0eb" stroke="#fff"/>
+<text x="493.0" y="186.0" text-anchor="middle" font-weight="bold" fill="#111">1.4x</text>
+<text x="493.0" y="201.0" text-anchor="middle" font-size="10.5" fill="#666">942.5k</text>
+<rect x="530" y="168" width="74" height="40" fill="#f4f4f4" stroke="#fff"/>
+<text x="567.0" y="193.0" text-anchor="middle" fill="#bbb">–</text>
+<rect x="604" y="168" width="74" height="40" fill="#f4f4f4" stroke="#fff"/>
+<text x="641.0" y="193.0" text-anchor="middle" fill="#bbb">–</text>
+<rect x="678" y="168" width="74" height="40" fill="#f4f4f4" stroke="#fff"/>
+<text x="715.0" y="193.0" text-anchor="middle" fill="#bbb">–</text>
+<rect x="752" y="168" width="74" height="40" fill="#f3f8f6" stroke="#fff"/>
+<text x="789.0" y="186.0" text-anchor="middle" font-weight="bold" fill="#111">1.1x</text>
+<text x="789.0" y="201.0" text-anchor="middle" font-size="10.5" fill="#666">28.1k</text>
+<rect x="826" y="168" width="74" height="40" fill="#e4efea" stroke="#fff"/>
+<text x="863.0" y="186.0" text-anchor="middle" font-weight="bold" fill="#111">1.4x</text>
+<text x="863.0" y="201.0" text-anchor="middle" font-size="10.5" fill="#666">135.1k</text>
+<text x="152" y="233.0" text-anchor="end">vfs:native</text>
+<rect x="160" y="208" width="74" height="40" fill="#f1f7f5" stroke="#fff"/>
+<text x="197.0" y="226.0" text-anchor="middle" font-weight="bold" fill="#111">1.1x</text>
+<text x="197.0" y="241.0" text-anchor="middle" font-size="10.5" fill="#666">385.8k</text>
+<rect x="234" y="208" width="74" height="40" fill="#cce1d8" stroke="#fff"/>
+<text x="271.0" y="226.0" text-anchor="middle" font-weight="bold" fill="#111">2.0x</text>
+<text x="271.0" y="241.0" text-anchor="middle" font-size="10.5" fill="#666">44.1k</text>
+<rect x="308" y="208" width="74" height="40" fill="#eaf2ef" stroke="#fff"/>
+<text x="345.0" y="226.0" text-anchor="middle" font-weight="bold" fill="#111">1.3x</text>
+<text x="345.0" y="241.0" text-anchor="middle" font-size="10.5" fill="#666">8.2k</text>
+<rect x="382" y="208" width="74" height="40" fill="#ebf3ef" stroke="#fff"/>
+<text x="419.0" y="226.0" text-anchor="middle" font-weight="bold" fill="#111">1.3x</text>
+<text x="419.0" y="241.0" text-anchor="middle" font-size="10.5" fill="#666">1.19M</text>
+<rect x="456" y="208" width="74" height="40" fill="#fbfdfc" stroke="#fff"/>
+<text x="493.0" y="226.0" text-anchor="middle" font-weight="bold" fill="#111">1.0x</text>
+<text x="493.0" y="241.0" text-anchor="middle" font-size="10.5" fill="#666">715.8k</text>
+<rect x="530" y="208" width="74" height="40" fill="#d2e4dc" stroke="#fff"/>
+<text x="567.0" y="226.0" text-anchor="middle" font-weight="bold" fill="#111">1.8x</text>
+<text x="567.0" y="241.0" text-anchor="middle" font-size="10.5" fill="#666">1.23M</text>
+<rect x="604" y="208" width="74" height="40" fill="#fdf9f9" stroke="#fff"/>
+<text x="641.0" y="226.0" text-anchor="middle" font-weight="bold" fill="#111">0.9x</text>
+<text x="641.0" y="241.0" text-anchor="middle" font-size="10.5" fill="#666">1.32M</text>
+<rect x="678" y="208" width="74" height="40" fill="#f7e6e5" stroke="#fff"/>
+<text x="715.0" y="226.0" text-anchor="middle" font-weight="bold" fill="#111">0.7x</text>
+<text x="715.0" y="241.0" text-anchor="middle" font-size="10.5" fill="#666">215</text>
+<rect x="752" y="208" width="74" height="40" fill="#eff6f3" stroke="#fff"/>
+<text x="789.0" y="226.0" text-anchor="middle" font-weight="bold" fill="#111">1.2x</text>
+<text x="789.0" y="241.0" text-anchor="middle" font-size="10.5" fill="#666">29.5k</text>
+<rect x="826" y="208" width="74" height="40" fill="#f9eceb" stroke="#fff"/>
+<text x="863.0" y="226.0" text-anchor="middle" font-weight="bold" fill="#111">0.8x</text>
+<text x="863.0" y="241.0" text-anchor="middle" font-size="10.5" fill="#666">76.0k</text>
+<text x="152" y="273.0" text-anchor="end">vfs:memory</text>
+<rect x="160" y="248" width="74" height="40" fill="#b1d1c3" stroke="#fff"/>
+<text x="197.0" y="266.0" text-anchor="middle" font-weight="bold" fill="#111">3.3x</text>
+<text x="197.0" y="281.0" text-anchor="middle" font-size="10.5" fill="#666">1.12M</text>
+<rect x="234" y="248" width="74" height="40" fill="#cadfd6" stroke="#fff"/>
+<text x="271.0" y="266.0" text-anchor="middle" font-weight="bold" fill="#111">2.1x</text>
+<text x="271.0" y="281.0" text-anchor="middle" font-size="10.5" fill="#666">45.7k</text>
+<rect x="308" y="248" width="74" height="40" fill="#d9e9e2" stroke="#fff"/>
+<text x="345.0" y="266.0" text-anchor="middle" font-weight="bold" fill="#111">1.6x</text>
+<text x="345.0" y="281.0" text-anchor="middle" font-size="10.5" fill="#666">10.5k</text>
+<rect x="382" y="248" width="74" height="40" fill="#d0e3db" stroke="#fff"/>
+<text x="419.0" y="266.0" text-anchor="middle" font-weight="bold" fill="#111">1.9x</text>
+<text x="419.0" y="281.0" text-anchor="middle" font-size="10.5" fill="#666">1.79M</text>
+<rect x="456" y="248" width="74" height="40" fill="#bad6ca" stroke="#fff"/>
+<text x="493.0" y="266.0" text-anchor="middle" font-weight="bold" fill="#111">2.8x</text>
+<text x="493.0" y="281.0" text-anchor="middle" font-size="10.5" fill="#666">1.94M</text>
+<rect x="530" y="248" width="74" height="40" fill="#b2d1c4" stroke="#fff"/>
+<text x="567.0" y="266.0" text-anchor="middle" font-weight="bold" fill="#111">3.3x</text>
+<text x="567.0" y="281.0" text-anchor="middle" font-size="10.5" fill="#666">2.21M</text>
+<rect x="604" y="248" width="74" height="40" fill="#dbeae3" stroke="#fff"/>
+<text x="641.0" y="266.0" text-anchor="middle" font-weight="bold" fill="#111">1.6x</text>
+<text x="641.0" y="281.0" text-anchor="middle" font-size="10.5" fill="#666">2.21M</text>
+<rect x="678" y="248" width="74" height="40" fill="#d5e6df" stroke="#fff"/>
+<text x="715.0" y="266.0" text-anchor="middle" font-weight="bold" fill="#111">1.7x</text>
+<text x="715.0" y="281.0" text-anchor="middle" font-size="10.5" fill="#666">535</text>
+<rect x="752" y="248" width="74" height="40" fill="#a0c7b6" stroke="#fff"/>
+<text x="789.0" y="266.0" text-anchor="middle" font-weight="bold" fill="#111">4.6x</text>
+<text x="789.0" y="281.0" text-anchor="middle" font-size="10.5" fill="#666">116.0k</text>
+<rect x="826" y="248" width="74" height="40" fill="#99c3b1" stroke="#fff"/>
+<text x="863.0" y="266.0" text-anchor="middle" font-weight="bold" fill="#111">5.3x</text>
+<text x="863.0" y="281.0" text-anchor="middle" font-size="10.5" fill="#666">525.6k</text>
+<text x="152" y="313.0" text-anchor="end">vfs:archive</text>
+<rect x="160" y="288" width="74" height="40" fill="#c0dacf" stroke="#fff"/>
+<text x="197.0" y="306.0" text-anchor="middle" font-weight="bold" fill="#111">2.5x</text>
+<text x="197.0" y="321.0" text-anchor="middle" font-size="10.5" fill="#666">841.6k</text>
+<rect x="234" y="288" width="74" height="40" fill="#f5f9f7" stroke="#fff"/>
+<text x="271.0" y="306.0" text-anchor="middle" font-weight="bold" fill="#111">1.1x</text>
+<text x="271.0" y="321.0" text-anchor="middle" font-size="10.5" fill="#666">23.7k</text>
+<rect x="308" y="288" width="74" height="40" fill="#fbf0f0" stroke="#fff"/>
+<text x="345.0" y="306.0" text-anchor="middle" font-weight="bold" fill="#111">0.8x</text>
+<text x="345.0" y="321.0" text-anchor="middle" font-size="10.5" fill="#666">5.4k</text>
+<rect x="382" y="288" width="74" height="40" fill="#fbf3f2" stroke="#fff"/>
+<text x="419.0" y="306.0" text-anchor="middle" font-weight="bold" fill="#111">0.9x</text>
+<text x="419.0" y="321.0" text-anchor="middle" font-size="10.5" fill="#666">817.8k</text>
+<rect x="456" y="288" width="74" height="40" fill="#a5caba" stroke="#fff"/>
+<text x="493.0" y="306.0" text-anchor="middle" font-weight="bold" fill="#111">4.2x</text>
+<text x="493.0" y="321.0" text-anchor="middle" font-size="10.5" fill="#666">2.92M</text>
+<rect x="530" y="288" width="74" height="40" fill="#96c1ae" stroke="#fff"/>
+<text x="567.0" y="306.0" text-anchor="middle" font-weight="bold" fill="#111">5.8x</text>
+<text x="567.0" y="321.0" text-anchor="middle" font-size="10.5" fill="#666">3.87M</text>
+<rect x="604" y="288" width="74" height="40" fill="#c9dfd5" stroke="#fff"/>
+<text x="641.0" y="306.0" text-anchor="middle" font-weight="bold" fill="#111">2.1x</text>
+<text x="641.0" y="321.0" text-anchor="middle" font-size="10.5" fill="#666">3.00M</text>
+<rect x="678" y="288" width="74" height="40" fill="#bdd8cc" stroke="#fff"/>
+<text x="715.0" y="306.0" text-anchor="middle" font-weight="bold" fill="#111">2.7x</text>
+<text x="715.0" y="321.0" text-anchor="middle" font-size="10.5" fill="#666">821</text>
+<rect x="752" y="288" width="74" height="40" fill="#f4f4f4" stroke="#fff"/>
+<text x="789.0" y="313.0" text-anchor="middle" fill="#bbb">–</text>
+<rect x="826" y="288" width="74" height="40" fill="#f4f4f4" stroke="#fff"/>
+<text x="863.0" y="313.0" text-anchor="middle" fill="#bbb">–</text>
+<text x="152" y="353.0" text-anchor="end">vfs:archive-lz4</text>
+<rect x="160" y="328" width="74" height="40" fill="#eef5f2" stroke="#fff"/>
+<text x="197.0" y="346.0" text-anchor="middle" font-weight="bold" fill="#111">1.2x</text>
+<text x="197.0" y="361.0" text-anchor="middle" font-size="10.5" fill="#666">401.1k</text>
+<rect x="234" y="328" width="74" height="40" fill="#f3d9d7" stroke="#fff"/>
+<text x="271.0" y="346.0" text-anchor="middle" font-weight="bold" fill="#111">0.5x</text>
+<text x="271.0" y="361.0" text-anchor="middle" font-size="10.5" fill="#666">11.7k</text>
+<rect x="308" y="328" width="74" height="40" fill="#e2a29c" stroke="#fff"/>
+<text x="345.0" y="346.0" text-anchor="middle" font-weight="bold" fill="#111">0.2x</text>
+<text x="345.0" y="361.0" text-anchor="middle" font-size="10.5" fill="#666">995</text>
+<rect x="382" y="328" width="74" height="40" fill="#da867f" stroke="#fff"/>
+<text x="419.0" y="346.0" text-anchor="middle" font-weight="bold" fill="#fff">0.07x</text>
+<text x="419.0" y="361.0" text-anchor="middle" font-size="10.5" fill="#e8e8e8">70.9k</text>
+<rect x="456" y="328" width="74" height="40" fill="#f7e5e3" stroke="#fff"/>
+<text x="493.0" y="346.0" text-anchor="middle" font-weight="bold" fill="#111">0.7x</text>
+<text x="493.0" y="361.0" text-anchor="middle" font-size="10.5" fill="#666">476.8k</text>
+<rect x="530" y="328" width="74" height="40" fill="#96c1ae" stroke="#fff"/>
+<text x="567.0" y="346.0" text-anchor="middle" font-weight="bold" fill="#111">5.8x</text>
+<text x="567.0" y="361.0" text-anchor="middle" font-size="10.5" fill="#666">3.86M</text>
+<rect x="604" y="328" width="74" height="40" fill="#c8ded5" stroke="#fff"/>
+<text x="641.0" y="346.0" text-anchor="middle" font-weight="bold" fill="#111">2.2x</text>
+<text x="641.0" y="361.0" text-anchor="middle" font-size="10.5" fill="#666">3.04M</text>
+<rect x="678" y="328" width="74" height="40" fill="#b9d5c9" stroke="#fff"/>
+<text x="715.0" y="346.0" text-anchor="middle" font-weight="bold" fill="#111">2.9x</text>
+<text x="715.0" y="361.0" text-anchor="middle" font-size="10.5" fill="#666">884</text>
+<rect x="752" y="328" width="74" height="40" fill="#f4f4f4" stroke="#fff"/>
+<text x="789.0" y="353.0" text-anchor="middle" fill="#bbb">–</text>
+<rect x="826" y="328" width="74" height="40" fill="#f4f4f4" stroke="#fff"/>
+<text x="863.0" y="353.0" text-anchor="middle" fill="#bbb">–</text>
+<text x="152" y="393.0" text-anchor="end">vfs:archive+native</text>
+<rect x="160" y="368" width="74" height="40" fill="#cfe2da" stroke="#fff"/>
+<text x="197.0" y="386.0" text-anchor="middle" font-weight="bold" fill="#111">1.9x</text>
+<text x="197.0" y="401.0" text-anchor="middle" font-size="10.5" fill="#666">654.5k</text>
+<rect x="234" y="368" width="74" height="40" fill="#f0f6f3" stroke="#fff"/>
+<text x="271.0" y="386.0" text-anchor="middle" font-weight="bold" fill="#111">1.2x</text>
+<text x="271.0" y="401.0" text-anchor="middle" font-size="10.5" fill="#666">25.2k</text>
+<rect x="308" y="368" width="74" height="40" fill="#fbf1f0" stroke="#fff"/>
+<text x="345.0" y="386.0" text-anchor="middle" font-weight="bold" fill="#111">0.8x</text>
+<text x="345.0" y="401.0" text-anchor="middle" font-size="10.5" fill="#666">5.4k</text>
+<rect x="382" y="368" width="74" height="40" fill="#fefcfc" stroke="#fff"/>
+<text x="419.0" y="386.0" text-anchor="middle" font-weight="bold" fill="#111">1.0x</text>
+<text x="419.0" y="401.0" text-anchor="middle" font-size="10.5" fill="#666">927.1k</text>
+<rect x="456" y="368" width="74" height="40" fill="#d2e4dd" stroke="#fff"/>
+<text x="493.0" y="386.0" text-anchor="middle" font-weight="bold" fill="#111">1.8x</text>
+<text x="493.0" y="401.0" text-anchor="middle" font-size="10.5" fill="#666">1.27M</text>
+<rect x="530" y="368" width="74" height="40" fill="#cae0d6" stroke="#fff"/>
+<text x="567.0" y="386.0" text-anchor="middle" font-weight="bold" fill="#111">2.1x</text>
+<text x="567.0" y="401.0" text-anchor="middle" font-size="10.5" fill="#666">1.41M</text>
+<rect x="604" y="368" width="74" height="40" fill="#fefdfd" stroke="#fff"/>
+<text x="641.0" y="386.0" text-anchor="middle" font-weight="bold" fill="#111">1.0x</text>
+<text x="641.0" y="401.0" text-anchor="middle" font-size="10.5" fill="#666">1.38M</text>
+<rect x="678" y="368" width="74" height="40" fill="#bbd7cb" stroke="#fff"/>
+<text x="715.0" y="386.0" text-anchor="middle" font-weight="bold" fill="#111">2.8x</text>
+<text x="715.0" y="401.0" text-anchor="middle" font-size="10.5" fill="#666">855</text>
+<rect x="752" y="368" width="74" height="40" fill="#f4f4f4" stroke="#fff"/>
+<text x="789.0" y="393.0" text-anchor="middle" fill="#bbb">–</text>
+<rect x="826" y="368" width="74" height="40" fill="#f4f4f4" stroke="#fff"/>
+<text x="863.0" y="393.0" text-anchor="middle" fill="#bbb">–</text>
+<text x="152" y="433.0" text-anchor="end">vfs:memory+archive</text>
+<rect x="160" y="408" width="74" height="40" fill="#b2d1c4" stroke="#fff"/>
+<text x="197.0" y="426.0" text-anchor="middle" font-weight="bold" fill="#111">3.3x</text>
+<text x="197.0" y="441.0" text-anchor="middle" font-size="10.5" fill="#666">1.11M</text>
+<rect x="234" y="408" width="74" height="40" fill="#e3eee9" stroke="#fff"/>
+<text x="271.0" y="426.0" text-anchor="middle" font-weight="bold" fill="#111">1.4x</text>
+<text x="271.0" y="441.0" text-anchor="middle" font-size="10.5" fill="#666">30.3k</text>
+<rect x="308" y="408" width="74" height="40" fill="#fcf7f6" stroke="#fff"/>
+<text x="345.0" y="426.0" text-anchor="middle" font-weight="bold" fill="#111">0.9x</text>
+<text x="345.0" y="441.0" text-anchor="middle" font-size="10.5" fill="#666">5.9k</text>
+<rect x="382" y="408" width="74" height="40" fill="#e9f2ee" stroke="#fff"/>
+<text x="419.0" y="426.0" text-anchor="middle" font-weight="bold" fill="#111">1.3x</text>
+<text x="419.0" y="441.0" text-anchor="middle" font-size="10.5" fill="#666">1.22M</text>
+<rect x="456" y="408" width="74" height="40" fill="#b1d1c3" stroke="#fff"/>
+<text x="493.0" y="426.0" text-anchor="middle" font-weight="bold" fill="#111">3.3x</text>
+<text x="493.0" y="441.0" text-anchor="middle" font-size="10.5" fill="#666">2.31M</text>
+<rect x="530" y="408" width="74" height="40" fill="#9ec5b4" stroke="#fff"/>
+<text x="567.0" y="426.0" text-anchor="middle" font-weight="bold" fill="#111">4.9x</text>
+<text x="567.0" y="441.0" text-anchor="middle" font-size="10.5" fill="#666">3.28M</text>
+<rect x="604" y="408" width="74" height="40" fill="#d6e7e0" stroke="#fff"/>
+<text x="641.0" y="426.0" text-anchor="middle" font-weight="bold" fill="#111">1.7x</text>
+<text x="641.0" y="441.0" text-anchor="middle" font-size="10.5" fill="#666">2.39M</text>
+<rect x="678" y="408" width="74" height="40" fill="#bad6ca" stroke="#fff"/>
+<text x="715.0" y="426.0" text-anchor="middle" font-weight="bold" fill="#111">2.8x</text>
+<text x="715.0" y="441.0" text-anchor="middle" font-size="10.5" fill="#666">864</text>
+<rect x="752" y="408" width="74" height="40" fill="#a8cbbc" stroke="#fff"/>
+<text x="789.0" y="426.0" text-anchor="middle" font-weight="bold" fill="#111">4.0x</text>
+<text x="789.0" y="441.0" text-anchor="middle" font-size="10.5" fill="#666">100.1k</text>
+<rect x="826" y="408" width="74" height="40" fill="#94c0ad" stroke="#fff"/>
+<text x="863.0" y="426.0" text-anchor="middle" font-weight="bold" fill="#111">5.9x</text>
+<text x="863.0" y="441.0" text-anchor="middle" font-size="10.5" fill="#666">581.9k</text>
+<text x="152" y="473.0" text-anchor="end">vfs:3layer</text>
+<rect x="160" y="448" width="74" height="40" fill="#cbe0d7" stroke="#fff"/>
+<text x="197.0" y="466.0" text-anchor="middle" font-weight="bold" fill="#111">2.1x</text>
+<text x="197.0" y="481.0" text-anchor="middle" font-size="10.5" fill="#666">691.4k</text>
+<rect x="234" y="448" width="74" height="40" fill="#dcebe4" stroke="#fff"/>
+<text x="271.0" y="466.0" text-anchor="middle" font-weight="bold" fill="#111">1.5x</text>
+<text x="271.0" y="481.0" text-anchor="middle" font-size="10.5" fill="#666">33.4k</text>
+<rect x="308" y="448" width="74" height="40" fill="#fefcfb" stroke="#fff"/>
+<text x="345.0" y="466.0" text-anchor="middle" font-weight="bold" fill="#111">1.0x</text>
+<text x="345.0" y="481.0" text-anchor="middle" font-size="10.5" fill="#666">6.3k</text>
+<rect x="382" y="448" width="74" height="40" fill="#e4efeb" stroke="#fff"/>
+<text x="419.0" y="466.0" text-anchor="middle" font-weight="bold" fill="#111">1.4x</text>
+<text x="419.0" y="481.0" text-anchor="middle" font-size="10.5" fill="#666">1.30M</text>
+<rect x="456" y="448" width="74" height="40" fill="#dbeae3" stroke="#fff"/>
+<text x="493.0" y="466.0" text-anchor="middle" font-weight="bold" fill="#111">1.6x</text>
+<text x="493.0" y="481.0" text-anchor="middle" font-size="10.5" fill="#666">1.11M</text>
+<rect x="530" y="448" width="74" height="40" fill="#cde1d9" stroke="#fff"/>
+<text x="567.0" y="466.0" text-anchor="middle" font-weight="bold" fill="#111">2.0x</text>
+<text x="567.0" y="481.0" text-anchor="middle" font-size="10.5" fill="#666">1.33M</text>
+<rect x="604" y="448" width="74" height="40" fill="#faefee" stroke="#fff"/>
+<text x="641.0" y="466.0" text-anchor="middle" font-weight="bold" fill="#111">0.8x</text>
+<text x="641.0" y="481.0" text-anchor="middle" font-size="10.5" fill="#666">1.14M</text>
+<rect x="678" y="448" width="74" height="40" fill="#b9d6c9" stroke="#fff"/>
+<text x="715.0" y="466.0" text-anchor="middle" font-weight="bold" fill="#111">2.9x</text>
+<text x="715.0" y="481.0" text-anchor="middle" font-size="10.5" fill="#666">879</text>
+<rect x="752" y="448" width="74" height="40" fill="#f4f4f4" stroke="#fff"/>
+<text x="789.0" y="473.0" text-anchor="middle" fill="#bbb">–</text>
+<rect x="826" y="448" width="74" height="40" fill="#f4f4f4" stroke="#fff"/>
+<text x="863.0" y="473.0" text-anchor="middle" fill="#bbb">–</text>
+<text x="1300.0" y="92" font-size="15" font-weight="bold" text-anchor="middle">8 threads</text>
+<text x="967.0" y="118" text-anchor="middle" font-size="12" fill="#333">small read</text>
+<text x="1041.0" y="118" text-anchor="middle" font-size="12" fill="#333">medium read</text>
+<text x="1115.0" y="118" text-anchor="middle" font-size="12" fill="#333">large seq</text>
+<text x="1189.0" y="118" text-anchor="middle" font-size="12" fill="#333">large rand</text>
+<text x="1263.0" y="118" text-anchor="middle" font-size="12" fill="#333">open</text>
+<text x="1337.0" y="118" text-anchor="middle" font-size="12" fill="#333">stat</text>
+<text x="1411.0" y="118" text-anchor="middle" font-size="12" fill="#333">miss</text>
+<text x="1485.0" y="118" text-anchor="middle" font-size="12" fill="#333">list</text>
+<text x="1559.0" y="118" text-anchor="middle" font-size="12" fill="#333">create</text>
+<text x="1633.0" y="118" text-anchor="middle" font-size="12" fill="#333">churn</text>
+<rect x="930" y="128" width="74" height="40" fill="#ffffff" stroke="#fff"/>
+<text x="967.0" y="146.0" text-anchor="middle" font-weight="bold" fill="#111">1.0x</text>
+<text x="967.0" y="161.0" text-anchor="middle" font-size="10.5" fill="#666">987.4k</text>
+<rect x="1004" y="128" width="74" height="40" fill="#ffffff" stroke="#fff"/>
+<text x="1041.0" y="146.0" text-anchor="middle" font-weight="bold" fill="#111">1.0x</text>
+<text x="1041.0" y="161.0" text-anchor="middle" font-size="10.5" fill="#666">331.3k</text>
+<rect x="1078" y="128" width="74" height="40" fill="#ffffff" stroke="#fff"/>
+<text x="1115.0" y="146.0" text-anchor="middle" font-weight="bold" fill="#111">1.0x</text>
+<text x="1115.0" y="161.0" text-anchor="middle" font-size="10.5" fill="#666">94.5k</text>
+<rect x="1152" y="128" width="74" height="40" fill="#ffffff" stroke="#fff"/>
+<text x="1189.0" y="146.0" text-anchor="middle" font-weight="bold" fill="#111">1.0x</text>
+<text x="1189.0" y="161.0" text-anchor="middle" font-size="10.5" fill="#666">6.11M</text>
+<rect x="1226" y="128" width="74" height="40" fill="#ffffff" stroke="#fff"/>
+<text x="1263.0" y="146.0" text-anchor="middle" font-weight="bold" fill="#111">1.0x</text>
+<text x="1263.0" y="161.0" text-anchor="middle" font-size="10.5" fill="#666">1.02M</text>
+<rect x="1300" y="128" width="74" height="40" fill="#ffffff" stroke="#fff"/>
+<text x="1337.0" y="146.0" text-anchor="middle" font-weight="bold" fill="#111">1.0x</text>
+<text x="1337.0" y="161.0" text-anchor="middle" font-size="10.5" fill="#666">5.00M</text>
+<rect x="1374" y="128" width="74" height="40" fill="#ffffff" stroke="#fff"/>
+<text x="1411.0" y="146.0" text-anchor="middle" font-weight="bold" fill="#111">1.0x</text>
+<text x="1411.0" y="161.0" text-anchor="middle" font-size="10.5" fill="#666">6.06M</text>
+<rect x="1448" y="128" width="74" height="40" fill="#ffffff" stroke="#fff"/>
+<text x="1485.0" y="146.0" text-anchor="middle" font-weight="bold" fill="#111">1.0x</text>
+<text x="1485.0" y="161.0" text-anchor="middle" font-size="10.5" fill="#666">2.3k</text>
+<rect x="1522" y="128" width="74" height="40" fill="#ffffff" stroke="#fff"/>
+<text x="1559.0" y="146.0" text-anchor="middle" font-weight="bold" fill="#111">1.0x</text>
+<text x="1559.0" y="161.0" text-anchor="middle" font-size="10.5" fill="#666">94.7k</text>
+<rect x="1596" y="128" width="74" height="40" fill="#ffffff" stroke="#fff"/>
+<text x="1633.0" y="146.0" text-anchor="middle" font-weight="bold" fill="#111">1.0x</text>
+<text x="1633.0" y="161.0" text-anchor="middle" font-size="10.5" fill="#666">298.5k</text>
+<rect x="930" y="168" width="74" height="40" fill="#e9f2ee" stroke="#fff"/>
+<text x="967.0" y="186.0" text-anchor="middle" font-weight="bold" fill="#111">1.3x</text>
+<text x="967.0" y="201.0" text-anchor="middle" font-size="10.5" fill="#666">1.27M</text>
+<rect x="1004" y="168" width="74" height="40" fill="#fefbfb" stroke="#fff"/>
+<text x="1041.0" y="186.0" text-anchor="middle" font-weight="bold" fill="#111">1.0x</text>
+<text x="1041.0" y="201.0" text-anchor="middle" font-size="10.5" fill="#666">318.6k</text>
+<rect x="1078" y="168" width="74" height="40" fill="#f5f9f7" stroke="#fff"/>
+<text x="1115.0" y="186.0" text-anchor="middle" font-weight="bold" fill="#111">1.1x</text>
+<text x="1115.0" y="201.0" text-anchor="middle" font-size="10.5" fill="#666">104.2k</text>
+<rect x="1152" y="168" width="74" height="40" fill="#e0ede7" stroke="#fff"/>
+<text x="1189.0" y="186.0" text-anchor="middle" font-weight="bold" fill="#111">1.5x</text>
+<text x="1189.0" y="201.0" text-anchor="middle" font-size="10.5" fill="#666">8.95M</text>
+<rect x="1226" y="168" width="74" height="40" fill="#eef5f2" stroke="#fff"/>
+<text x="1263.0" y="186.0" text-anchor="middle" font-weight="bold" fill="#111">1.2x</text>
+<text x="1263.0" y="201.0" text-anchor="middle" font-size="10.5" fill="#666">1.22M</text>
+<rect x="1300" y="168" width="74" height="40" fill="#f4f4f4" stroke="#fff"/>
+<text x="1337.0" y="193.0" text-anchor="middle" fill="#bbb">–</text>
+<rect x="1374" y="168" width="74" height="40" fill="#f4f4f4" stroke="#fff"/>
+<text x="1411.0" y="193.0" text-anchor="middle" fill="#bbb">–</text>
+<rect x="1448" y="168" width="74" height="40" fill="#f4f4f4" stroke="#fff"/>
+<text x="1485.0" y="193.0" text-anchor="middle" fill="#bbb">–</text>
+<rect x="1522" y="168" width="74" height="40" fill="#cde1d9" stroke="#fff"/>
+<text x="1559.0" y="186.0" text-anchor="middle" font-weight="bold" fill="#111">2.0x</text>
+<text x="1559.0" y="201.0" text-anchor="middle" font-size="10.5" fill="#666">189.4k</text>
+<rect x="1596" y="168" width="74" height="40" fill="#edf4f1" stroke="#fff"/>
+<text x="1633.0" y="186.0" text-anchor="middle" font-weight="bold" fill="#111">1.2x</text>
+<text x="1633.0" y="201.0" text-anchor="middle" font-size="10.5" fill="#666">361.6k</text>
+<rect x="930" y="208" width="74" height="40" fill="#e9f2ee" stroke="#fff"/>
+<text x="967.0" y="226.0" text-anchor="middle" font-weight="bold" fill="#111">1.3x</text>
+<text x="967.0" y="241.0" text-anchor="middle" font-size="10.5" fill="#666">1.27M</text>
+<rect x="1004" y="208" width="74" height="40" fill="#fdf9f9" stroke="#fff"/>
+<text x="1041.0" y="226.0" text-anchor="middle" font-weight="bold" fill="#111">0.9x</text>
+<text x="1041.0" y="241.0" text-anchor="middle" font-size="10.5" fill="#666">312.8k</text>
+<rect x="1078" y="208" width="74" height="40" fill="#fefcfc" stroke="#fff"/>
+<text x="1115.0" y="226.0" text-anchor="middle" font-weight="bold" fill="#111">1.0x</text>
+<text x="1115.0" y="241.0" text-anchor="middle" font-size="10.5" fill="#666">92.5k</text>
+<rect x="1152" y="208" width="74" height="40" fill="#ebf3f0" stroke="#fff"/>
+<text x="1189.0" y="226.0" text-anchor="middle" font-weight="bold" fill="#111">1.2x</text>
+<text x="1189.0" y="241.0" text-anchor="middle" font-size="10.5" fill="#666">7.63M</text>
+<rect x="1226" y="208" width="74" height="40" fill="#f0f6f4" stroke="#fff"/>
+<text x="1263.0" y="226.0" text-anchor="middle" font-weight="bold" fill="#111">1.2x</text>
+<text x="1263.0" y="241.0" text-anchor="middle" font-size="10.5" fill="#666">1.18M</text>
+<rect x="1300" y="208" width="74" height="40" fill="#edf4f1" stroke="#fff"/>
+<text x="1337.0" y="226.0" text-anchor="middle" font-weight="bold" fill="#111">1.2x</text>
+<text x="1337.0" y="241.0" text-anchor="middle" font-size="10.5" fill="#666">6.11M</text>
+<rect x="1374" y="208" width="74" height="40" fill="#faf0ef" stroke="#fff"/>
+<text x="1411.0" y="226.0" text-anchor="middle" font-weight="bold" fill="#111">0.8x</text>
+<text x="1411.0" y="241.0" text-anchor="middle" font-size="10.5" fill="#666">5.03M</text>
+<rect x="1448" y="208" width="74" height="40" fill="#f7e7e5" stroke="#fff"/>
+<text x="1485.0" y="226.0" text-anchor="middle" font-weight="bold" fill="#111">0.7x</text>
+<text x="1485.0" y="241.0" text-anchor="middle" font-size="10.5" fill="#666">1.6k</text>
+<rect x="1522" y="208" width="74" height="40" fill="#d1e4dc" stroke="#fff"/>
+<text x="1559.0" y="226.0" text-anchor="middle" font-weight="bold" fill="#111">1.9x</text>
+<text x="1559.0" y="241.0" text-anchor="middle" font-size="10.5" fill="#666">175.9k</text>
+<rect x="1596" y="208" width="74" height="40" fill="#fefffe" stroke="#fff"/>
+<text x="1633.0" y="226.0" text-anchor="middle" font-weight="bold" fill="#111">1.0x</text>
+<text x="1633.0" y="241.0" text-anchor="middle" font-size="10.5" fill="#666">299.7k</text>
+<rect x="930" y="248" width="74" height="40" fill="#a8cbbc" stroke="#fff"/>
+<text x="967.0" y="266.0" text-anchor="middle" font-weight="bold" fill="#111">4.0x</text>
+<text x="967.0" y="281.0" text-anchor="middle" font-size="10.5" fill="#666">3.96M</text>
+<rect x="1004" y="248" width="74" height="40" fill="#c7ded4" stroke="#fff"/>
+<text x="1041.0" y="266.0" text-anchor="middle" font-weight="bold" fill="#111">2.2x</text>
+<text x="1041.0" y="281.0" text-anchor="middle" font-size="10.5" fill="#666">735.9k</text>
+<rect x="1078" y="248" width="74" height="40" fill="#e3efea" stroke="#fff"/>
+<text x="1115.0" y="266.0" text-anchor="middle" font-weight="bold" fill="#111">1.4x</text>
+<text x="1115.0" y="281.0" text-anchor="middle" font-size="10.5" fill="#666">131.6k</text>
+<rect x="1152" y="248" width="74" height="40" fill="#e9f2ee" stroke="#fff"/>
+<text x="1189.0" y="266.0" text-anchor="middle" font-weight="bold" fill="#111">1.3x</text>
+<text x="1189.0" y="281.0" text-anchor="middle" font-size="10.5" fill="#666">7.88M</text>
+<rect x="1226" y="248" width="74" height="40" fill="#adcfc0" stroke="#fff"/>
+<text x="1263.0" y="266.0" text-anchor="middle" font-weight="bold" fill="#111">3.6x</text>
+<text x="1263.0" y="281.0" text-anchor="middle" font-size="10.5" fill="#666">3.65M</text>
+<rect x="1300" y="248" width="74" height="40" fill="#e9f2ee" stroke="#fff"/>
+<text x="1337.0" y="266.0" text-anchor="middle" font-weight="bold" fill="#111">1.3x</text>
+<text x="1337.0" y="281.0" text-anchor="middle" font-size="10.5" fill="#666">6.38M</text>
+<rect x="1374" y="248" width="74" height="40" fill="#fcf5f4" stroke="#fff"/>
+<text x="1411.0" y="266.0" text-anchor="middle" font-weight="bold" fill="#111">0.9x</text>
+<text x="1411.0" y="281.0" text-anchor="middle" font-size="10.5" fill="#666">5.40M</text>
+<rect x="1448" y="248" width="74" height="40" fill="#d5e6df" stroke="#fff"/>
+<text x="1485.0" y="266.0" text-anchor="middle" font-weight="bold" fill="#111">1.7x</text>
+<text x="1485.0" y="281.0" text-anchor="middle" font-size="10.5" fill="#666">4.1k</text>
+<rect x="1522" y="248" width="74" height="40" fill="#91beaa" stroke="#fff"/>
+<text x="1559.0" y="266.0" text-anchor="middle" font-weight="bold" fill="#111">6.4x</text>
+<text x="1559.0" y="281.0" text-anchor="middle" font-size="10.5" fill="#666">605.5k</text>
+<rect x="1596" y="248" width="74" height="40" fill="#c2dbd0" stroke="#fff"/>
+<text x="1633.0" y="266.0" text-anchor="middle" font-weight="bold" fill="#111">2.4x</text>
+<text x="1633.0" y="281.0" text-anchor="middle" font-size="10.5" fill="#666">729.5k</text>
+<rect x="930" y="288" width="74" height="40" fill="#b4d3c6" stroke="#fff"/>
+<text x="967.0" y="306.0" text-anchor="middle" font-weight="bold" fill="#111">3.1x</text>
+<text x="967.0" y="321.0" text-anchor="middle" font-size="10.5" fill="#666">3.10M</text>
+<rect x="1004" y="288" width="74" height="40" fill="#f3f8f6" stroke="#fff"/>
+<text x="1041.0" y="306.0" text-anchor="middle" font-weight="bold" fill="#111">1.1x</text>
+<text x="1041.0" y="321.0" text-anchor="middle" font-size="10.5" fill="#666">371.7k</text>
+<rect x="1078" y="288" width="74" height="40" fill="#fbf1f0" stroke="#fff"/>
+<text x="1115.0" y="306.0" text-anchor="middle" font-weight="bold" fill="#111">0.8x</text>
+<text x="1115.0" y="321.0" text-anchor="middle" font-size="10.5" fill="#666">78.7k</text>
+<rect x="1152" y="288" width="74" height="40" fill="#fefdfd" stroke="#fff"/>
+<text x="1189.0" y="306.0" text-anchor="middle" font-weight="bold" fill="#111">1.0x</text>
+<text x="1189.0" y="321.0" text-anchor="middle" font-size="10.5" fill="#666">6.03M</text>
+<rect x="1226" y="288" width="74" height="40" fill="#b4d3c5" stroke="#fff"/>
+<text x="1263.0" y="306.0" text-anchor="middle" font-weight="bold" fill="#111">3.2x</text>
+<text x="1263.0" y="321.0" text-anchor="middle" font-size="10.5" fill="#666">3.21M</text>
+<rect x="1300" y="288" width="74" height="40" fill="#a7cbbb" stroke="#fff"/>
+<text x="1337.0" y="306.0" text-anchor="middle" font-weight="bold" fill="#111">4.1x</text>
+<text x="1337.0" y="321.0" text-anchor="middle" font-size="10.5" fill="#666">20.31M</text>
+<rect x="1374" y="288" width="74" height="40" fill="#d1e4dc" stroke="#fff"/>
+<text x="1411.0" y="306.0" text-anchor="middle" font-weight="bold" fill="#111">1.9x</text>
+<text x="1411.0" y="321.0" text-anchor="middle" font-size="10.5" fill="#666">11.30M</text>
+<rect x="1448" y="288" width="74" height="40" fill="#bbd7cb" stroke="#fff"/>
+<text x="1485.0" y="306.0" text-anchor="middle" font-weight="bold" fill="#111">2.8x</text>
+<text x="1485.0" y="321.0" text-anchor="middle" font-size="10.5" fill="#666">6.4k</text>
+<rect x="1522" y="288" width="74" height="40" fill="#f4f4f4" stroke="#fff"/>
+<text x="1559.0" y="313.0" text-anchor="middle" fill="#bbb">–</text>
+<rect x="1596" y="288" width="74" height="40" fill="#f4f4f4" stroke="#fff"/>
+<text x="1633.0" y="313.0" text-anchor="middle" fill="#bbb">–</text>
+<rect x="930" y="328" width="74" height="40" fill="#c6ddd3" stroke="#fff"/>
+<text x="967.0" y="346.0" text-anchor="middle" font-weight="bold" fill="#111">2.3x</text>
+<text x="967.0" y="361.0" text-anchor="middle" font-size="10.5" fill="#666">2.23M</text>
+<rect x="1004" y="328" width="74" height="40" fill="#eabbb7" stroke="#fff"/>
+<text x="1041.0" y="346.0" text-anchor="middle" font-weight="bold" fill="#111">0.3x</text>
+<text x="1041.0" y="361.0" text-anchor="middle" font-size="10.5" fill="#666">93.0k</text>
+<rect x="1078" y="328" width="74" height="40" fill="#d77e76" stroke="#fff"/>
+<text x="1115.0" y="346.0" text-anchor="middle" font-weight="bold" fill="#fff">0.06x</text>
+<text x="1115.0" y="361.0" text-anchor="middle" font-size="10.5" fill="#e8e8e8">5.6k</text>
+<rect x="1152" y="328" width="74" height="40" fill="#d88078" stroke="#fff"/>
+<text x="1189.0" y="346.0" text-anchor="middle" font-weight="bold" fill="#fff">0.06x</text>
+<text x="1189.0" y="361.0" text-anchor="middle" font-size="10.5" fill="#e8e8e8">386.6k</text>
+<rect x="1226" y="328" width="74" height="40" fill="#cde1d8" stroke="#fff"/>
+<text x="1263.0" y="346.0" text-anchor="middle" font-weight="bold" fill="#111">2.0x</text>
+<text x="1263.0" y="361.0" text-anchor="middle" font-size="10.5" fill="#666">2.04M</text>
+<rect x="1300" y="328" width="74" height="40" fill="#b5d3c6" stroke="#fff"/>
+<text x="1337.0" y="346.0" text-anchor="middle" font-weight="bold" fill="#111">3.1x</text>
+<text x="1337.0" y="361.0" text-anchor="middle" font-size="10.5" fill="#666">15.60M</text>
+<rect x="1374" y="328" width="74" height="40" fill="#d9e8e2" stroke="#fff"/>
+<text x="1411.0" y="346.0" text-anchor="middle" font-weight="bold" fill="#111">1.6x</text>
+<text x="1411.0" y="361.0" text-anchor="middle" font-size="10.5" fill="#666">9.95M</text>
+<rect x="1448" y="328" width="74" height="40" fill="#bbd7cb" stroke="#fff"/>
+<text x="1485.0" y="346.0" text-anchor="middle" font-weight="bold" fill="#111">2.8x</text>
+<text x="1485.0" y="361.0" text-anchor="middle" font-size="10.5" fill="#666">6.5k</text>
+<rect x="1522" y="328" width="74" height="40" fill="#f4f4f4" stroke="#fff"/>
+<text x="1559.0" y="353.0" text-anchor="middle" fill="#bbb">–</text>
+<rect x="1596" y="328" width="74" height="40" fill="#f4f4f4" stroke="#fff"/>
+<text x="1633.0" y="353.0" text-anchor="middle" fill="#bbb">–</text>
+<rect x="930" y="368" width="74" height="40" fill="#a7cbbc" stroke="#fff"/>
+<text x="967.0" y="386.0" text-anchor="middle" font-weight="bold" fill="#111">4.0x</text>
+<text x="967.0" y="401.0" text-anchor="middle" font-size="10.5" fill="#666">3.99M</text>
+<rect x="1004" y="368" width="74" height="40" fill="#eef5f2" stroke="#fff"/>
+<text x="1041.0" y="386.0" text-anchor="middle" font-weight="bold" fill="#111">1.2x</text>
+<text x="1041.0" y="401.0" text-anchor="middle" font-size="10.5" fill="#666">397.4k</text>
+<rect x="1078" y="368" width="74" height="40" fill="#fcf5f4" stroke="#fff"/>
+<text x="1115.0" y="386.0" text-anchor="middle" font-weight="bold" fill="#111">0.9x</text>
+<text x="1115.0" y="401.0" text-anchor="middle" font-size="10.5" fill="#666">83.6k</text>
+<rect x="1152" y="368" width="74" height="40" fill="#eff5f3" stroke="#fff"/>
+<text x="1189.0" y="386.0" text-anchor="middle" font-weight="bold" fill="#111">1.2x</text>
+<text x="1189.0" y="401.0" text-anchor="middle" font-size="10.5" fill="#666">7.22M</text>
+<rect x="1226" y="368" width="74" height="40" fill="#aacdbe" stroke="#fff"/>
+<text x="1263.0" y="386.0" text-anchor="middle" font-weight="bold" fill="#111">3.8x</text>
+<text x="1263.0" y="401.0" text-anchor="middle" font-size="10.5" fill="#666">3.89M</text>
+<rect x="1300" y="368" width="74" height="40" fill="#d0e3db" stroke="#fff"/>
+<text x="1337.0" y="386.0" text-anchor="middle" font-weight="bold" fill="#111">1.9x</text>
+<text x="1337.0" y="401.0" text-anchor="middle" font-size="10.5" fill="#666">9.51M</text>
+<rect x="1374" y="368" width="74" height="40" fill="#faedec" stroke="#fff"/>
+<text x="1411.0" y="386.0" text-anchor="middle" font-weight="bold" fill="#111">0.8x</text>
+<text x="1411.0" y="401.0" text-anchor="middle" font-size="10.5" fill="#666">4.80M</text>
+<rect x="1448" y="368" width="74" height="40" fill="#bdd8cc" stroke="#fff"/>
+<text x="1485.0" y="386.0" text-anchor="middle" font-weight="bold" fill="#111">2.7x</text>
+<text x="1485.0" y="401.0" text-anchor="middle" font-size="10.5" fill="#666">6.3k</text>
+<rect x="1522" y="368" width="74" height="40" fill="#f4f4f4" stroke="#fff"/>
+<text x="1559.0" y="393.0" text-anchor="middle" fill="#bbb">–</text>
+<rect x="1596" y="368" width="74" height="40" fill="#f4f4f4" stroke="#fff"/>
+<text x="1633.0" y="393.0" text-anchor="middle" fill="#bbb">–</text>
+<rect x="930" y="408" width="74" height="40" fill="#adcfc0" stroke="#fff"/>
+<text x="967.0" y="426.0" text-anchor="middle" font-weight="bold" fill="#111">3.6x</text>
+<text x="967.0" y="441.0" text-anchor="middle" font-size="10.5" fill="#666">3.54M</text>
+<rect x="1004" y="408" width="74" height="40" fill="#f5f9f7" stroke="#fff"/>
+<text x="1041.0" y="426.0" text-anchor="middle" font-weight="bold" fill="#111">1.1x</text>
+<text x="1041.0" y="441.0" text-anchor="middle" font-size="10.5" fill="#666">362.9k</text>
+<rect x="1078" y="408" width="74" height="40" fill="#f6e2e1" stroke="#fff"/>
+<text x="1115.0" y="426.0" text-anchor="middle" font-weight="bold" fill="#111">0.7x</text>
+<text x="1115.0" y="441.0" text-anchor="middle" font-size="10.5" fill="#666">61.6k</text>
+<rect x="1152" y="408" width="74" height="40" fill="#f0f6f3" stroke="#fff"/>
+<text x="1189.0" y="426.0" text-anchor="middle" font-weight="bold" fill="#111">1.2x</text>
+<text x="1189.0" y="441.0" text-anchor="middle" font-size="10.5" fill="#666">7.16M</text>
+<rect x="1226" y="408" width="74" height="40" fill="#b0d0c2" stroke="#fff"/>
+<text x="1263.0" y="426.0" text-anchor="middle" font-weight="bold" fill="#111">3.4x</text>
+<text x="1263.0" y="441.0" text-anchor="middle" font-size="10.5" fill="#666">3.47M</text>
+<rect x="1300" y="408" width="74" height="40" fill="#c1dacf" stroke="#fff"/>
+<text x="1337.0" y="426.0" text-anchor="middle" font-weight="bold" fill="#111">2.5x</text>
+<text x="1337.0" y="441.0" text-anchor="middle" font-size="10.5" fill="#666">12.39M</text>
+<rect x="1374" y="408" width="74" height="40" fill="#cde1d8" stroke="#fff"/>
+<text x="1411.0" y="426.0" text-anchor="middle" font-weight="bold" fill="#111">2.0x</text>
+<text x="1411.0" y="441.0" text-anchor="middle" font-size="10.5" fill="#666">12.19M</text>
+<rect x="1448" y="408" width="74" height="40" fill="#c1dacf" stroke="#fff"/>
+<text x="1485.0" y="426.0" text-anchor="middle" font-weight="bold" fill="#111">2.5x</text>
+<text x="1485.0" y="441.0" text-anchor="middle" font-size="10.5" fill="#666">5.8k</text>
+<rect x="1522" y="408" width="74" height="40" fill="#93bfac" stroke="#fff"/>
+<text x="1559.0" y="426.0" text-anchor="middle" font-weight="bold" fill="#111">6.1x</text>
+<text x="1559.0" y="441.0" text-anchor="middle" font-size="10.5" fill="#666">575.9k</text>
+<rect x="1596" y="408" width="74" height="40" fill="#c0dacf" stroke="#fff"/>
+<text x="1633.0" y="426.0" text-anchor="middle" font-weight="bold" fill="#111">2.5x</text>
+<text x="1633.0" y="441.0" text-anchor="middle" font-size="10.5" fill="#666">750.5k</text>
+<rect x="930" y="448" width="74" height="40" fill="#abcdbe" stroke="#fff"/>
+<text x="967.0" y="466.0" text-anchor="middle" font-weight="bold" fill="#111">3.8x</text>
+<text x="967.0" y="481.0" text-anchor="middle" font-size="10.5" fill="#666">3.72M</text>
+<rect x="1004" y="448" width="74" height="40" fill="#e9f2ee" stroke="#fff"/>
+<text x="1041.0" y="466.0" text-anchor="middle" font-weight="bold" fill="#111">1.3x</text>
+<text x="1041.0" y="481.0" text-anchor="middle" font-size="10.5" fill="#666">425.1k</text>
+<rect x="1078" y="448" width="74" height="40" fill="#fcf4f4" stroke="#fff"/>
+<text x="1115.0" y="466.0" text-anchor="middle" font-weight="bold" fill="#111">0.9x</text>
+<text x="1115.0" y="481.0" text-anchor="middle" font-size="10.5" fill="#666">83.2k</text>
+<rect x="1152" y="448" width="74" height="40" fill="#e7f1ed" stroke="#fff"/>
+<text x="1189.0" y="466.0" text-anchor="middle" font-weight="bold" fill="#111">1.3x</text>
+<text x="1189.0" y="481.0" text-anchor="middle" font-size="10.5" fill="#666">8.04M</text>
+<rect x="1226" y="448" width="74" height="40" fill="#afd0c2" stroke="#fff"/>
+<text x="1263.0" y="466.0" text-anchor="middle" font-weight="bold" fill="#111">3.5x</text>
+<text x="1263.0" y="481.0" text-anchor="middle" font-size="10.5" fill="#666">3.52M</text>
+<rect x="1300" y="448" width="74" height="40" fill="#e0ede7" stroke="#fff"/>
+<text x="1337.0" y="466.0" text-anchor="middle" font-weight="bold" fill="#111">1.5x</text>
+<text x="1337.0" y="481.0" text-anchor="middle" font-size="10.5" fill="#666">7.31M</text>
+<rect x="1374" y="448" width="74" height="40" fill="#eff5f2" stroke="#fff"/>
+<text x="1411.0" y="466.0" text-anchor="middle" font-weight="bold" fill="#111">1.2x</text>
+<text x="1411.0" y="481.0" text-anchor="middle" font-size="10.5" fill="#666">7.19M</text>
+<rect x="1448" y="448" width="74" height="40" fill="#c4dcd2" stroke="#fff"/>
+<text x="1485.0" y="466.0" text-anchor="middle" font-weight="bold" fill="#111">2.3x</text>
+<text x="1485.0" y="481.0" text-anchor="middle" font-size="10.5" fill="#666">5.5k</text>
+<rect x="1522" y="448" width="74" height="40" fill="#f4f4f4" stroke="#fff"/>
+<text x="1559.0" y="473.0" text-anchor="middle" fill="#bbb">–</text>
+<rect x="1596" y="448" width="74" height="40" fill="#f4f4f4" stroke="#fff"/>
+<text x="1633.0" y="473.0" text-anchor="middle" fill="#bbb">–</text>
+<text x="10" y="526" font-size="12" fill="#333">Speedup vs base:stdio (log color scale):</text>
+<rect x="260" y="512" width="60" height="20" fill="#c44034" stroke="#ddd"/>
+<text x="290.0" y="526" text-anchor="middle" font-size="11" fill="#fff">0.01x</text>
+<rect x="320" y="512" width="60" height="20" fill="#dd918a" stroke="#ddd"/>
+<text x="350.0" y="526" text-anchor="middle" font-size="11" fill="#fff">0.1x</text>
+<rect x="380" y="512" width="60" height="20" fill="#f2d5d2" stroke="#ddd"/>
+<text x="410.0" y="526" text-anchor="middle" font-size="11" fill="#111">0.5x</text>
+<rect x="440" y="512" width="60" height="20" fill="#ffffff" stroke="#ddd"/>
+<text x="470.0" y="526" text-anchor="middle" font-size="11" fill="#111">1x</text>
+<rect x="500" y="512" width="60" height="20" fill="#cde1d9" stroke="#ddd"/>
+<text x="530.0" y="526" text-anchor="middle" font-size="11" fill="#111">2x</text>
+<rect x="560" y="512" width="60" height="20" fill="#7cb19a" stroke="#ddd"/>
+<text x="590.0" y="526" text-anchor="middle" font-size="11" fill="#fff">10x</text>
+<rect x="620" y="512" width="60" height="20" fill="#1b7850" stroke="#ddd"/>
+<text x="650.0" y="526" text-anchor="middle" font-size="11" fill="#fff">100x</text>
+<text x="10" y="554" font-size="11" fill="#666">Small grey number = absolute throughput in ops/s. "–" = target not run for that scenario (archive backends are read-only).</text>
+</svg>
