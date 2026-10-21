@@ -26,7 +26,7 @@ target_include_directories(vfs_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 # vfs 通过 vfstool_core 的 PUBLIC 依赖传递进来，不重复链接（否则 Apple ld 会警告 duplicate libraries）
 target_link_libraries(vfs_tests PRIVATE vfstool_core vfs_3rd_doctest)
 vfs_set_warnings(vfs_tests)
-vfs_add_long_path_manifest(vfs_tests)
+vfs_setup_executable(vfs_tests)
 
 find_package(Threads REQUIRED)
 target_link_libraries(vfs_tests PRIVATE Threads::Threads)

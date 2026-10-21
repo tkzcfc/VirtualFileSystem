@@ -50,3 +50,20 @@ if(EMSCRIPTEN)
         endif()
     endif()
 endif()
+
+# iOS / tvOS 等：可执行文件生成为 .app，Info.plist 需要包标识（CFBundleIdentifier），否则无法安装到设备。
+# 包标识 = VFS_APPLE_BUNDLE_ID_PREFIX + "." + 目标名（'_' 换成 '-'）。免费开发团队要求全局唯一，可以改前缀
+set(VFS_APPLE_BUNDLE_ID_PREFIX "com.example.vfs" CACHE STRING "Bundle identifier prefix for executables on iOS")
+
+# 可执行文件的通用设置：Windows 长路径清单、iOS 包标识
+function(vfs_setup_executable target)
+    vfs_add_long_path_manifest(${target})
+    if(CMAKE_SYSTEM_NAME MATCHES "iOS|tvOS|visionOS")
+        string(REPLACE "_" "-" id "${VFS_APPLE_BUNDLE_ID_PREFIX}.${target}")
+        set_target_properties(${target} PROPERTIES
+            MACOSX_BUNDLE ON
+            MACOSX_BUNDLE_GUI_IDENTIFIER "${id}"
+            MACOSX_BUNDLE_BUNDLE_NAME "${target}"
+            XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "${id}")
+    endif()
+endfunction()

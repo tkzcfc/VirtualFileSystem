@@ -1,3 +1,4 @@
 add_executable(vfs_example_multithread main.cpp)
 target_link_libraries(vfs_example_multithread PRIVATE vfs)
 vfs_set_warnings(vfs_example_multithread)
+vfs_setup_executable(vfs_example_multithread)
