@@ -6,7 +6,8 @@
 #   python3 bench/bench_charts.py --platform linux --input linux.csv --out docs/images/bench
 #
 # Output:
-#   <platform>-<scenario>.svg     one chart per scenario: throughput (ops/s) of each target at 1 thread and N threads (default 8)
+#   <platform>-<scenario>.svg     one chart per scenario: two panels (1 thread, N threads, default 8),
+#                                 each with its own scale, bars sorted fastest first, labeled with ops/s and speedup vs base:stdio
 import argparse
 import csv
 import html
@@ -18,7 +19,9 @@ DEFAULT_SCENARIOS = ["read.small", "read.large.rand", "meta.open", "meta.stat", 
 # Targets shown in the bar chart (order is display order); missing ones are skipped.
 DEFAULT_TARGETS = ["base:stdio", "base:posix", "base:win32", "vfs:native", "vfs:memory", "vfs:archive",
                    "vfs:archive-lz4", "vfs:archive+native", "vfs:memory+archive", "vfs:3layer"]
-COLORS = ["#4e79a7", "#f28e2b", "#59a14f", "#e15759"]
+BASELINES = ("base:stdio", "base:fstream", "base:posix", "base:win32")
+BASE_COLOR = "#a0a0a0"
+VFS_COLOR = "#4e79a7"
 
 
 def parse_number(text):
@@ -67,40 +70,49 @@ def fmt(v):
     return "%.0f" % v
 
 
-def bar_chart(title, subtitle, labels, series, series_names, out_path):
-    """Horizontal grouped bar chart. series: [[value or None, ...], ...], one color per series."""
-    bar_h, gap, label_w, chart_w, right_pad = 14, 10, 170, 520, 70
-    group_h = bar_h * len(series) + gap
-    top = 64
-    height = top + group_h * len(labels) + 30
-    width = label_w + chart_w + right_pad
-    vmax = max([v for s in series for v in s if v] or [1])
-    out = ['<svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d" font-family="Segoe UI,Helvetica,Arial,sans-serif" font-size="12">' % (width, height),
-           '<rect width="100%" height="100%" fill="white"/>',
-           '<text x="10" y="22" font-size="15" font-weight="bold">%s</text>' % html.escape(title),
-           '<text x="10" y="40" fill="#555">%s</text>' % html.escape(subtitle)]
-    # Legend.
-    x = label_w
-    for i, name in enumerate(series_names):
-        out.append('<rect x="%d" y="48" width="10" height="10" fill="%s"/>' % (x, COLORS[i % len(COLORS)]))
-        out.append('<text x="%d" y="57">%s</text>' % (x + 14, html.escape(name)))
-        x += 24 + 7 * len(name)
-    for gi, label in enumerate(labels):
-        y0 = top + gi * group_h
-        out.append('<text x="%d" y="%d" text-anchor="end">%s</text>' % (label_w - 8, y0 + bar_h * len(series) / 2 + 4, html.escape(label)))
-        for si, s in enumerate(series):
-            v = s[gi]
-            y = y0 + si * bar_h
-            if not v:
-                out.append('<text x="%d" y="%d" fill="#999">n/a</text>' % (label_w + 4, y + bar_h - 3))
-                continue
-            w = max(1, chart_w * v / vmax)
-            out.append('<rect x="%d" y="%d" width="%.1f" height="%d" fill="%s"/>' % (label_w, y, w, bar_h - 2, COLORS[si % len(COLORS)]))
-            out.append('<text x="%.1f" y="%d">%s</text>' % (label_w + w + 4, y + bar_h - 3, fmt(v)))
-    out.append('<line x1="%d" y1="%d" x2="%d" y2="%d" stroke="#888"/>' % (label_w, top - 4, label_w, height - 26))
-    out.append('</svg>')
+def panel(out, x0, y0, width, caption, items, ref):
+    """One panel: items = [(target, value)] sorted fastest-first; ref = base:stdio value (or None)."""
+    bar_h, gap, label_w, value_w = 20, 6, 150, 120
+    chart_w = width - label_w - value_w
+    vmax = max(v for _, v in items)
+    out.append('<text x="%d" y="%d" font-size="14" font-weight="bold">%s</text>' % (x0 + label_w, y0, html.escape(caption)))
+    top = y0 + 12
+    for i, (t, v) in enumerate(items):
+        y = top + i * (bar_h + gap)
+        base = t in BASELINES
+        out.append('<text x="%d" y="%d" text-anchor="end"%s>%s</text>' % (
+            x0 + label_w - 8, y + bar_h - 6, ' fill="#666"' if base else "", html.escape(t)))
+        w = max(1.0, chart_w * v / vmax)
+        out.append('<rect x="%d" y="%d" width="%.1f" height="%d" fill="%s"/>' % (x0 + label_w, y, w, bar_h, BASE_COLOR if base else VFS_COLOR))
+        text = fmt(v) + ("  (%.1fx)" % (v / ref) if ref else "")
+        out.append('<text x="%.1f" y="%d"%s>%s</text>' % (x0 + label_w + w + 5, y + bar_h - 6, ' fill="#666"' if base else "", html.escape(text)))
+    bottom = top + len(items) * (bar_h + gap)
+    out.append('<line x1="%d" y1="%d" x2="%d" y2="%d" stroke="#888"/>' % (x0 + label_w, top - 2, x0 + label_w, bottom))
+    if ref:
+        rx = x0 + label_w + chart_w * ref / vmax
+        out.append('<line x1="%.1f" y1="%d" x2="%.1f" y2="%d" stroke="#333" stroke-dasharray="4,3"/>' % (rx, top - 4, rx, bottom))
+        out.append('<text x="%.1f" y="%d" font-size="11" fill="#333" text-anchor="middle">stdio</text>' % (rx, bottom + 13))
+    return bottom + 16
+
+
+def bar_chart(title, subtitle, panels, out_path):
+    """panels: [(caption, {target: value})]. Side-by-side horizontal bar panels, each with its own scale."""
+    panel_w, top = 560, 78
+    shown = [(c, d) for c, d in panels if d]
+    width = max(1, len(shown)) * panel_w + 20
+    out = []
+    bottom = top
+    for i, (caption, d) in enumerate(shown):
+        items = sorted(d.items(), key=lambda kv: -kv[1])
+        bottom = max(bottom, panel(out, 10 + i * panel_w, top, panel_w - 10, caption, items, d.get("base:stdio")))
+    height = bottom + 10
+    head = ['<svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d" font-family="Segoe UI,Helvetica,Arial,sans-serif" font-size="13">' % (width, height),
+            '<rect width="100%" height="100%" fill="white"/>',
+            '<text x="10" y="24" font-size="17" font-weight="bold">%s</text>' % html.escape(title),
+            '<text x="10" y="44" fill="#555">%s</text>' % html.escape(subtitle),
+            '<text x="10" y="62" font-size="12" fill="#555">Bars sorted fastest first; label = ops/s (speedup vs base:stdio at the same thread count). Grey = direct-API baselines.</text>']
     with open(out_path, "w", encoding="utf-8") as f:
-        f.write("\n".join(out) + "\n")
+        f.write("\n".join(head + out + ["</svg>"]) + "\n")
 
 
 def main():
@@ -121,9 +133,10 @@ def main():
         targets = [t for t in DEFAULT_TARGETS if (sc, t, 1) in after or (sc, t, n) in after]
         if not targets:
             continue
-        bar_chart("%s — %s (ops/s, higher is better)" % (args.platform, sc), args.label, targets,
-                  [[after.get((sc, t, 1)) for t in targets], [after.get((sc, t, n)) for t in targets]],
-                  ["1 thread", "%d threads" % n], os.path.join(args.out, "%s-%s.svg" % (args.platform, sc)))
+        panels = [(cap, {t: after[(sc, t, th)] for t in targets if after.get((sc, t, th))})
+                  for cap, th in (("1 thread", 1), ("%d threads" % n, n))]
+        bar_chart("%s — %s (ops/s, higher is better)" % (args.platform, sc), args.label, panels,
+                  os.path.join(args.out, "%s-%s.svg" % (args.platform, sc)))
 
 
 if __name__ == "__main__":
