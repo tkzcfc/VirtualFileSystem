@@ -889,6 +889,14 @@ Error realName(std::string_view dir, std::string_view name, std::string& actual)
 	while (len > 0 && p[len - 1] == '\0')
 		--len;
 	actual.assign(p, len);
+	if (actual != name)
+	{
+		// 只差大小写时再确认一次：iOS 模拟器的文件系统按字节区分大小写，但 getattrlist 仍会按
+		// 不区分大小写匹配到另一个名字；此时 lstat 原名失败，说明请求的名字本身不存在
+		struct stat st;
+		if (::lstat(full.c_str(), &st) != 0)
+			return errorFromErrno(errno);
+	}
 	return Error::OK;
 #else
 	// Linux 等平台的文件系统按字节匹配名字：能 stat 到就是同名
