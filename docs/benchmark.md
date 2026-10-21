@@ -61,7 +61,7 @@ The three handle-based write scenarios run on `base:stdio`, `base:posix` / `base
 | `base:posix` / `base:win32` | POSIX `open`/`read`/`pread`; on Windows, `CreateFileW`/`ReadFile` (OVERLAPPED offsets) |
 | `vfs:native` | `NativeBackend` mounted alone |
 | `vfs:memory` | `MemoryBackend`, with all data preloaded |
-| `vfs:archive` / `-xor` / `-lz4` | Three archives of the same dataset: plaintext, fully XOR-encrypted, and fully LZ4-compressed (42 MiB, about 3.7:1) |
+| `vfs:archive` / `-xor` / `-lz4` | Three archives of the same dataset: plaintext, fully XOR-encrypted, and fully LZ4-compressed (44 MiB, about 3.5:1, 64 KiB blocks) |
 | `vfs:archive+native` | Archive below + an empty native override directory above (the development "native files override the archive" layout), same mount point |
 | `vfs:memory+archive` | Archive below + an empty writable memory layer above |
 | `vfs:3layer` | Three layers: archive + native override + memory (WriteTarget) |
@@ -86,7 +86,7 @@ Write scenarios use the three baselines, `vfs:native`, `vfs:memory`, and `vfs:me
 - Date: 2026-10-21 (UTC+8); command: `vfs_bench --csv <platform>.csv --md <platform>.md` (defaults: --scale 1, threads 1/2/4/8/N, median of 3, warm cache), Release build.
 - Throughput is in ops/s, higher is better; the number in parentheses is the multiple of `base:stdio` at the same thread count. > 1 means faster than calling the C file API directly.
 - Numbers on the shared VM (Linux) fluctuate by about ±20%. Compare orders of magnitude and trends.
-- Charts are generated from `--csv` output by [`bench/bench_charts.py`](../bench/bench_charts.py). Full tables for every scenario and thread count: [Linux](bench/linux.md), [macOS](bench/macos.md), [Windows](bench/windows.md), [iOS](bench/ios.md), [Android](bench/android.md).
+- Charts are generated from `--csv` output by [`bench/bench_charts.py`](../bench/bench_charts.py). Full tables for every scenario and thread count: [Linux](bench/linux.md), [macOS](bench/macos.md), [Windows](bench/windows.md), [iOS](bench/ios.md), [Android](bench/android.md), [WebAssembly](bench/wasm.md).
 
 ### Linux
 
@@ -97,18 +97,24 @@ Write scenarios use the three baselines, `vfs:native`, `vfs:memory`, and `vfs:me
 
 | Scenario | Threads | base:stdio | native | memory | archive | archive-lz4 | archive+native | 3layer |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| read.small | 1 | 336.6k | 385.8k (1.15) | 1.12M (3.33) | 841.6k (2.50) | 401.1k (1.19) | 654.5k (1.94) | 691.4k (2.05) |
-| read.small | 8 | 987.4k | 1.27M (1.28) | 3.96M (4.01) | 3.10M (3.14) | 2.23M (2.26) | 3.99M (4.04) | 3.72M (3.76) |
-| read.large.rand | 1 | 951.0k | 1.19M (1.25) | 1.79M (1.89) | 817.8k (0.86) | 70.9k (0.07) | 927.1k (0.97) | 1.30M (1.37) |
-| read.large.rand | 8 | 6.11M | 7.63M (1.25) | 7.88M (1.29) | 6.03M (0.99) | 386.6k (0.06) | 7.22M (1.18) | 8.04M (1.32) |
-| meta.open | 1 | 696.8k | 715.8k (1.03) | 1.94M (2.79) | 2.92M (4.20) | 476.8k (0.68) | 1.27M (1.83) | 1.11M (1.59) |
-| meta.open | 8 | 1.02M | 1.18M (1.16) | 3.65M (3.58) | 3.21M (3.16) | 2.04M (2.01) | 3.89M (3.83) | 3.52M (3.46) |
-| meta.stat | 1 | 668.0k | 1.23M (1.84) | 2.21M (3.30) | 3.87M (5.79) | 3.86M (5.77) | 1.41M (2.11) | 1.33M (2.00) |
-| meta.stat | 8 | 5.00M | 6.11M (1.22) | 6.38M (1.28) | 20.31M (4.06) | 15.60M (3.12) | 9.51M (1.90) | 7.31M (1.46) |
-| meta.miss | 1 | 1.40M | 1.32M (0.95) | 2.21M (1.58) | 3.00M (2.15) | 3.04M (2.18) | 1.38M (0.99) | 1.14M (0.82) |
-| meta.miss | 8 | 6.06M | 5.03M (0.83) | 5.40M (0.89) | 11.30M (1.87) | 9.95M (1.64) | 4.80M (0.79) | 7.19M (1.19) |
-| write.churn | 1 | 98.3k | 76.0k (0.77) | 525.6k (5.35) | - | - | - | - |
-| write.churn | 8 | 298.5k | 299.7k (1.00) | 729.5k (2.44) | - | - | - | - |
+| read.small | 1 | 337.1k | 420.7k (1.25) | 1.05M (3.12) | 830.8k (2.46) | 294.8k (0.87) | 671.9k (1.99) | 839.9k (2.49) |
+| read.small | 8 | 1.03M | 1.33M (1.29) | 3.46M (3.36) | 2.29M (2.23) | 1.47M (1.43) | 1.71M (1.66) | 2.38M (2.31) |
+| read.large.rand | 1 | 875.4k | 1.44M (1.64) | 2.20M (2.51) | 1.33M (1.52) | 52.4k (0.06) | 873.1k (1.00) | 1.30M (1.49) |
+| read.large.rand | 8 | 6.17M | 9.23M (1.50) | 7.36M (1.19) | 6.43M (1.04) | 385.5k (0.06) | 6.90M (1.12) | 7.38M (1.20) |
+| meta.open | 1 | 744.3k | 728.3k (0.98) | 2.14M (2.88) | 3.17M (4.26) | 3.16M (4.24) | 1.33M (1.79) | 1.11M (1.49) |
+| meta.open | 8 | 1.08M | 1.24M (1.15) | 4.04M (3.76) | 3.37M (3.14) | 4.22M (3.92) | 3.31M (3.07) | 3.57M (3.32) |
+| meta.stat | 1 | 822.6k | 810.7k (0.99) | 2.37M (2.88) | 3.59M (4.36) | 3.95M (4.80) | 1.58M (1.91) | 1.29M (1.56) |
+| meta.stat | 8 | 4.33M | 6.73M (1.55) | 6.79M (1.57) | 18.81M (4.35) | 15.06M (3.48) | 9.56M (2.21) | 5.55M (1.28) |
+| meta.miss | 1 | 996.8k | 1.06M (1.07) | 2.07M (2.08) | 2.60M (2.61) | 2.73M (2.74) | 1.34M (1.34) | 1.29M (1.30) |
+| meta.miss | 8 | 11.82M | 9.09M (0.77) | 6.74M (0.57) | 14.48M (1.23) | 13.73M (1.16) | 8.49M (0.72) | 7.70M (0.65) |
+| write.churn | 1 | 120.8k | 81.7k (0.68) | 629.0k (5.21) | - | - | - | - |
+| write.churn | 8 | 370.0k | 312.9k (0.85) | 780.7k (2.11) | - | - | - | - |
+| write.large.seq | 1 | 2.4k | 3.1k (1.29) | 1.6k (0.66) | - | - | - | - |
+| write.large.seq | 8 | 2.3k | 2.1k (0.90) | 6.3k (2.71) | - | - | - | - |
+| write.overwrite | 1 | 1.30M | 1.25M (0.95) | 3.00M (2.30) | - | - | - | - |
+| write.overwrite | 8 | 3.84M | 5.35M (1.39) | 8.18M (2.13) | - | - | - | - |
+| write.append | 1 | 317.0k | 299.3k (0.94) | 1.27M (4.00) | - | - | - | - |
+| write.append | 8 | 2.70M | 2.76M (1.02) | 8.08M (2.99) | - | - | - | - |
 
 ![Linux: speed relative to stdio](images/bench/linux.svg)
 
@@ -121,18 +127,24 @@ Write scenarios use the three baselines, `vfs:native`, `vfs:memory`, and `vfs:me
 
 | Scenario | Threads | base:stdio | native | memory | archive | archive-lz4 | archive+native | 3layer |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| read.small | 1 | 93.6k | 94.6k (1.01) | 2.99M (31.97) | 1.72M (18.43) | 666.8k (7.12) | 653.2k (6.98) | 640.9k (6.85) |
-| read.small | 8 | 125.1k | 127.8k (1.02) | 1.24M (9.92) | 1.38M (11.05) | 1.37M (10.96) | 897.8k (7.18) | 776.7k (6.21) |
-| read.large.rand | 1 | 840.6k | 1.53M (1.83) | 4.31M (5.13) | 1.91M (2.27) | 293.3k (0.35) | 2.01M (2.39) | 2.29M (2.73) |
-| read.large.rand | 8 | 409.4k | 626.9k (1.53) | 1.88M (4.59) | 1.37M (3.35) | 1.17M (2.85) | 1.35M (3.31) | 1.35M (3.30) |
-| meta.open | 1 | 103.1k | 98.4k (0.95) | 3.64M (35.26) | 4.81M (46.67) | 681.3k (6.61) | 867.6k (8.42) | 834.5k (8.10) |
-| meta.open | 8 | 126.7k | 128.4k (1.01) | 1.40M (11.03) | 3.09M (24.43) | 1.40M (11.04) | 1.16M (9.19) | 913.5k (7.21) |
-| meta.stat | 1 | 433.6k | 733.3k (1.69) | 4.13M (9.52) | 5.86M (13.52) | 5.98M (13.79) | 925.4k (2.13) | 849.7k (1.96) |
-| meta.stat | 8 | 614.0k | 1.21M (1.97) | 1.66M (2.71) | 16.18M (26.35) | 16.65M (27.12) | 1.20M (1.95) | 970.4k (1.58) |
-| meta.miss | 1 | 1.05M | 865.7k (0.82) | 3.20M (3.04) | 3.61M (3.44) | 3.45M (3.29) | 819.1k (0.78) | 790.8k (0.75) |
-| meta.miss | 8 | 1.18M | 1.17M (0.99) | 1.55M (1.31) | 12.95M (10.95) | 11.20M (9.47) | 1.17M (0.99) | 977.0k (0.83) |
-| write.churn | 1 | 12.8k | 12.5k (0.97) | 911.9k (71.04) | - | - | - | - |
-| write.churn | 8 | 17.3k | 17.1k (0.99) | 288.3k (16.69) | - | - | - | - |
+| read.small | 1 | 92.1k | 92.2k (1.00) | 2.87M (31.13) | 1.66M (18.06) | 467.1k (5.07) | 622.8k (6.76) | 609.5k (6.61) |
+| read.small | 8 | 130.7k | 132.6k (1.01) | 1.29M (9.90) | 1.35M (10.30) | 652.2k (4.99) | 874.1k (6.69) | 775.7k (5.93) |
+| read.large.rand | 1 | 815.1k | 1.46M (1.79) | 4.18M (5.13) | 1.94M (2.39) | 77.8k (0.10) | 2.05M (2.51) | 2.11M (2.59) |
+| read.large.rand | 8 | 422.2k | 642.8k (1.52) | 1.90M (4.49) | 1.26M (2.97) | 399.5k (0.95) | 1.30M (3.08) | 1.25M (2.97) |
+| meta.open | 1 | 100.8k | 97.4k (0.97) | 3.49M (34.57) | 4.59M (45.55) | 4.49M (44.57) | 857.8k (8.51) | 827.1k (8.20) |
+| meta.open | 8 | 129.8k | 131.9k (1.02) | 1.42M (10.96) | 3.82M (29.44) | 4.13M (31.82) | 1.12M (8.63) | 953.0k (7.34) |
+| meta.stat | 1 | 362.0k | 561.9k (1.55) | 3.81M (10.52) | 5.70M (15.75) | 5.64M (15.57) | 900.8k (2.49) | 867.7k (2.40) |
+| meta.stat | 8 | 609.9k | 1.18M (1.93) | 1.74M (2.85) | 15.76M (25.85) | 15.12M (24.79) | 1.19M (1.94) | 980.7k (1.61) |
+| meta.miss | 1 | 998.9k | 813.9k (0.81) | 3.21M (3.21) | 3.66M (3.66) | 3.58M (3.59) | 799.0k (0.80) | 763.5k (0.76) |
+| meta.miss | 8 | 1.18M | 1.16M (0.98) | 1.65M (1.40) | 11.07M (9.36) | 11.79M (9.97) | 1.18M (1.00) | 973.1k (0.82) |
+| write.churn | 1 | 13.7k | 11.7k (0.85) | 900.7k (65.86) | - | - | - | - |
+| write.churn | 8 | 16.8k | 16.8k (1.00) | 283.8k (16.89) | - | - | - | - |
+| write.large.seq | 1 | 6.4k | 2.4k (0.38) | 20.1k (3.15) | - | - | - | - |
+| write.large.seq | 8 | 3.8k | 4.2k (1.10) | 22.5k (5.87) | - | - | - | - |
+| write.overwrite | 1 | 464.7k | 453.6k (0.98) | 5.50M (11.84) | - | - | - | - |
+| write.overwrite | 8 | 567.0k | 550.1k (0.97) | 8.85M (15.60) | - | - | - | - |
+| write.append | 1 | 256.2k | 226.0k (0.88) | 3.80M (14.84) | - | - | - | - |
+| write.append | 8 | 166.0k | 167.4k (1.01) | 6.09M (36.67) | - | - | - | - |
 
 ![macOS: speed relative to stdio](images/bench/macos.svg)
 
@@ -145,18 +157,24 @@ Write scenarios use the three baselines, `vfs:native`, `vfs:memory`, and `vfs:me
 
 | Scenario | Threads | base:stdio | native | memory | archive | archive-lz4 | archive+native | 3layer |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| read.small | 1 | 40.7k | 40.5k (0.99) | 1.13M (27.79) | 306.2k (7.53) | 236.2k (5.81) | 60.2k (1.48) | 58.1k (1.43) |
-| read.small | 8 | 171.6k | 185.1k (1.08) | 3.74M (21.80) | 875.1k (5.10) | 655.0k (3.82) | 256.6k (1.50) | 256.5k (1.50) |
-| read.large.rand | 1 | 253.6k | 250.0k (0.99) | 3.03M (11.93) | 224.1k (0.88) | 106.7k (0.42) | 214.2k (0.84) | 195.9k (0.77) |
-| read.large.rand | 8 | 303.2k | 308.0k (1.02) | 6.65M (21.94) | 301.8k (1.00) | 352.1k (1.16) | 280.0k (0.92) | 297.5k (0.98) |
-| meta.open | 1 | 70.3k | 74.0k (1.05) | 1.17M (16.64) | 2.24M (31.91) | 243.4k (3.46) | 77.6k (1.10) | 75.9k (1.08) |
-| meta.open | 8 | 298.0k | 291.0k (0.98) | 4.53M (15.20) | 5.68M (19.07) | 583.7k (1.96) | 324.4k (1.09) | 318.4k (1.07) |
-| meta.stat | 1 | 42.3k | 81.2k (1.92) | 1.91M (45.05) | 2.85M (67.22) | 2.94M (69.53) | 81.6k (1.93) | 81.1k (1.92) |
-| meta.stat | 8 | 185.0k | 348.3k (1.88) | 4.59M (24.82) | 11.23M (60.71) | 9.56M (51.68) | 313.4k (1.69) | 303.9k (1.64) |
-| meta.miss | 1 | 108.3k | 104.9k (0.97) | 1.68M (15.51) | 2.20M (20.35) | 2.14M (19.72) | 83.0k (0.77) | 80.4k (0.74) |
-| meta.miss | 8 | 512.4k | 489.1k (0.95) | 4.96M (9.69) | 9.19M (17.94) | 9.34M (18.22) | 329.0k (0.64) | 324.4k (0.63) |
-| write.churn | 1 | 1.9k | 1.4k (0.70) | 439.6k (226.52) | - | - | - | - |
-| write.churn | 8 | 6.5k | 5.7k (0.86) | 676.3k (103.30) | - | - | - | - |
+| read.small | 1 | 35.1k | 35.6k (1.02) | 984.0k (28.05) | 257.1k (7.33) | 114.5k (3.26) | 58.3k (1.66) | 58.4k (1.66) |
+| read.small | 8 | 175.9k | 181.8k (1.03) | 3.11M (17.69) | 776.3k (4.41) | 304.8k (1.73) | 251.5k (1.43) | 251.1k (1.43) |
+| read.large.rand | 1 | 204.4k | 225.1k (1.10) | 2.50M (12.23) | 180.0k (0.88) | 42.1k (0.21) | 208.6k (1.02) | 192.2k (0.94) |
+| read.large.rand | 8 | 283.8k | 295.7k (1.04) | 6.38M (22.49) | 284.3k (1.00) | 188.2k (0.66) | 288.7k (1.02) | 293.3k (1.03) |
+| meta.open | 1 | 69.6k | 68.6k (0.99) | 1.51M (21.68) | 1.83M (26.30) | 2.11M (30.27) | 77.5k (1.11) | 78.7k (1.13) |
+| meta.open | 8 | 284.6k | 285.7k (1.00) | 4.39M (15.41) | 5.92M (20.78) | 5.74M (20.15) | 315.9k (1.11) | 318.6k (1.12) |
+| meta.stat | 1 | 44.1k | 79.7k (1.81) | 1.85M (42.03) | 2.94M (66.59) | 2.74M (62.21) | 84.5k (1.92) | 81.6k (1.85) |
+| meta.stat | 8 | 186.7k | 354.8k (1.90) | 4.63M (24.82) | 8.84M (47.36) | 9.57M (51.25) | 320.4k (1.72) | 318.1k (1.70) |
+| meta.miss | 1 | 106.3k | 98.2k (0.92) | 1.64M (15.42) | 2.06M (19.42) | 2.15M (20.24) | 78.4k (0.74) | 79.5k (0.75) |
+| meta.miss | 8 | 520.0k | 498.2k (0.96) | 4.88M (9.39) | 9.29M (17.86) | 9.15M (17.59) | 322.9k (0.62) | 320.2k (0.62) |
+| write.churn | 1 | 1.8k | 1.4k (0.75) | 463.9k (251.56) | - | - | - | - |
+| write.churn | 8 | 6.1k | 5.1k (0.84) | 709.0k (117.17) | - | - | - | - |
+| write.large.seq | 1 | 2.9k | 182 (0.06) | 907 (0.32) | - | - | - | - |
+| write.large.seq | 8 | 5.7k | 7.8k (1.38) | 2.4k (0.42) | - | - | - | - |
+| write.overwrite | 1 | 135.1k | 186.7k (1.38) | 3.05M (22.56) | - | - | - | - |
+| write.overwrite | 8 | 807.6k | 844.1k (1.05) | 5.27M (6.52) | - | - | - | - |
+| write.append | 1 | 46.7k | 53.3k (1.14) | 345.7k (7.40) | - | - | - | - |
+| write.append | 8 | 62.4k | 31.0k (0.50) | 1.19M (19.05) | - | - | - | - |
 
 ![Windows: speed relative to stdio](images/bench/windows.svg)
 
@@ -169,18 +187,24 @@ Write scenarios use the three baselines, `vfs:native`, `vfs:memory`, and `vfs:me
 
 | Scenario | Threads | base:stdio | native | memory | archive | archive-lz4 | archive+native | 3layer |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| read.small | 1 | 8.0k | 8.1k (1.01) | 2.00M (249.46) | 1.33M (165.32) | 530.0k (66.10) | 71.0k (8.85) | 70.7k (8.82) |
-| read.small | 8 | 56.5k | 55.9k (0.99) | 894.8k (15.85) | 1.14M (20.17) | 887.5k (15.72) | 167.6k (2.97) | 157.9k (2.80) |
-| read.large.rand | 1 | 359.7k | 760.9k (2.12) | 1.91M (5.31) | 928.3k (2.58) | 128.2k (0.36) | 885.1k (2.46) | 1.16M (3.22) |
-| read.large.rand | 8 | 381.6k | 588.5k (1.54) | 1.12M (2.93) | 1.12M (2.93) | 530.2k (1.39) | 1.08M (2.83) | 1.06M (2.79) |
-| meta.open | 1 | 27.2k | 27.3k (1.00) | 2.56M (94.20) | 3.61M (132.67) | 517.3k (19.00) | 66.1k (2.43) | 65.8k (2.42) |
-| meta.open | 8 | 66.9k | 64.2k (0.96) | 694.8k (10.39) | 2.08M (31.05) | 800.6k (11.97) | 160.8k (2.40) | 142.0k (2.12) |
-| meta.stat | 1 | 17.0k | 29.2k (1.72) | 3.20M (188.61) | 4.61M (271.22) | 4.71M (277.44) | 68.5k (4.04) | 68.7k (4.05) |
-| meta.stat | 8 | 40.3k | 73.9k (1.83) | 752.9k (18.67) | 6.97M (172.94) | 6.99M (173.34) | 158.5k (3.93) | 144.9k (3.59) |
-| meta.miss | 1 | 39.2k | 57.1k (1.46) | 2.33M (59.58) | 2.70M (68.82) | 2.70M (68.93) | 68.5k (1.75) | 68.8k (1.76) |
-| meta.miss | 8 | 135.4k | 121.5k (0.90) | 735.4k (5.43) | 5.08M (37.56) | 5.53M (40.83) | 152.7k (1.13) | 145.8k (1.08) |
-| write.churn | 1 | 1.5k | 1.7k (1.10) | 701.8k (454.15) | - | - | - | - |
-| write.churn | 8 | 2.7k | 2.8k (1.02) | 181.5k (66.40) | - | - | - | - |
+| read.small | 1 | 8.0k | 8.0k (1.00) | 2.03M (253.75) | 1.31M (163.75) | 365.4k (45.67) | 70.9k (8.86) | 70.5k (8.81) |
+| read.small | 8 | 50.5k | 45.4k (0.90) | 876.3k (17.35) | 1.10M (21.78) | 459.9k (9.11) | 163.2k (3.23) | 148.6k (2.94) |
+| read.large.rand | 1 | 354.1k | 772.2k (2.18) | 1.96M (5.54) | 823.6k (2.33) | 40.3k (0.11) | 1.19M (3.36) | 1.42M (4.01) |
+| read.large.rand | 8 | 352.1k | 602.0k (1.71) | 1.12M (3.18) | 1.09M (3.10) | 205.1k (0.58) | 1.03M (2.93) | 970.7k (2.76) |
+| meta.open | 1 | 26.9k | 27.7k (1.03) | 2.66M (98.88) | 3.57M (132.71) | 3.57M (132.71) | 66.1k (2.46) | 65.8k (2.45) |
+| meta.open | 8 | 65.0k | 64.2k (0.99) | 688.7k (10.60) | 1.96M (30.15) | 1.97M (30.31) | 161.4k (2.48) | 148.8k (2.29) |
+| meta.stat | 1 | 16.9k | 29.0k (1.72) | 3.18M (188.17) | 4.82M (285.21) | 4.44M (262.72) | 67.8k (4.01) | 67.6k (4.00) |
+| meta.stat | 8 | 38.8k | 65.5k (1.69) | 768.8k (19.81) | 5.81M (149.74) | 8.36M (215.46) | 155.7k (4.01) | 149.0k (3.84) |
+| meta.miss | 1 | 38.9k | 56.9k (1.46) | 2.34M (60.15) | 2.67M (68.64) | 2.68M (68.89) | 68.3k (1.76) | 68.2k (1.75) |
+| meta.miss | 8 | 117.2k | 109.7k (0.94) | 716.8k (6.12) | 5.28M (45.05) | 5.18M (44.20) | 145.7k (1.24) | 133.3k (1.14) |
+| write.churn | 1 | 1.5k | 1.7k (1.13) | 695.5k (463.67) | - | - | - | - |
+| write.churn | 8 | 2.7k | 2.8k (1.04) | 179.2k (66.37) | - | - | - | - |
+| write.large.seq | 1 | 2.2k | 1.6k (0.73) | 8.9k (4.05) | - | - | - | - |
+| write.large.seq | 8 | 1.5k | 1.5k (1.00) | 8.4k (5.60) | - | - | - | - |
+| write.overwrite | 1 | 193.9k | 212.0k (1.09) | 4.55M (23.47) | - | - | - | - |
+| write.overwrite | 8 | 170.1k | 136.6k (0.80) | 4.76M (27.98) | - | - | - | - |
+| write.append | 1 | 75.4k | 114.9k (1.52) | 2.93M (38.86) | - | - | - | - |
+| write.append | 8 | 102.8k | 98.2k (0.96) | 3.17M (30.84) | - | - | - | - |
 
 ![iOS: speed relative to stdio](images/bench/ios.svg)
 
@@ -194,35 +218,71 @@ Write scenarios use the three baselines, `vfs:native`, `vfs:memory`, and `vfs:me
 
 | Scenario | Threads | base:stdio | native | memory | archive | archive-lz4 | archive+native | 3layer |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| read.small | 1 | 89.2k | 120.2k (1.35) | 195.2k (2.19) | 139.0k (1.56) | 125.8k (1.41) | 112.5k (1.26) | 107.1k (1.20) |
-| read.small | 8 | 648.2k | 573.9k (0.89) | 767.7k (1.18) | 824.4k (1.27) | 541.1k (0.83) | 573.7k (0.89) | 486.7k (0.75) |
-| read.large.rand | 1 | 105.7k | 110.0k (1.04) | 652.0k (6.17) | 157.3k (1.49) | 35.5k (0.34) | 138.7k (1.31) | 249.8k (2.36) |
-| read.large.rand | 8 | 1.39M | 1.34M (0.97) | 1.82M (1.31) | 1.83M (1.32) | 180.8k (0.13) | 1.29M (0.93) | 1.53M (1.10) |
-| meta.open | 1 | 133.9k | 91.9k (0.69) | 244.7k (1.83) | 221.2k (1.65) | 132.7k (0.99) | 143.4k (1.07) | 138.0k (1.03) |
-| meta.open | 8 | 1.14M | 668.4k (0.58) | 782.5k (0.68) | 821.8k (0.72) | 543.7k (0.48) | 564.8k (0.49) | 478.5k (0.42) |
-| meta.stat | 1 | 97.1k | 130.1k (1.34) | 235.7k (2.43) | 380.2k (3.91) | 387.8k (3.99) | 151.2k (1.56) | 152.9k (1.57) |
-| meta.stat | 8 | 1.02M | 870.1k (0.85) | 1.24M (1.21) | 1.35M (1.32) | 1.25M (1.22) | 748.9k (0.73) | 608.7k (0.60) |
-| meta.miss | 1 | 238.8k | 173.5k (0.73) | 448.0k (1.88) | 416.1k (1.74) | 273.7k (1.15) | 130.5k (0.55) | 128.7k (0.54) |
-| meta.miss | 8 | 1.69M | 562.1k (0.33) | 682.7k (0.40) | 719.7k (0.43) | 724.6k (0.43) | 506.9k (0.30) | 452.0k (0.27) |
-| write.churn | 1 | 12.3k | 15.3k (1.24) | 56.1k (4.55) | - | - | - | - |
-| write.churn | 8 | 92.6k | 70.4k (0.76) | 268.7k (2.90) | - | - | - | - |
+| read.small | 1 | 96.0k | 110.6k (1.15) | 326.3k (3.40) | 144.7k (1.51) | 105.1k (1.09) | 109.6k (1.14) | 121.3k (1.26) |
+| read.small | 8 | 679.4k | 594.7k (0.88) | 753.0k (1.11) | 799.4k (1.18) | 462.1k (0.68) | 550.5k (0.81) | 532.7k (0.78) |
+| read.large.rand | 1 | 275.7k | 324.0k (1.18) | 1.49M (5.39) | 574.7k (2.08) | 41.4k (0.15) | 459.6k (1.67) | 589.7k (2.14) |
+| read.large.rand | 8 | 1.97M | 1.44M (0.73) | 2.43M (1.24) | 2.34M (1.19) | 172.0k (0.09) | 2.15M (1.09) | 2.35M (1.20) |
+| meta.open | 1 | 240.7k | 192.8k (0.80) | 908.9k (3.78) | 1.36M (5.63) | 1.27M (5.28) | 357.0k (1.48) | 271.2k (1.13) |
+| meta.open | 8 | 1.03M | 710.7k (0.69) | 769.7k (0.75) | 795.1k (0.77) | 802.2k (0.78) | 575.4k (0.56) | 494.3k (0.48) |
+| meta.stat | 1 | 97.8k | 135.1k (1.38) | 270.2k (2.76) | 358.3k (3.66) | 353.8k (3.62) | 152.9k (1.56) | 151.6k (1.55) |
+| meta.stat | 8 | 1.03M | 872.2k (0.85) | 1.19M (1.15) | 1.26M (1.22) | 1.23M (1.19) | 730.6k (0.71) | 643.1k (0.62) |
+| meta.miss | 1 | 533.6k | 160.9k (0.30) | 261.3k (0.49) | 280.0k (0.52) | 272.0k (0.51) | 144.5k (0.27) | 129.0k (0.24) |
+| meta.miss | 8 | 1.78M | 565.3k (0.32) | 711.1k (0.40) | 734.1k (0.41) | 725.2k (0.41) | 512.7k (0.29) | 444.8k (0.25) |
+| write.churn | 1 | 11.3k | 10.0k (0.89) | 39.0k (3.46) | - | - | - | - |
+| write.churn | 8 | 89.1k | 81.0k (0.91) | 288.5k (3.24) | - | - | - | - |
+| write.large.seq | 1 | 1.1k | 996 (0.93) | 576 (0.54) | - | - | - | - |
+| write.large.seq | 8 | 8.2k | 9.6k (1.17) | 3.4k (0.41) | - | - | - | - |
+| write.overwrite | 1 | 98.3k | 99.3k (1.01) | 360.8k (3.67) | - | - | - | - |
+| write.overwrite | 8 | 740.4k | 791.6k (1.07) | 1.79M (2.41) | - | - | - | - |
+| write.append | 1 | 65.9k | 87.3k (1.32) | 84.7k (1.29) | - | - | - | - |
+| write.append | 8 | 636.2k | 688.5k (1.08) | 565.2k (0.89) | - | - | - | - |
 
 ![Android: speed relative to stdio](images/bench/android.svg)
+
+### WebAssembly
+
+- Host: the Linux box above (Intel Xeon KVM, 8 vCPU), node v24.21.0
+- Compiler: Emscripten 6.0.13, Release (-O3), pthread build, NODERAWFS
+- Note: base and native calls go through Emscripten's syscall layer into node's fs API, so system calls cost far more than on native Linux while in-memory paths run as compiled code. Ratios against stdio are therefore much larger than native Linux for 1-thread metadata, and smaller at 8 threads, where proxied file system calls serialize. Details: [WebAssembly](bench/wasm.md)
+
+| Scenario | Threads | base:stdio | native | memory | archive | archive-lz4 | archive+native | 3layer |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| read.small | 1 | 14.6k | 11.1k (0.76) | 803.0k (55.00) | 56.6k (3.88) | 29.7k (2.03) | 24.8k (1.70) | 24.4k (1.67) |
+| read.small | 8 | 62.0k | 49.5k (0.80) | 139.4k (2.25) | 141.6k (2.28) | 77.5k (1.25) | 86.9k (1.40) | 76.3k (1.23) |
+| read.large.rand | 1 | 32.8k | 33.6k (1.02) | 1.39M (42.38) | 61.4k (1.87) | 27.0k (0.82) | 61.1k (1.86) | 63.0k (1.92) |
+| read.large.rand | 8 | 135.7k | 138.6k (1.02) | 1.34M (9.87) | 283.4k (2.09) | 172.1k (1.27) | 296.3k (2.18) | 303.8k (2.24) |
+| meta.open | 1 | 28.4k | 18.7k (0.66) | 1.04M (36.62) | 1.27M (44.72) | 1.33M (46.83) | 42.2k (1.49) | 42.7k (1.50) |
+| meta.open | 8 | 114.9k | 73.6k (0.64) | 143.5k (1.25) | 151.0k (1.31) | 143.8k (1.25) | 110.7k (0.96) | 109.4k (0.95) |
+| meta.stat | 1 | 25.8k | 51.2k (1.98) | 1.07M (41.47) | 1.50M (58.14) | 1.54M (59.69) | 41.5k (1.61) | 41.1k (1.59) |
+| meta.stat | 8 | 96.8k | 151.9k (1.57) | 182.4k (1.88) | 196.9k (2.03) | 195.6k (2.02) | 113.1k (1.17) | 114.6k (1.18) |
+| meta.miss | 1 | 42.9k | 41.6k (0.97) | 1.15M (26.81) | 1.17M (27.27) | 1.18M (27.51) | 42.9k (1.00) | 42.5k (0.99) |
+| meta.miss | 8 | 112.0k | 108.2k (0.97) | 156.0k (1.39) | 164.1k (1.47) | 161.6k (1.44) | 111.9k (1.00) | 111.0k (0.99) |
+| write.churn | 1 | 10.1k | 2.8k (0.28) | 279.9k (27.71) | - | - | - | - |
+| write.churn | 8 | 38.7k | 15.6k (0.40) | 49.1k (1.27) | - | - | - | - |
+| write.large.seq | 1 | 2.6k | 2.1k (0.81) | 4.5k (1.73) | - | - | - | - |
+| write.large.seq | 8 | 2.4k | 2.6k (1.08) | 14.4k (6.00) | - | - | - | - |
+| write.overwrite | 1 | 31.5k | 32.0k (1.02) | 1.49M (47.30) | - | - | - | - |
+| write.overwrite | 8 | 122.2k | 125.0k (1.02) | 4.60M (37.64) | - | - | - | - |
+| write.append | 1 | 40.2k | 44.9k (1.12) | 1.01M (25.12) | - | - | - | - |
+| write.append | 8 | 158.1k | 157.9k (1.00) | 2.03M (12.84) | - | - | - | - |
+
+![WebAssembly: speed relative to stdio](images/bench/wasm.svg)
 
 ## Choosing backends and combinations
 
 | Use | Recommendation | Basis (tables above) |
 |---|---|---|
-| Shipping read-only assets | Plaintext or XOR archive (`vfs:archive`) | Open, `stat`, and miss queries are served from the in-memory index. Versus stdio: small-file reads are 2.5-3.1x on Linux, 11-18x on macOS, 5-7.5x on Windows; `meta.open` is 3.2-4.2x, 24-47x, and 19-32x respectively; 8 threads scale the same way |
-| Compression needed | Compress only small text such as scripts and config (`--compress "*.lua"`) | An LZ4 entry is decompressed as a whole on open: small files are barely affected, sequential reads of a 64 MiB file are only 0.06-0.3x stdio, and random reads must decompress the whole file first |
-| Native override of the archive during development | `archive + native`, mounted only in development builds | Every lookup checks the native directory first: miss queries (`meta.miss`) are about 0.64-0.99x; files that hit the archive are still faster than stdio (`read.small` 1.5-7x). Do not mount an empty native directory in a shipping build |
-| Runtime-generated / temporary data | Memory backend (`vfs:memory`), optionally stacked on an archive as a writable layer | No system calls: reads, `stat`, writes, and deletes are mostly several times to hundreds of times faster (`write.churn` 2.4-226x); an 8-thread miss query on Linux is about 0.9x |
-| Data that must hit disk, such as saves and logs | Native directory (`vfs:native`), its own mount point | A single layer is roughly even with a direct call (reads and opens 0.95-1.3x, `stat` 1.2-1.9x); choosing the write layer and checking the parent before a write makes create + delete about 0.7-1.0x |
-| Stacking layers | As few layers as possible; do not stack needless empty layers on the same path | Lookup walks layers top-down. `nested8` (9 layers) metadata operations are about 0.4-1.0x |
+| Shipping read-only assets | Plaintext or XOR archive (`vfs:archive`) | Open, `stat`, and miss queries are served from the in-memory index. Versus stdio: small-file reads are 2.2-2.5x on Linux, 10-18x on macOS, 4.4-7.3x on Windows; `meta.open` is 3.1-4.3x, 29-46x, and 21-26x respectively |
+| Compression needed | Compress small text such as scripts and config (`--compress "*.lua"`); keep large binary assets uncompressed | LZ4 entries are stored in blocks (64 KiB by default) and opening does no decompression, but each read decodes the whole block it touches: sequential reads of a 64 MiB LZ4 file are 0.22-0.58x of stdio on native platforms, and 1-thread 4 KiB random reads 0.06-0.21x. A smaller `--block-size` reduces the work per random read |
+| Native override of the archive during development | `archive + native`, mounted only in development builds | Every lookup checks the native directory first: miss queries (`meta.miss`) are 0.27-1.76x; files that hit the archive read at 0.81-8.9x. Do not mount an empty native directory in a shipping build |
+| Runtime-generated / temporary data | Memory backend (`vfs:memory`), optionally stacked on an archive as a writable layer | No system calls: `write.churn` is 1.3-464x; an 8-thread miss query on Linux is about 0.6x |
+| Data that must hit disk, such as saves and logs | Native directory (`vfs:native`), its own mount point | A single layer is close to a direct call: small reads 0.76-1.29x, opens 0.64-1.15x, `stat` 0.85-2.0x, in-place overwrites 0.80-1.39x, appends 0.50-1.52x, create + delete 0.28-1.13x (lowest under WebAssembly) |
+| Stacking layers | As few layers as possible; do not stack needless empty layers on the same path | Lookup walks layers top-down. `nested8` (9 layers) opens are 0.26-1.25x and misses 0.18-1.53x |
 
 Other:
-- Directory listing (`meta.list`): archive and memory backends are about 1.7-12.7x; the native backend must merge, deduplicate, sort, and convert names, about 0.62-1.04x.
+- Directory listing (`meta.list`): archive and memory backends are about 1.0-21x; the native backend must merge, deduplicate, sort, and convert names, about 0.55-1.04x.
 - Threads: reads and metadata queries are concurrent on every backend, and mount-table lookup takes no global lock; each archive thread reads by offset on its own handle.
+- Windows disk writes (`write.large.seq`, `write.create`) show multi-second p99 stalls from the SSD write cache and Defender in both the stdio baseline and the VFS targets, so those Windows ratios vary widely between runs.
 
 ## Regenerating charts
 

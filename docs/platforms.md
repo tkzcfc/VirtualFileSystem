@@ -6,7 +6,7 @@
 | Linux (GCC, Clang, libc++) | POSIX | — | All tests, plus TSAN (with `tests/tsan.supp`) and ASan+LSan+UBSan builds |
 | macOS | POSIX + `getattrlist` (case check) | — | All tests |
 | iOS / iPadOS | Same as macOS (the app bundle and sandbox directories are ordinary files) | No dedicated backend | Device (arm64) and simulator builds with zero warnings; all tests on a device (iPhone 14 Pro, iOS 26.5) and on the simulator |
-| Android (API 24+) | POSIX (internal storage, external storage) | `AndroidAssetBackend`: mount `assets/` inside the APK | NDK r27 cross-compile arm64-v8a / x86_64 / armeabi-v7a with zero warnings; all tests on an x86_64 emulator (Android 14) and on a real device (Redmi K80, Snapdragon 8 Gen 3, Android 16, arm64-v8a): vfs_tests, stress tests, examples, vfstool, vfs_bench |
+| Android (API 24+) | POSIX (internal storage, external storage) | `AndroidAssetBackend`: mount `assets/` inside the APK | NDK r27 cross-compile arm64-v8a / x86_64 / armeabi-v7a with zero warnings; all tests on an x86_64 emulator (Android 14) and on a real device (Redmi K80, Snapdragon 8 Gen 3, Android 16, arm64-v8a): vfs_tests, examples, vfstool, vfs_bench, and the AndroidAssetBackend test APK |
 | WebAssembly (Emscripten) | POSIX over the Emscripten FS (MEMFS, NODEFS, NODERAWFS, and so on) | — | All tests under node, in both the pthread build and the threadless build (thread-based cases are skipped there) |
 
 Platform detection uses `VFS_PLATFORM_WINDOWS / LINUX / ANDROID / MACOS / IOS / WASM` from `src/vfs/Platform.h`,
@@ -135,9 +135,10 @@ cd build-wasm && ctest            # run tests and vfstool under node
 ```
 
 - `VFS_WASM_THREADS` (default ON): every target gets `-pthread`. The library itself still works in a threadless build (OFF); locks become no-ops. In that build the test cases that start threads (the `concurrency`, `deadlock` and `stress` suites, plus a few multithreaded cases elsewhere) are skipped through the `VFS_NEEDS_THREADS` decorator; everything else runs.
-  Tests, the benchmark, and the multithreaded examples need threads.
+  The benchmark and the multithreaded examples need threads.
 - When built as the top-level project, executables are linked as node programs: `-sNODERAWFS=1` (the native backend talks to the host filesystem directly),
-  `-sPROXY_TO_PTHREAD`, and a fixed 1.5 GiB initial memory. Used as a subdirectory, those options are not applied to your program.
+  `-sPROXY_TO_PTHREAD`, and a fixed 3 GiB initial memory (vfs_bench `write.large.seq` at 8 threads keeps about 1 GiB in the memory backend). Used as a subdirectory, those options are not applied to your program.
 - In the browser the native backend runs on Emscripten's virtual filesystem (MEMFS by default; IDBFS / OPFS for persistence).
   Mount a directory there with `mountNative("/data", "/data")`. Assets can also be mounted directly through the memory backend or `MemoryArchiveSource` from a downloaded archive.
+- Tested: Emscripten 6.0.13, node v24.21.0, on the Linux box (Intel Xeon KVM, 8 vCPU, Debian 13). `vfs_tests` passes under node in the pthread build (18 ctest cases) and the threadless build (482 test cases, 53 thread-based cases skipped). The full default `vfs_bench` runs under node (Release -O3, pthreads, NODERAWFS); results are in [bench/wasm.md](bench/wasm.md) and the WebAssembly section of [benchmark.md](benchmark.md).
 - Emscripten's filesystem silently truncates names longer than 255 bytes and still creates the file. On WebAssembly the native backend rejects those names outright (INVALID_PATH).
