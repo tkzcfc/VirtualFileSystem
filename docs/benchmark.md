@@ -289,14 +289,14 @@ Windows（MSVC）下用 `cmake --build build-bench --config Release`，可执行
 | 归档并发读 | 所有流共用一个句柄 + 锁；Linux 上共享 fd 的引用计数争用 | 按偏移读（`pread` / overlapped `ReadFile`），每个线程最多 8 个独立句柄槽 | `meta.open` archive：Windows 42k → 5.68M，macOS 145k → 3.09M |
 | Windows 本机覆盖层未命中 | 查询“中间目录不存在”的路径（`ERROR_PATH_NOT_FOUND`）在系统内部串行；之后还要逐级 `GetFileAttributesW` 区分 NOT_FOUND / NOT_DIR | 只读查询先确认父目录存在（每线程记住最近确认存在的父目录），父目录不存在时自顶向下分类 | `meta.miss` archive+native 26.9k → 329k，`meta.open` 25.8k → 324k |
 | `MemoryBackend` 写入抖动 | 整棵树一把读写锁 | 每个目录一把读写锁，逐级“先锁子目录再放父目录”；rename 额外一把全局锁 | `write.churn` memory：Linux 161k → 730k，macOS 92k → 288k |
-| Windows `vfs:native` 打开开销 | — | 测量后确认已与直接调用持平（`meta.open` 0.98 ~ 1.04 倍，`read.small` 1.0 ~ 1.08 倍），未再改动 | — |
+| Windows `vfs:native` 打开开销 | — | 测量后确认已与直接调用持平（`meta.open` 0.98 ~ 1.05 倍，`read.small` 0.99 ~ 1.09 倍），未再改动 | — |
 
 ## 仍然较慢的组合
 
 - **LZ4 归档读大文件**：压缩条目在 `open` 时整体解压，大文件不要压缩，只压缩脚本、配置等小文件。
 - **本机覆盖层**：同一挂载点上每多一个本机目录，每次查找多一次系统调用（Windows 上约 10 µs）；发布版本不需要本机覆盖时不要挂空目录。
-- **深层嵌套（nested8）**：查找要经过 9 层，元数据操作约 0.6 ~ 0.9 倍。
-- **本机后端列目录**：VFS 要汇总各层、去重排序并转换文件名，约 0.6 ~ 0.7 倍。
+- **深层嵌套（nested8）**：查找要经过 9 层，`meta.miss` / `meta.open` 约 0.4 ~ 1.0 倍（Windows 上 `meta.stat` 因 stdio 基线本身较慢反而是 1.7 倍）。
+- **本机后端列目录**：VFS 要汇总各层、去重排序并转换文件名，Linux / Windows 约 0.56 ~ 0.77 倍，macOS 多线程时与直接调用持平。
 
 ## 重新生成图表
 
