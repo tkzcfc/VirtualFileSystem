@@ -220,7 +220,9 @@ std::unique_ptr<IFileStream> NativeBackend::open(std::string_view rel, IFileStre
 	auto stream = std::make_unique<NativeFileStream>();
 	if (!stream->open(full, mode))
 	{
-		setError(err, native::errorFromErrno(errno));
+		int code = errno;
+		native::forgetParentDir();
+		setError(err, native::errorFromErrno(code));
 		return nullptr;
 	}
 	// VFS 在单层时直接 open、不先 stat，所以大小写核对也要在这里做

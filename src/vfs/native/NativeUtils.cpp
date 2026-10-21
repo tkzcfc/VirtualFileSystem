@@ -317,6 +317,9 @@ static Error errorForPath(DWORD code, std::string_view utf8Path, bool mustExist 
 	return errorFromWin32(code);
 }
 
+// checkParentDir 的每线程记录：最近确认存在的父目录（完整路径）
+static thread_local std::string t_knownParent;
+
 Error checkParentDir(std::string_view utf8Path, size_t rootLen)
 {
 	// 实测（Windows 11 / NTFS）：查询“中间目录不存在”的路径（ERROR_PATH_NOT_FOUND）在系统内部是串行的，
@@ -328,6 +331,11 @@ Error checkParentDir(std::string_view utf8Path, size_t rootLen)
 	std::string_view parent = parentOf(utf8Path);
 	if (parent.size() <= rootLen)
 		return Error::OK;   // 父目录就是后端根目录
+	// 但查询目录本身会和对该目录内名字的并发查询互相竞争（同样实测 8 线程大幅变慢），
+	// 所以每个线程记住最近确认存在的父目录，命中时跳过预检。这只是“正向”提示：
+	// 目录之后被删掉，叶子查询会拿到 PATH_NOT_FOUND，结果依然正确（只是走回慢路径），并清掉记录
+	if (parent == t_knownParent)
+		return Error::OK;
 	DWORD attr = ::GetFileAttributesW(toWidePath(parent).c_str());
 	if (attr == INVALID_FILE_ATTRIBUTES)
 	{
@@ -336,7 +344,15 @@ Error checkParentDir(std::string_view utf8Path, size_t rootLen)
 			return classifyMissing(utf8Path, rootLen);
 		return Error::OK;   // 其他错误交给实际操作报告
 	}
-	return (attr & FILE_ATTRIBUTE_DIRECTORY) ? Error::OK : Error::NOT_DIR;
+	if (!(attr & FILE_ATTRIBUTE_DIRECTORY))
+		return Error::NOT_DIR;
+	t_knownParent.assign(parent);
+	return Error::OK;
+}
+
+void forgetParentDir()
+{
+	t_knownParent.clear();
 }
 
 Error statPath(std::string_view utf8Path, Stat& out, size_t rootLen)
@@ -351,7 +367,11 @@ Error statPath(std::string_view utf8Path, Stat& out, size_t rootLen)
 		return ::GetFileAttributesExW(wpath.c_str(), GetFileExInfoStandard, &data) ? ERROR_SUCCESS : ::GetLastError();
 	});
 	if (code != ERROR_SUCCESS)
+	{
+		if (code == ERROR_PATH_NOT_FOUND || code == ERROR_DIRECTORY)
+			forgetParentDir();
 		return errorForPath(code, utf8Path, true, rootLen);
+	}
 	out.type = (data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) ? FileType::DIR : FileType::FILE;
 	out.size = out.type == FileType::FILE
 				   ? static_cast<int64_t>((static_cast<uint64_t>(data.nFileSizeHigh) << 32) | data.nFileSizeLow)
@@ -815,6 +835,8 @@ Error checkParentDir(std::string_view /*utf8Path*/, size_t /*rootLen*/)
 {
 	return Error::OK;
 }
+
+void forgetParentDir() {}
 
 Error statPath(std::string_view utf8Path, Stat& out, size_t /*rootLen*/)
 {

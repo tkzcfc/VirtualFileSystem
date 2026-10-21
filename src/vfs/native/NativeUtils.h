@@ -55,6 +55,9 @@ Error statPath(std::string_view utf8Path, Stat& out, size_t rootLen = 0);
  */
 Error checkParentDir(std::string_view utf8Path, size_t rootLen);
 
+/// 清除本线程 checkParentDir 记住的父目录（打开失败、父目录可能已消失时调用）
+void forgetParentDir();
+
 /**
  * 列目录：对每个子项调用 cb(name, type)，跳过 "." ".." 和特殊文件（设备、管道等）；cb 返回 false 停止。
  * 符号链接按它指向的类型报告。Windows 上直接用 FindFirstFileExW（支持长路径，不依赖各家 std::filesystem 的实现）。
