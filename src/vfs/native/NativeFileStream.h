@@ -55,11 +55,16 @@ public:
 
 	virtual bool isOpen() const override;
 
+	// Windows APPEND streams have no read access until the first read(), which also replaces this handle
 	virtual osfhnd_t nativeHandle() const override;
 
 private:
-	osfhnd_t m_handle;   // native handle; (osfhnd_t)-1 when not open
-	bool m_append;       // APPEND mode: on Windows, seek to the end before every write
+	// Windows APPEND: reopen the handle with read access before the first read
+	bool ensureReadable() const;
+
+	mutable osfhnd_t m_handle;   // native handle; (osfhnd_t)-1 when not open
+	bool m_append;               // APPEND mode: on Windows, seek to the end before every write
+	mutable bool m_writeOnly;    // Windows APPEND: opened without read access until the first read (see open())
 };
 
 NS_VFS_END

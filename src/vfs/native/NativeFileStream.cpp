@@ -41,15 +41,18 @@ static const osfhnd_t s_invalidHandle = -1;
 NativeFileStream::NativeFileStream()
 	: m_handle(s_invalidHandle)
 	, m_append(false)
+	, m_writeOnly(false)
 {
 }
 
 NativeFileStream::NativeFileStream(NativeFileStream&& other) noexcept
 	: m_handle(other.m_handle)
 	, m_append(other.m_append)
+	, m_writeOnly(other.m_writeOnly)
 {
 	other.m_handle = s_invalidHandle;
 	other.m_append = false;
+	other.m_writeOnly = false;
 }
 
 NativeFileStream& NativeFileStream::operator=(NativeFileStream&& other) noexcept
@@ -59,8 +62,10 @@ NativeFileStream& NativeFileStream::operator=(NativeFileStream&& other) noexcept
 		close();
 		m_handle = other.m_handle;
 		m_append = other.m_append;
+		m_writeOnly = other.m_writeOnly;
 		other.m_handle = s_invalidHandle;
 		other.m_append = false;
+		other.m_writeOnly = false;
 	}
 	return *this;
 }
@@ -113,6 +118,12 @@ bool NativeFileStream::open(std::string_view path, IFileStream::Mode mode)
 		creation = CREATE_ALWAYS;
 		break;
 	case Mode::APPEND:
+		// No read access yet: opening a just-written file with read access makes Windows Defender scan it
+		// synchronously (about 5 ms per open), which dominates open/append/close loops such as logs.
+		// The handle is reopened with read access on the first read (ensureReadable).
+		access = GENERIC_WRITE | FILE_READ_ATTRIBUTES;
+		creation = OPEN_ALWAYS;
+		break;
 	case Mode::OVERLAPPED:
 	default:
 		creation = OPEN_ALWAYS;
@@ -149,6 +160,31 @@ bool NativeFileStream::open(std::string_view path, IFileStream::Mode mode)
 	}
 	m_handle = h;
 	m_append = mode == Mode::APPEND;
+	m_writeOnly = m_append;
+	return true;
+}
+
+bool NativeFileStream::ensureReadable() const
+{
+	if (!m_writeOnly)
+		return true;
+	// Same file, same sharing, now with read access; the file pointer moves over to the new handle
+	LARGE_INTEGER zero{}, pos{};
+	if (!::SetFilePointerEx(m_handle, zero, &pos, FILE_CURRENT))
+	{
+		errno = EIO;
+		return false;
+	}
+	HANDLE h = ::ReOpenFile(m_handle, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, 0);
+	if (h == INVALID_HANDLE_VALUE)
+	{
+		errno = ioErrno(::GetLastError());
+		return false;
+	}
+	::CloseHandle(m_handle);
+	m_handle = h;
+	m_writeOnly = false;
+	::SetFilePointerEx(m_handle, pos, nullptr, FILE_BEGIN);
 	return true;
 }
 
@@ -160,6 +196,7 @@ int NativeFileStream::close()
 		m_handle = s_invalidHandle;
 	}
 	m_append = false;
+	m_writeOnly = false;
 	return 0;
 }
 
@@ -188,6 +225,8 @@ int NativeFileStream::read(void* buf, unsigned int size) const
 	}
 	if (size > VFS_MAX_IO_CHUNK)
 		size = VFS_MAX_IO_CHUNK;
+	if (!ensureReadable())
+		return -1;
 	DWORD bytesRead = 0;
 	if (::ReadFile(m_handle, buf, size, &bytesRead, nullptr))
 		return static_cast<int>(bytesRead);

@@ -383,8 +383,16 @@ TEST_SUITE("stream")
 			s->seek(0, SEEK_SET);
 			CHECK(s->write("34", 2) == 2);
 			CHECK(s->size() == 7);
+			// APPEND is readable (on Windows the first read upgrades the handle); writes after a read still append.
+			CHECK(s->seek(1, SEEK_SET) == 1);
+			char buf[4] = {};
+			CHECK(s->read(buf, 3) == 3);
+			CHECK(std::string(buf, 3) == "bc1");
+			CHECK(s->tell() == 4);
+			CHECK(s->write("5", 1) == 1);
+			CHECK(s->size() == 8);
 		}
-		CHECK(test::str(fx.contents()) == "abc1234");
+		CHECK(test::str(fx.contents()) == "abc12345");
 
 		// APPEND creates the file when it does not exist.
 		fx.removeFile();

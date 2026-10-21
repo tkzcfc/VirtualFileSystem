@@ -43,8 +43,8 @@ if(EMSCRIPTEN)
         add_link_options(-pthread)
     endif()
     if(VFS_IS_TOP_LEVEL)
-        # Growing memory under threads slows JS-side access (emcc warns), so pin a 1.5 GiB initial heap (the benchmark memory backend needs about 0.5 GiB).
-        add_link_options(-sNODERAWFS=1 -sINITIAL_MEMORY=1536MB -sSTACK_SIZE=4MB -sEXIT_RUNTIME=1)
+        # Growing memory under threads slows JS-side access (emcc warns), so pin a 3 GiB initial heap (vfs_bench write.large.seq keeps 64 MiB per thread in the memory backend, about 1 GiB at 8 threads with the layered target).
+        add_link_options(-sNODERAWFS=1 -sINITIAL_MEMORY=3072MB -sSTACK_SIZE=4MB -sEXIT_RUNTIME=1)
         if(VFS_WASM_THREADS)
             add_link_options(-sPROXY_TO_PTHREAD=1 -sDEFAULT_PTHREAD_STACK_SIZE=2MB)
         endif()
