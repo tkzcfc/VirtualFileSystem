@@ -1,5 +1,6 @@
 // vfstool info: print header fields and entry statistics.
 #include "Commands.h"
+#include <map>
 #include <set>
 
 NS_VFS_BEGIN
@@ -17,6 +18,7 @@ int runInfo(const InfoOptions& options, std::ostream& out, std::ostream& err)
 	const ArchiveHeader& h = index->header;
 	size_t files = 0, dirs = 0, encrypted = 0, compressed = 0, shared = 0;
 	uint64_t totalSize = 0;
+	std::map<uint64_t, size_t> blockSizes;   // LZ4 block size -> file count
 	std::set<uint64_t> offsets;   // Dedup accounting: non-empty files that share a stored-data start count once.
 	for (const auto& entry : index->entries)
 	{
@@ -30,7 +32,10 @@ int runInfo(const InfoOptions& options, std::ostream& out, std::ostream& err)
 		if (entry.cipher != CipherType::NONE)
 			++encrypted;
 		if (entry.compression != CompressionType::NONE)
+		{
 			++compressed;
+			++blockSizes[entry.blockSize()];
+		}
 		if (entry.storedSize > 0 && !offsets.insert(entry.offset).second)
 			++shared;
 	}
@@ -56,6 +61,12 @@ int runInfo(const InfoOptions& options, std::ostream& out, std::ostream& err)
 			<< "  \"emptyDirs\": " << dirs << ",\n"
 			<< "  \"encryptedFiles\": " << encrypted << ",\n"
 			<< "  \"compressedFiles\": " << compressed << ",\n"
+			<< "  \"blockSizes\": {" << [&] {
+				   std::string j;
+				   for (const auto& kv : blockSizes)
+					   j += (j.empty() ? "\"" : ", \"") + std::to_string(kv.first) + "\": " + std::to_string(kv.second);
+				   return j;
+			   }() << "},\n"
 			<< "  \"dedupShared\": " << shared << ",\n"
 			<< "  \"totalSize\": " << totalSize << ",\n"
 			<< "  \"indexHash\": \"" << std::hex << h.indexHash << std::dec << "\",\n"
@@ -75,7 +86,12 @@ int runInfo(const InfoOptions& options, std::ostream& out, std::ostream& err)
 		<< "Entries:        " << h.entryCount << " (files " << files << ", empty dirs " << dirs << ")\n"
 		<< "Total size:     " << totalSize << " bytes\n"
 		<< "XOR-encrypted:  " << encrypted << " file(s)\n"
-		<< "LZ4-compressed: " << compressed << " file(s)\n"
+		<< "LZ4-compressed: " << compressed << " file(s)" << [&] {
+			   std::string t;
+			   for (const auto& kv : blockSizes)
+				   t += (t.empty() ? ", block size " : ", ") + formatBlockSize(kv.first) + " x" + std::to_string(kv.second);
+			   return t;
+		   }() << "\n"
 		<< "Deduplicated:   " << shared << " entr(ies)\n"
 		<< "Checksums:      header XXH3-64 = " << std::hex << h.headerChecksum << ", index XXH3-64 = " << h.indexHash
 		<< std::dec << " (all verified)\n";

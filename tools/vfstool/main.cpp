@@ -207,6 +207,10 @@ int main(int argc, char** argv)
 	packCmd->add_flag("--store-key", pack.storeKey, "also store the external index key in the archive");
 	packCmd->add_flag("--no-index-encrypt", pack.noIndexEncrypt, "do not encrypt the index");
 	packCmd->add_option("--xor-key-len", pack.xorKeyLength, "per-file XOR key length (16..32, default 32)");
+	packCmd->add_option("--block-size", pack.blockSizes,
+						"LZ4 block size: <size> sets the default (power of two, 4K..4M, default 64K); "
+						"<glob>=<size> overrides matching files (repeatable, last match wins)")
+		->allow_extra_args(false);
 	packCmd->add_option("--lz4-level", pack.compressionLevel, "LZ4 HC compression level (1..12, default 9)");
 	packCmd->add_flag("--keep-mtime", pack.keepMtime, "store the real source mtime (default 0 for reproducible output)");
 	packCmd->add_flag("--empty-dirs", pack.emptyDirs, "keep empty directories (dropped by default)");

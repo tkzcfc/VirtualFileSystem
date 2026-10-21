@@ -61,6 +61,7 @@ struct PackOptions
 	bool noIndexEncrypt = false;         // Do not encrypt the index
 	uint32_t xorKeyLength = 32;          // Per-file XOR key length (16..32)
 	int compressionLevel = 9;            // LZ4 HC level
+	std::vector<std::string> blockSizes; // --block-size: "<size>" sets the default, "<glob>=<size>" overrides matching files (last match wins)
 	bool keepMtime = false;              // Write the real mtime (default 0, for reproducibility)
 	bool emptyDirs = false;              // Keep empty directories (omitted by default)
 	bool noDedup = false;                // Disable content dedup
@@ -117,6 +118,17 @@ struct KeygenOptions
 {
 	std::string outputFile;   // Print to stdout when empty
 };
+
+/**
+ * Parse an LZ4 block size such as "65536", "64K", "64KiB", "1M" (power of two, 4 KiB..4 MiB) into its log2.
+ * @return false if the text is not a valid block size
+ */
+bool parseBlockSize(std::string_view text, uint8_t& log2);
+
+/**
+ * Format a block size for display, e.g. 65536 -> "64K", 1048576 -> "1M".
+ */
+std::string formatBlockSize(uint64_t size);
 
 int runPack(const PackOptions& options, std::ostream& out, std::ostream& err);
 

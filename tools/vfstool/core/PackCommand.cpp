@@ -1,4 +1,5 @@
 // vfstool pack: pack a directory into a .vfs archive
+#include <cctype>
 #include "Commands.h"
 #include "vfs/Path.h"
 #include "vfs/archive/ArchiveWriter.h"
@@ -97,6 +98,10 @@ public:
 				item.nativePath = std::move(nativePath);
 				item.options.encrypt = Glob::evaluate(m_options.encryptRules, childRel, m_options.encryptAll);
 				item.options.compress = Glob::evaluate(m_options.compressRules, childRel, m_options.compressAll);
+				// Per-pattern LZ4 block size: the last matching "<glob>=<size>" wins; otherwise the archive default
+				for (const auto& rule : m_blockRules)
+					if (Glob::match(rule.first, childRel))
+						item.options.blockLog2 = rule.second;
 				if (m_options.keepMtime)
 				{
 					Stat st;
@@ -115,9 +120,54 @@ private:
 	std::ostream& m_err;
 	std::vector<Rule> m_filters;
 	bool m_hasInclude = false;
+
+public:
+	std::vector<std::pair<std::string, uint8_t>> m_blockRules;   // (glob, blockLog2) from --block-size <glob>=<size>
 };
 
 } // namespace
+
+bool parseBlockSize(std::string_view text, uint8_t& log2)
+{
+	size_t i = 0;
+	uint64_t value = 0;
+	while (i < text.size() && text[i] >= '0' && text[i] <= '9')
+	{
+		value = value * 10 + static_cast<uint64_t>(text[i] - '0');
+		if (value > (uint64_t(1) << 40))
+			return false;
+		++i;
+	}
+	if (i == 0)
+		return false;
+	std::string unit;
+	for (; i < text.size(); ++i)
+		unit += static_cast<char>(std::tolower(static_cast<unsigned char>(text[i])));
+	if (unit == "k" || unit == "kb" || unit == "kib")
+		value <<= 10;
+	else if (unit == "m" || unit == "mb" || unit == "mib")
+		value <<= 20;
+	else if (!unit.empty() && unit != "b")
+		return false;
+	for (uint8_t l = ArchiveFormat::MIN_BLOCK_LOG2; l <= ArchiveFormat::MAX_BLOCK_LOG2; ++l)
+	{
+		if (value == (uint64_t(1) << l))
+		{
+			log2 = l;
+			return true;
+		}
+	}
+	return false;
+}
+
+std::string formatBlockSize(uint64_t size)
+{
+	if (size >= (1u << 20) && size % (1u << 20) == 0)
+		return std::to_string(size >> 20) + "M";
+	if (size >= 1024 && size % 1024 == 0)
+		return std::to_string(size >> 10) + "K";
+	return std::to_string(size);
+}
 
 int runPack(const PackOptions& options, std::ostream& out, std::ostream& err)
 {
@@ -149,6 +199,23 @@ int runPack(const PackOptions& options, std::ostream& out, std::ostream& err)
 	writeOptions.fileKeyLength = options.xorKeyLength;
 	writeOptions.dedup = !options.noDedup;
 	writeOptions.compressionLevel = options.compressionLevel;
+	std::vector<std::pair<std::string, uint8_t>> blockRules;
+	for (const std::string& spec : options.blockSizes)
+	{
+		const size_t eq = spec.rfind('=');
+		uint8_t log2 = 0;
+		if (!parseBlockSize(eq == std::string::npos ? std::string_view(spec) : std::string_view(spec).substr(eq + 1), log2) ||
+			eq == 0)
+		{
+			err << "error: invalid --block-size: " << spec
+				<< " (expected <size> or <glob>=<size>; size is a power of two from 4K to 4M, e.g. 64K, 1M)\n";
+			return static_cast<int>(ExitCode::USAGE);
+		}
+		if (eq == std::string::npos)
+			writeOptions.blockLog2 = log2;
+		else
+			blockRules.emplace_back(spec.substr(0, eq), log2);
+	}
 	writeOptions.encryptIndex = !options.noIndexEncrypt;
 	Error e = resolveKey(options.key, writeOptions.indexKey, err);
 	if (e != Error::OK)
@@ -168,6 +235,7 @@ int runPack(const PackOptions& options, std::ostream& out, std::ostream& err)
 
 	std::vector<PackItem> items;
 	Collector collector(options, outputCanonical, err);
+	collector.m_blockRules = blockRules;
 	e = collector.collect(native::toFsPath(options.inputDir), std::string(), items);
 	if (e != Error::OK)
 		return exitCodeFor(e);

@@ -28,18 +28,21 @@ int runList(const ListOptions& options, std::ostream& out, std::ostream& err)
 				<< (isDir ? "dir" : "file") << "\", \"size\": " << entry.size << ", \"storedSize\": " << entry.storedSize
 				<< ", \"offset\": " << entry.offset << ", \"encrypted\": "
 				<< (entry.cipher != CipherType::NONE ? "true" : "false") << ", \"compressed\": "
-				<< (entry.compression != CompressionType::NONE ? "true" : "false") << ", \"hash\": \"" << std::hex
+				<< (entry.compression != CompressionType::NONE ? "true" : "false") << ", \"blockSize\": "
+				<< (entry.compression != CompressionType::NONE ? entry.blockSize() : 0) << ", \"hash\": \"" << std::hex
 				<< std::setw(16) << std::setfill('0') << entry.hash << std::dec << std::setfill(' ') << "\"}";
 			first = false;
 		}
 		else if (options.longFormat)
 		{
-			// Flags: D = empty directory, E = XOR encryption, C = LZ4 compression.
+			// Flags: D = empty directory, E = XOR encryption, C = LZ4 compression; then the LZ4 block size ("-" if not compressed).
 			std::string flags;
 			flags += isDir ? 'D' : '-';
 			flags += entry.cipher != CipherType::NONE ? 'E' : '-';
 			flags += entry.compression != CompressionType::NONE ? 'C' : '-';
+			const std::string block = entry.compression != CompressionType::NONE ? formatBlockSize(entry.blockSize()) : "-";
 			out << flags << " " << std::setw(12) << entry.size << " " << std::setw(12) << entry.storedSize << " "
+				<< std::setw(5) << block << " "
 				<< std::hex << std::setw(16) << std::setfill('0') << entry.hash << std::dec << std::setfill(' ') << "  "
 				<< entry.path << (isDir ? "/" : "") << "\n";
 		}

@@ -10,6 +10,7 @@ add_executable(vfs_tests
     memory/MemoryTests.cpp
     stream/StreamConformanceTests.cpp
     archive/ArchiveTests.cpp
+    archive/Lz4BlockTests.cpp
     asset/AssetTests.cpp
     crypto/CryptoTests.cpp
     tool/ToolTests.cpp
