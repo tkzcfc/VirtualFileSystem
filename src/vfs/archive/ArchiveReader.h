@@ -64,7 +64,7 @@ struct ArchiveEntry
 	uint64_t blockSize() const { return uint64_t(1) << blockLog2; }
 
 	/// LZ4: number of blocks (0 for an empty file).
-	uint64_t blockCount() const { return (size + blockSize() - 1) >> blockLog2; }
+	uint64_t blockCount() const { return (size >> blockLog2) + ((size & (blockSize() - 1)) != 0 ? 1 : 0); }
 
 	/// LZ4: size of the block table at the start of the stored data.
 	uint64_t blockTableSize() const { return blockCount() * ArchiveFormat::BLOCK_ENTRY_SIZE; }

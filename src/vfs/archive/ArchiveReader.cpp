@@ -1,5 +1,6 @@
 #include "ArchiveReader.h"
 #include <new>
+#include <cstdint>
 #include "ByteIO.h"
 #include "Compression.h"
 #include "../Path.h"
@@ -401,6 +402,8 @@ std::shared_ptr<const ArchiveIndex> ArchiveReader::open(std::shared_ptr<IArchive
 		}
 		else if (entry.keyLength != 0)
 			return fail(Error::CORRUPTED);
+		if (entry.size > static_cast<uint64_t>(INT64_MAX))
+			return fail(Error::CORRUPTED);
 		if (entry.compression == CompressionType::NONE && entry.storedSize != entry.size)
 			return fail(Error::CORRUPTED);
 		if (entry.compression == CompressionType::NONE && entry.blockLog2 != 0)
@@ -413,6 +416,12 @@ std::shared_ptr<const ArchiveIndex> ArchiveReader::open(std::shared_ptr<IArchive
 				return fail(Error::CORRUPTED);
 			const uint64_t blocks = entry.blockCount();
 			if (blocks > entry.storedSize / (BLOCK_ENTRY_SIZE + 1) || entry.storedSize - entry.blockTableSize() < blocks)
+				return fail(Error::CORRUPTED);
+			// LZ4 expands at most about 255:1, so the logical size is bounded by the block payload.
+			// This rejects hostile sizes before anyone allocates a buffer for them.
+			const uint64_t payload = entry.storedSize - entry.blockTableSize();
+			const uint64_t slack = blocks * 64;
+			if (entry.size > slack && (entry.size - slack) / 255 > payload)
 				return fail(Error::CORRUPTED);
 		}
 	}

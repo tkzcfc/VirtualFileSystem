@@ -2,6 +2,7 @@
 #include "ByteIO.h"
 #include "../crypto/XorCipher.h"
 #include <algorithm>
+#include <cstdint>
 #include <cstring>
 #include <new>
 
@@ -176,6 +177,12 @@ bool ArchiveFileStream::loadBlock(uint64_t block) const
 		const uint64_t table = m_entry->blockTableSize();
 		if (m_blockTable.empty())
 		{
+			// size_t may be narrower than uint64_t (32-bit targets): refuse tables that do not fit in memory
+			if (blocks > m_blockTable.max_size() || table > static_cast<uint64_t>(SIZE_MAX))
+			{
+				errno = EFBIG;
+				return false;
+			}
 			// Load and decrypt the whole table once: later block lookups are O(1)
 			std::vector<uint8_t> raw(static_cast<size_t>(table));
 			if (!readStored(raw.data(), raw.size(), 0))
@@ -227,7 +234,7 @@ int64_t ArchiveFileStream::readCompressed(uint8_t* out, size_t want) const
 	{
 		const uint64_t pos = static_cast<uint64_t>(m_pos) + done;
 		if (!loadBlock(pos >> log2))
-			return done > 0 ? static_cast<int64_t>(done) : -1;
+			return -1;   // A corrupt block fails the whole read, even if earlier blocks were copied
 		const uint64_t inBlock = pos & mask;
 		const uint64_t blockLen = std::min<uint64_t>(m_entry->blockSize(), m_entry->size - ((pos >> log2) << log2));
 		const size_t n = static_cast<size_t>(std::min<uint64_t>(want - done, blockLen - inBlock));

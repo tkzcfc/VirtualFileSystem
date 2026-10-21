@@ -16,27 +16,6 @@ namespace
 std::atomic<AAssetManager*> g_manager{nullptr};
 std::mutex g_javaRefMutex;
 jobject g_javaRef = nullptr;   // Global reference held by setAssetManagerFromJava
-JavaVM* g_javaVm = nullptr;    // VM that owns g_javaRef, so the raw setter can release it
-
-// Releases g_javaRef (caller holds g_javaRefMutex). Attaches the thread briefly if needed.
-void releaseJavaRefLocked()
-{
-	if (!g_javaRef || !g_javaVm)
-		return;
-	JNIEnv* env = nullptr;
-	bool attached = false;
-	if (g_javaVm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6) == JNI_EDETACHED)
-	{
-		if (g_javaVm->AttachCurrentThread(&env, nullptr) != JNI_OK)
-			return;
-		attached = true;
-	}
-	if (env)
-		env->DeleteGlobalRef(g_javaRef);
-	g_javaRef = nullptr;
-	if (attached)
-		g_javaVm->DetachCurrentThread();
-}
 
 class AndroidAssetFile : public IAssetFile
 {
@@ -98,18 +77,17 @@ private:
 
 void AndroidAssetBackend::setAssetManager(AAssetManager* manager)
 {
-	std::lock_guard<std::mutex> lock(g_javaRefMutex);
+	// A Java ref from setAssetManagerFromJava is kept on purpose: mounts created earlier still hold its
+	// AAssetManager*. Call setAssetManagerFromJava(env, nullptr) to release it.
 	g_manager.store(manager, std::memory_order_release);
-	// A raw manager replaces any Java-owned one; do not keep that AssetManager pinned.
-	releaseJavaRefLocked();
 }
 
 void AndroidAssetBackend::setAssetManagerFromJava(JNIEnv* env, jobject assetManager)
 {
 	std::lock_guard<std::mutex> lock(g_javaRefMutex);
-	if (!g_javaVm)
-		env->GetJavaVM(&g_javaVm);
 	jobject ref = assetManager ? env->NewGlobalRef(assetManager) : nullptr;
+	if (assetManager && !ref)
+		return;   // Out of JNI references: keep the current manager
 	g_manager.store(ref ? AAssetManager_fromJava(env, ref) : nullptr, std::memory_order_release);
 	if (g_javaRef)
 		env->DeleteGlobalRef(g_javaRef);

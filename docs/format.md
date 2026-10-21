@@ -75,7 +75,7 @@ The plaintext index is `Entry[entryCount]` immediately followed by `StringPool`.
 | 56 | u64 | reserved | 0 |
 | 64 | u8[32] | key | XOR key; the first keyLength bytes are significant, the rest are 0 |
 
-Validation rules (the reader treats every field as untrusted input): type/cipher/compression are legal values; `[nameOffset, nameOffset+nameLength)` lies inside the StringPool; the path is normalized; entries are strictly sorted; the file data range `[offset, offset+storedSize)` lies inside the data region; when uncompressed, `storedSize == size`; when uncompressed, `blockLog2 == 0`; when compressed, `size > 0`, `blockLog2` is in 12..22, and `storedSize` holds at least the block table plus one byte per block (block spans are validated when the table is read, see 5.2); the same path cannot be both a file and an ancestor of a directory. Data ranges of different entries **may overlap** (shared by dedup).
+Validation rules (the reader treats every field as untrusted input): type/cipher/compression are legal values; `[nameOffset, nameOffset+nameLength)` lies inside the StringPool; the path is normalized; entries are strictly sorted; the file data range `[offset, offset+storedSize)` lies inside the data region; when uncompressed, `storedSize == size`; when uncompressed, `blockLog2 == 0`; when compressed, `size > 0`, `blockLog2` is in 12..22, and `storedSize` holds at least the block table plus one byte per block, and `size` is at most about 255 times the block payload (the LZ4 expansion limit; `size` never exceeds INT64_MAX) (block spans are validated when the table is read, see 5.2); the same path cannot be both a file and an ancestor of a directory. Data ranges of different entries **may overlap** (shared by dedup).
 
 ### 4.2 StringPool
 

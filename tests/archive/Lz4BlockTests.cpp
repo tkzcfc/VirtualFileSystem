@@ -299,6 +299,46 @@ TEST_SUITE("archive")
 		}
 	}
 
+	TEST_CASE("LZ4 blocks: index validation rejects hostile logical sizes")
+	{
+		const auto good = pack({{"t.lua", textLike(50000, 1), lz4(12)}}, [] {
+			ArchiveWriteOptions o;
+			o.encryptIndex = false;
+			return o;
+		}());
+		const auto idx = mountData(good)->index();
+		const uint64_t entryAt = idx->header.indexOffset;
+		// Wraps blockCount, exceeds INT64_MAX, and claims far more than LZ4 can expand to
+		for (uint64_t v : {UINT64_MAX, uint64_t(INT64_MAX) + 1, uint64_t(1) << 40})
+		{
+			auto bad = good;
+			ByteIO::writeU64LE(bad.data() + entryAt + ArchiveFormat::E_SIZE, v);
+			const uint64_t h = xxh3_64(bad.data() + entryAt, idx->header.indexSize);
+			ByteIO::writeU64LE(bad.data() + ArchiveFormat::H_INDEX_HASH, h);
+			ByteIO::writeU64LE(bad.data() + ArchiveFormat::H_CHECKSUM, xxh3_64(bad.data(), ArchiveFormat::H_CHECKSUM));
+			Error e = Error::OK;
+			CAPTURE(v);
+			CHECK_FALSE(ArchiveBackend::create(std::make_shared<MemoryArchiveSource>(bad), {}, &e));
+			CHECK(e == Error::CORRUPTED);
+		}
+	}
+
+	TEST_CASE("LZ4 blocks: a read spanning a corrupt block fails as a whole")
+	{
+		const auto text = textLike(3 * 4096, 7);
+		auto data = pack({{"t.lua", text, lz4(12)}});
+		const ArchiveEntry entry = *mountData(data)->index()->findFile("t.lua");
+		// Corrupt the second block's table end offset so its span is invalid
+		const size_t second = static_cast<size_t>(entry.offset) + ArchiveFormat::BLOCK_ENTRY_SIZE;
+		ByteIO::writeU64LE(data.data() + second, 0);
+		auto b = mountData(data);
+		auto s = b->open("t.lua", IFileStream::Mode::READ, nullptr);
+		REQUIRE(s);
+		std::vector<uint8_t> buf(8192);
+		CHECK(s->read(buf.data(), static_cast<unsigned int>(buf.size())) == -1);
+		CHECK(s->tell() == 0);
+	}
+
 	TEST_CASE("LZ4 blocks: packing is deterministic; block size is part of dedup")
 	{
 		const auto text = textLike(400000, 41);
