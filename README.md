@@ -28,6 +28,25 @@ The companion command-line tool `vfstool` packs, unpacks, and inspects `.vfs` ar
 
 How to build on each platform, and the caveats, are in [Platforms](docs/platforms.md).
 
+## Performance
+
+Shipping assets in a `.vfs` archive is usually much faster than opening loose files with plain C `stdio` (`fopen`/`fread`/`stat`) on the same machine, because opens, `stat`s, and lookups are answered from an in-memory index:
+
+| Operation | Windows | Linux | macOS | iOS | Android |
+|---|---:|---:|---:|---:|---:|
+| Read a small file (4 KiB) | **7.5x** / 5.1x | **2.5x** / 3.1x | **18.4x** / 11.0x | **166x** / 20.2x | **1.6x** / 1.3x |
+| Random reads in a 64 MiB file | **0.9x** / 1.0x | **0.9x** / 1.0x | **2.3x** / 3.3x | **2.6x** / 2.9x | **1.5x** / 1.3x |
+| `stat` a file | **67.2x** / 60.7x | **5.8x** / 4.1x | **13.5x** / 26.3x | **271x** / 173x | **3.9x** / 1.3x |
+| Open a file | **31.9x** / 19.1x | **4.2x** / 3.2x | **46.7x** / 24.4x | **133x** / 31.1x | **1.7x** / 0.7x |
+| Look up a missing file | **20.3x** / 17.9x | **2.1x** / 1.9x | **3.4x** / 11.0x | **68.9x** / 37.5x | **1.7x** / 0.4x |
+
+Speedup of the plain archive backend (`vfs:archive`) over `base:stdio`, **1 thread** / 8 threads, measured with [`vfs_bench`](docs/benchmark.md) at default settings (warm cache, Release).
+Values below 1x mean slower than stdio. Machines: Windows = Core i5-12400, Linux = 8-vCPU Xeon VM, macOS = Apple M4, iOS = iPhone 14 Pro, Android = Redmi K80 (Snapdragon 8 Gen 3).
+Android ran as a command-line process from `adb shell`, which gets no foreground-app CPU boost.
+Every backend (native, memory, LZ4 archives, layered mounts), every scenario, and the absolute numbers are in [docs/benchmark.md](docs/benchmark.md).
+
+![Windows: speed relative to stdio](docs/images/bench/windows.svg)
+
 ## Quick start
 
 ```cpp

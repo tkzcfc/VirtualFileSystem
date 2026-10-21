@@ -28,6 +28,25 @@
 
 各平台的构建方法与注意事项见 [平台支持](docs/platforms.md)。
 
+## 性能
+
+把资源打包成 `.vfs` 归档后，打开、`stat`、查找都由内存索引直接应答，通常比在同一台机器上用普通 C `stdio`（`fopen`/`fread`/`stat`）访问散文件快得多：
+
+| 操作 | Windows | Linux | macOS | iOS | Android |
+|---|---:|---:|---:|---:|---:|
+| 读小文件（4 KiB） | **7.5x** / 5.1x | **2.5x** / 3.1x | **18.4x** / 11.0x | **166x** / 20.2x | **1.6x** / 1.3x |
+| 64 MiB 大文件随机读 | **0.9x** / 1.0x | **0.9x** / 1.0x | **2.3x** / 3.3x | **2.6x** / 2.9x | **1.5x** / 1.3x |
+| `stat` 文件 | **67.2x** / 60.7x | **5.8x** / 4.1x | **13.5x** / 26.3x | **271x** / 173x | **3.9x** / 1.3x |
+| 打开文件 | **31.9x** / 19.1x | **4.2x** / 3.2x | **46.7x** / 24.4x | **133x** / 31.1x | **1.7x** / 0.7x |
+| 查找不存在的文件 | **20.3x** / 17.9x | **2.1x** / 1.9x | **3.4x** / 11.0x | **68.9x** / 37.5x | **1.7x** / 0.4x |
+
+表中为普通归档后端（`vfs:archive`）相对 `base:stdio` 的加速比，**1 线程** / 8 线程，由 [`vfs_bench`](docs/benchmark.md) 以默认参数测得（热缓存，Release）。
+小于 1x 表示比 stdio 慢。测试机器：Windows = Core i5-12400，Linux = 8 vCPU Xeon 虚拟机，macOS = Apple M4，iOS = iPhone 14 Pro，Android = Redmi K80（骁龙 8 Gen 3）。
+Android 数据来自 `adb shell` 启动的命令行进程，没有前台应用的 CPU 提频。
+所有后端（native、memory、LZ4 归档、多层挂载）、所有场景以及绝对数值见 [docs/benchmark.md](docs/benchmark.md)（英文）。
+
+![Windows：相对 stdio 的速度](docs/images/bench/windows.svg)
+
 ## 快速上手
 
 ```cpp
