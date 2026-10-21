@@ -185,9 +185,18 @@ vfs::Error buildArchive(const std::string& outPath, const std::vector<ArchiveFil
 bool nativeCaseSensitive()
 {
 	static const bool s_value = [] {
+		// 只有两个只差大小写的名字能同时创建成两个文件才算区分大小写：
+		// iOS 模拟器的文件系统查找区分大小写，但创建时仍与已有的名字冲突（EEXIST）
 		TempDir dir;
 		dir.write("CaseProbe.txt", "x");
-		return !dir.exists("caseprobe.txt");
+		if (dir.exists("caseprobe.txt"))
+			return false;
+		dir.write("caseprobe.txt", "y");
+		size_t count = 0;
+		std::error_code ec;
+		for (auto it = stdfs::directory_iterator(u8(dir.path()), ec); !ec && it != stdfs::directory_iterator(); it.increment(ec))
+			++count;
+		return count == 2;
 	}();
 	return s_value;
 }
