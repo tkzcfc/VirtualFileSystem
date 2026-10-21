@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="436" font-family="Segoe UI,Helvetica,Arial,sans-serif" font-size="12">
+<rect width="100%" height="100%" fill="white"/>
+<text x="10" y="22" font-size="15" font-weight="bold">windows — meta.open (ops/s, higher is better)</text>
+<text x="10" y="40" fill="#555">Intel i5-12400 (6C/12T), Windows 11, MSVC 19.51 Release</text>
+<rect x="170" y="48" width="10" height="10" fill="#4e79a7"/>
+<text x="184" y="57">1 thread</text>
+<rect x="250" y="48" width="10" height="10" fill="#f28e2b"/>
+<text x="264" y="57">8 threads</text>
+<text x="162" y="82" text-anchor="end">base:stdio</text>
+<rect x="170" y="64" width="6.4" height="12" fill="#4e79a7"/>
+<text x="180.4" y="75">70.3k</text>
+<rect x="170" y="78" width="27.3" height="12" fill="#f28e2b"/>
+<text x="201.3" y="89">298.0k</text>
+<text x="162" y="120" text-anchor="end">base:win32</text>
+<rect x="170" y="102" width="7.1" height="12" fill="#4e79a7"/>
+<text x="181.1" y="113">77.6k</text>
+<rect x="170" y="116" width="28.4" height="12" fill="#f28e2b"/>
+<text x="202.4" y="127">310.0k</text>
+<text x="162" y="158" text-anchor="end">vfs:native</text>
+<rect x="170" y="140" width="6.8" height="12" fill="#4e79a7"/>
+<text x="180.8" y="151">74.0k</text>
+<rect x="170" y="154" width="26.6" height="12" fill="#f28e2b"/>
+<text x="200.6" y="165">291.0k</text>
+<text x="162" y="196" text-anchor="end">vfs:memory</text>
+<rect x="170" y="178" width="106.9" height="12" fill="#4e79a7"/>
+<text x="280.9" y="189">1.17M</text>
+<rect x="170" y="192" width="414.3" height="12" fill="#f28e2b"/>
+<text x="588.3" y="203">4.53M</text>
+<text x="162" y="234" text-anchor="end">vfs:archive</text>
+<rect x="170" y="216" width="205.1" height="12" fill="#4e79a7"/>
+<text x="379.1" y="227">2.24M</text>
+<rect x="170" y="230" width="520.0" height="12" fill="#f28e2b"/>
+<text x="694.0" y="241">5.68M</text>
+<text x="162" y="272" text-anchor="end">vfs:archive-lz4</text>
+<rect x="170" y="254" width="22.3" height="12" fill="#4e79a7"/>
+<text x="196.3" y="265">243.4k</text>
+<rect x="170" y="268" width="53.4" height="12" fill="#f28e2b"/>
+<text x="227.4" y="279">583.7k</text>
+<text x="162" y="310" text-anchor="end">vfs:archive+native</text>
+<rect x="170" y="292" width="7.1" height="12" fill="#4e79a7"/>
+<text x="181.1" y="303">77.6k</text>
+<rect x="170" y="306" width="29.7" height="12" fill="#f28e2b"/>
+<text x="203.7" y="317">324.4k</text>
+<text x="162" y="348" text-anchor="end">vfs:memory+archive</text>
+<rect x="170" y="330" width="108.8" height="12" fill="#4e79a7"/>
+<text x="282.8" y="341">1.19M</text>
+<rect x="170" y="344" width="467.3" height="12" fill="#f28e2b"/>
+<text x="641.3" y="355">5.11M</text>
+<text x="162" y="386" text-anchor="end">vfs:3layer</text>
+<rect x="170" y="368" width="6.9" height="12" fill="#4e79a7"/>
+<text x="180.9" y="379">75.9k</text>
+<rect x="170" y="382" width="29.1" height="12" fill="#f28e2b"/>
+<text x="203.1" y="393">318.4k</text>
+<line x1="170" y1="60" x2="170" y2="410" stroke="#888"/>
+</svg>

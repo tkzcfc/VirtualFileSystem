@@ -6,6 +6,10 @@
 
 配套命令行工具 `vfstool` 负责打包、解包和检查 `.vfs` 归档。
 
+**性能**：在 Linux、macOS、Windows 上与直接调用 C 文件 API 的对比（含 1 / 8 线程、各后端与分层组合、优化前后）见 [性能基准](docs/benchmark.md)。
+
+![Windows before/after](docs/images/bench/windows-before-after.svg)
+
 ## 特性
 
 - **多种挂载**：本机目录、单个本机文件、内存目录树、`.vfs` 归档（来自文件或内存），以及实现 `IBackend` 的自定义后端。

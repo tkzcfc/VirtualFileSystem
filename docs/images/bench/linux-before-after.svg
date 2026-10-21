@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="436" font-family="Segoe UI,Helvetica,Arial,sans-serif" font-size="12">
+<rect width="100%" height="100%" fill="white"/>
+<text x="10" y="22" font-size="15" font-weight="bold">linux — before vs after, 8 threads (ops/s)</text>
+<text x="10" y="40" fill="#555">Intel Xeon KVM, 8 vCPU, Debian 13, GCC 14.2 Release</text>
+<rect x="170" y="48" width="10" height="10" fill="#4e79a7"/>
+<text x="184" y="57">before</text>
+<rect x="236" y="48" width="10" height="10" fill="#f28e2b"/>
+<text x="250" y="57">after</text>
+<text x="162" y="82" text-anchor="end">read.small archive</text>
+<rect x="170" y="64" width="32.8" height="12" fill="#4e79a7"/>
+<text x="206.8" y="75">1.28M</text>
+<rect x="170" y="78" width="79.5" height="12" fill="#f28e2b"/>
+<text x="253.5" y="89">3.10M</text>
+<text x="162" y="120" text-anchor="end">read.large.rand archive</text>
+<rect x="170" y="102" width="188.5" height="12" fill="#4e79a7"/>
+<text x="362.5" y="113">7.36M</text>
+<rect x="170" y="116" width="154.5" height="12" fill="#f28e2b"/>
+<text x="328.5" y="127">6.03M</text>
+<text x="162" y="158" text-anchor="end">meta.open archive</text>
+<rect x="170" y="140" width="33.3" height="12" fill="#4e79a7"/>
+<text x="207.3" y="151">1.30M</text>
+<rect x="170" y="154" width="82.2" height="12" fill="#f28e2b"/>
+<text x="256.2" y="165">3.21M</text>
+<text x="162" y="196" text-anchor="end">meta.open archive+native</text>
+<rect x="170" y="178" width="34.3" height="12" fill="#4e79a7"/>
+<text x="208.3" y="189">1.34M</text>
+<rect x="170" y="192" width="99.7" height="12" fill="#f28e2b"/>
+<text x="273.7" y="203">3.89M</text>
+<text x="162" y="234" text-anchor="end">meta.stat native</text>
+<rect x="170" y="216" width="57.1" height="12" fill="#4e79a7"/>
+<text x="231.1" y="227">2.23M</text>
+<rect x="170" y="230" width="156.3" height="12" fill="#f28e2b"/>
+<text x="330.3" y="241">6.11M</text>
+<text x="162" y="272" text-anchor="end">meta.stat archive</text>
+<rect x="170" y="254" width="67.6" height="12" fill="#4e79a7"/>
+<text x="241.6" y="265">2.64M</text>
+<rect x="170" y="268" width="520.0" height="12" fill="#f28e2b"/>
+<text x="694.0" y="279">20.31M</text>
+<text x="162" y="310" text-anchor="end">meta.miss native</text>
+<rect x="170" y="292" width="57.9" height="12" fill="#4e79a7"/>
+<text x="231.9" y="303">2.26M</text>
+<rect x="170" y="306" width="128.9" height="12" fill="#f28e2b"/>
+<text x="302.9" y="317">5.03M</text>
+<text x="162" y="348" text-anchor="end">meta.miss archive+native</text>
+<rect x="170" y="330" width="55.3" height="12" fill="#4e79a7"/>
+<text x="229.3" y="341">2.16M</text>
+<rect x="170" y="344" width="122.9" height="12" fill="#f28e2b"/>
+<text x="296.9" y="355">4.80M</text>
+<text x="162" y="386" text-anchor="end">write.churn memory</text>
+<rect x="170" y="368" width="4.1" height="12" fill="#4e79a7"/>
+<text x="178.1" y="379">161.0k</text>
+<rect x="170" y="382" width="18.7" height="12" fill="#f28e2b"/>
+<text x="192.7" y="393">729.5k</text>
+<line x1="170" y1="60" x2="170" y2="410" stroke="#888"/>
+</svg>
