@@ -35,6 +35,9 @@ int ArchiveFileStream::close()
 {
 	m_file.reset();
 	m_open = false;
+	// Drop the index too, so a closed but not yet destroyed stream does not pin the archive source.
+	m_entry = nullptr;
+	m_index.reset();
 	std::vector<uint64_t>().swap(m_blockTable);
 	std::vector<uint8_t>().swap(m_block);
 	std::vector<uint8_t>().swap(m_scratch);

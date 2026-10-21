@@ -1395,7 +1395,16 @@ Error VirtualFileSystem::copyFile(std::string_view from, std::string_view to) co
 
 Error VirtualFileSystem::copyStream(IFileStream& in, IFileStream& out)
 {
-	std::vector<uint8_t> buf(COPY_BUFFER_SIZE);
+	std::vector<uint8_t> buf;
+	try
+	{
+		buf.resize(COPY_BUFFER_SIZE);
+	}
+	catch (const std::bad_alloc&)
+	{
+		// Report instead of throwing, so callers still remove their temporary files
+		return Error::IO_ERROR;
+	}
 	while (true)
 	{
 		int n = in.read(buf.data(), static_cast<unsigned int>(buf.size()));
@@ -1488,7 +1497,16 @@ Error VirtualFileSystem::writeFileAtomic(std::string_view path, const void* data
 	if (norm == "/")
 		return report(Error::IS_DIR);
 	const std::string tmp = uniqueTempName(norm, "vfs");
-	Error e = writeFile(tmp, data, size);
+	Error e = Error::OK;
+	try
+	{
+		e = writeFile(tmp, data, size);
+	}
+	catch (const std::bad_alloc&)
+	{
+		// Out of memory halfway: do not leave the temporary file behind
+		e = Error::IO_ERROR;
+	}
 	if (e == Error::READ_ONLY)
 	{
 		// The temporary file's location is not writable (for example the target is a single-file mount and there is no writable layer beside it): write the target directly, no longer atomic

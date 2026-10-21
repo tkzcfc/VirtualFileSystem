@@ -192,7 +192,7 @@ TEST_SUITE("archive")
 		CHECK(b->verifyAll() == Error::OK);
 	}
 
-	TEST_CASE("LZ4 blocks: many threads read the same compressed entry")
+	TEST_CASE("LZ4 blocks: many threads read the same compressed entry" * VFS_NEEDS_THREADS)
 	{
 		const auto big = textLike(2 * 1024 * 1024 + 5, 21);
 		auto b = mountData(pack({{"shared.lua", big, lz4(14, true)}}));
@@ -231,7 +231,6 @@ TEST_SUITE("archive")
 			auto s = b->open("t.lua", IFileStream::Mode::READ, nullptr);
 			REQUIRE(s);
 			std::vector<uint8_t> buf(text.size());
-			int64_t total = 0;
 			bool failed = false;
 			while (true)
 			{
@@ -243,7 +242,6 @@ TEST_SUITE("archive")
 				}
 				if (n == 0)
 					break;
-				total += n;
 			}
 			// Either a read reports EIO, or the bytes differ (a flip inside literal data still decodes); never a crash
 			if (!failed)

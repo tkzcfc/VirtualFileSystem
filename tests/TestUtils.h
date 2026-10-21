@@ -11,6 +11,15 @@
 #include <string>
 #include <vector>
 
+// Emscripten without -pthread cannot start threads (std::thread throws); thread-based cases are skipped there.
+#if defined(__EMSCRIPTEN__) && !defined(__EMSCRIPTEN_PTHREADS__)
+#    define VFS_TEST_HAS_THREADS 0
+#else
+#    define VFS_TEST_HAS_THREADS 1
+#endif
+// Decorator for TEST_CASE / TEST_SUITE that start threads
+#define VFS_NEEDS_THREADS doctest::skip(!VFS_TEST_HAS_THREADS)
+
 // Make doctest print the error-code name when an assertion fails.
 // Note: doctest prefers to print enums as their underlying integer (it will not use a StringMaker specialization), so operator<< is required
 namespace vfs

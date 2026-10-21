@@ -93,7 +93,7 @@ std::string payload(int t, int i)
 
 #define STRESS_ENVS StressMemory, StressNative, StressMemoryOverArchive, StressNativeOverArchive
 
-TEST_SUITE("stress")
+TEST_SUITE("stress" * VFS_NEEDS_THREADS)
 {
 	TEST_CASE_TEMPLATE("same directory: each thread creates / writes / reads / overwrites / removes its own files while another lists", E, STRESS_ENVS)
 	{

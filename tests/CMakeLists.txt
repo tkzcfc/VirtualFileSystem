@@ -23,6 +23,7 @@ add_executable(vfs_tests
     model/ModelTests.cpp
     extreme/FaultBackend.h
     extreme/ExtremeTests.cpp
+    leak/LeakTests.cpp
 )
 target_include_directories(vfs_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 # vfs arrives through vfstool_core's PUBLIC dependency and is not linked again (otherwise Apple ld warns about duplicate libraries)
@@ -34,7 +35,7 @@ find_package(Threads REQUIRED)
 target_link_libraries(vfs_tests PRIVATE Threads::Threads)
 
 # Each TEST_SUITE is registered as its own ctest case so a failure is easy to locate
-foreach(suite path union native memory stream archive asset crypto tool concurrency deadlock matrix stress model extreme scenario)
+foreach(suite path union native memory stream archive asset crypto tool concurrency deadlock matrix stress model extreme scenario leak)
     add_test(NAME vfs.${suite} COMMAND vfs_tests --test-suite=${suite} --no-version)
 endforeach()
 

@@ -331,7 +331,7 @@ TEST_SUITE("asset")
 #endif
 	}
 
-	TEST_CASE("concurrent reads: one asset object per stream, 8 threads read the same assets")
+	TEST_CASE("concurrent reads: one asset object per stream, 8 threads read the same assets" * VFS_NEEDS_THREADS)
 	{
 		test::TempDir dir;
 		std::map<std::string, MockAsset> assets;

@@ -16,7 +16,7 @@ constexpr int THREADS = 16;
 
 } // namespace
 
-TEST_SUITE("concurrency")
+TEST_SUITE("concurrency" * VFS_NEEDS_THREADS)
 {
 	TEST_CASE("16 threads randomly read the same archive (each stream has its own handle and position)")
 	{

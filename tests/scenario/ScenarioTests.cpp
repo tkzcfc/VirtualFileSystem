@@ -319,7 +319,7 @@ TEST_SUITE("scenario")
 		(void)s;
 	}
 
-	TEST_CASE("concurrent: readers always see a complete version while layers are swapped and overrides written")
+	TEST_CASE("concurrent: readers always see a complete version while layers are swapped and overrides written" * VFS_NEEDS_THREADS)
 	{
 		Game g;
 		// Extra patch versions for remount churn

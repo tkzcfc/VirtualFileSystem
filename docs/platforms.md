@@ -7,7 +7,7 @@
 | macOS | POSIX + `getattrlist` (case check) | — | All tests |
 | iOS / iPadOS | Same as macOS (the app bundle and sandbox directories are ordinary files) | No dedicated backend | Device (arm64) and simulator builds with zero warnings; all tests on a device (iPhone 14 Pro, iOS 26.5) and on the simulator |
 | Android (API 24+) | POSIX (internal storage, external storage) | `AndroidAssetBackend`: mount `assets/` inside the APK | NDK r27 cross-compile arm64-v8a / x86_64 / armeabi-v7a with zero warnings; all tests on an x86_64 emulator (Android 14) and on a real device (Redmi K80, Snapdragon 8 Gen 3, Android 16, arm64-v8a): vfs_tests, stress tests, examples, vfstool, vfs_bench |
-| WebAssembly (Emscripten) | POSIX over the Emscripten FS (MEMFS, NODEFS, NODERAWFS, and so on) | — | All tests under node (pthread build) |
+| WebAssembly (Emscripten) | POSIX over the Emscripten FS (MEMFS, NODEFS, NODERAWFS, and so on) | — | All tests under node, in both the pthread build and the threadless build (thread-based cases are skipped there) |
 
 Platform detection uses `VFS_PLATFORM_WINDOWS / LINUX / ANDROID / MACOS / IOS / WASM` from `src/vfs/Platform.h`,
 plus `VFS_PLATFORM_APPLE` and `VFS_PLATFORM_POSIX` (each defined as 0 or 1, tested with `#if`).
@@ -134,7 +134,7 @@ cmake --build build-wasm -j
 cd build-wasm && ctest            # run tests and vfstool under node
 ```
 
-- `VFS_WASM_THREADS` (default ON): every target gets `-pthread`. The library itself still works in a threadless build (OFF); locks become no-ops.
+- `VFS_WASM_THREADS` (default ON): every target gets `-pthread`. The library itself still works in a threadless build (OFF); locks become no-ops. In that build the test cases that start threads (the `concurrency`, `deadlock` and `stress` suites, plus a few multithreaded cases elsewhere) are skipped through the `VFS_NEEDS_THREADS` decorator; everything else runs.
   Tests, the benchmark, and the multithreaded examples need threads.
 - When built as the top-level project, executables are linked as node programs: `-sNODERAWFS=1` (the native backend talks to the host filesystem directly),
   `-sPROXY_TO_PTHREAD`, and a fixed 1.5 GiB initial memory. Used as a subdirectory, those options are not applied to your program.

@@ -106,7 +106,7 @@ private:
 
 } // namespace
 
-TEST_SUITE("deadlock")
+TEST_SUITE("deadlock" * VFS_NEEDS_THREADS)
 {
 	TEST_CASE("unmount / FailIfBusy / remount while streams of every backend are open and being read")
 	{

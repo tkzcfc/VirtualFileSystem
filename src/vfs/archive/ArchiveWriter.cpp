@@ -1,5 +1,6 @@
 #include "ArchiveWriter.h"
 #include <atomic>
+#include <new>
 #include "ArchiveReader.h"
 #include "ByteIO.h"
 #include "Compression.h"
@@ -301,7 +302,16 @@ Error ArchiveWriter::write(std::string_view outPath, ArchiveWriteStats* stats)
 	if (!fs.open(tmp, IFileStream::Mode::WRITE))
 		return fail(native::errorFromErrno(errno), "cannot create output file: " + tmp);
 
-	Error e = write(fs, stats);
+	Error e = Error::OK;
+	try
+	{
+		e = write(fs, stats);
+	}
+	catch (const std::bad_alloc&)
+	{
+		// Out of memory while packing: remove the temporary file below instead of leaking it
+		e = Error::IO_ERROR;
+	}
 	fs.close();
 	if (e != Error::OK)
 	{
