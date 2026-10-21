@@ -6,7 +6,7 @@
 | Linux（GCC、Clang、libc++） | POSIX | — | 全部测试，另有 TSAN 构建 |
 | macOS | POSIX + `getattrlist`（大小写核对） | — | 全部测试 |
 | iOS / iPadOS | 与 macOS 相同（应用包与沙盒目录都是普通文件） | 不需要专门的后端 | 真机（arm64）与模拟器编译零警告；模拟器上运行全部测试 |
-| Android（API 24+） | POSIX（内部存储、外部存储） | `AndroidAssetBackend`：挂载 APK 内的 `assets/` | NDK r27 交叉编译 arm64-v8a / x86_64 / armeabi-v7a 零警告；测试见下文 |
+| Android（API 24+） | POSIX（内部存储、外部存储） | `AndroidAssetBackend`：挂载 APK 内的 `assets/` | NDK r27 交叉编译 arm64-v8a / x86_64 / armeabi-v7a 零警告；x86_64 模拟器（Android 14）上运行全部测试 |
 | WebAssembly（Emscripten） | POSIX over Emscripten FS（MEMFS、NODEFS、NODERAWFS 等） | — | node 上运行全部测试（pthread 构建） |
 
 平台判断统一使用 `src/vfs/Platform.h` 中的 `VFS_PLATFORM_WINDOWS / LINUX / ANDROID / MACOS / IOS / WASM`

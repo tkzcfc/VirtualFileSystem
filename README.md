@@ -21,7 +21,7 @@
 |---|---|
 | Windows / Linux / macOS | 全部测试 |
 | iOS | 真机与模拟器编译；模拟器运行全部测试 |
-| Android（API 24+） | arm64-v8a / x86_64 / armeabi-v7a 交叉编译；APK 资源后端 |
+| Android（API 24+） | arm64-v8a / x86_64 / armeabi-v7a 交叉编译；x86_64 模拟器运行全部测试；APK 资源后端 |
 | WebAssembly | Emscripten 构建，node 上运行全部测试 |
 
 各平台的构建方法与注意事项见 [平台支持](docs/platforms.md)。
