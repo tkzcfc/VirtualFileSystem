@@ -157,13 +157,13 @@ private:
 	mutable std::atomic<intptr_t> m_handles[SLOTS];   // fd 或 HANDLE；-1 表示尚未打开；第 0 个是主句柄
 	mutable std::atomic<bool> m_failed[SLOTS];         // 该分片重新打开失败过，直接用主句柄
 	mutable std::mutex m_openMutex;                    // 串行化分片的惰性打开
-#if !defined(_WIN32)
+#if !VFS_PLATFORM_WINDOWS
 	uint64_t m_dev = 0;
 	uint64_t m_ino = 0;
 #endif
 };
 
-#if defined(_WIN32)
+#if VFS_PLATFORM_WINDOWS
 /**
  * UTF-8 转 UTF-16，'/' 换成 '\\'。路径长度达到 248（CreateDirectoryW 的上限 MAX_PATH - 12）时，
  * 先用 GetFullPathNameW 转成绝对路径，再加长路径前缀："\\\\?\\C:\\..."，UNC 路径为 "\\\\?\\UNC\\server\\share\\..."。

@@ -9,7 +9,7 @@
 
 NS_VFS_BEGIN
 
-#if defined(_WIN32)
+#if VFS_PLATFORM_WINDOWS
 
 class VFS_DLL SharedMutex
 {

@@ -2,7 +2,7 @@
 #include <algorithm>
 #include <atomic>
 
-#if defined(_WIN32)
+#if VFS_PLATFORM_WINDOWS
 #    ifndef WIN32_LEAN_AND_MEAN
 #        define WIN32_LEAN_AND_MEAN
 #    endif
@@ -14,7 +14,7 @@
 #    include <cwchar>
 #    include <vector>
 #else
-#    if defined(__APPLE__)
+#    if VFS_PLATFORM_APPLE
 #        include <sys/attr.h>
 #        include <cstring>
 #    endif
@@ -32,7 +32,7 @@ namespace native
 
 std::filesystem::path toFsPath(std::string_view utf8)
 {
-#if defined(_WIN32)
+#if VFS_PLATFORM_WINDOWS
 	// Windows 上直接用 UTF-16，顺便处理长路径前缀
 	return std::filesystem::path(toWidePath(utf8));
 #else
@@ -45,7 +45,7 @@ std::string fromFsPath(const std::filesystem::path& p)
 {
 	std::u8string u8 = p.u8string();
 	std::string s(reinterpret_cast<const char*>(u8.data()), u8.size());
-#if defined(_WIN32)
+#if VFS_PLATFORM_WINDOWS
 	// 去掉长路径前缀，保证对外（日志、realPath、路径比较）始终是普通的 Win32 路径；两种分隔符都要处理
 	auto sep = [](char c) { return c == '\\' || c == '/'; };
 	if (s.size() >= 4 && sep(s[0]) && sep(s[1]) && s[2] == '?' && sep(s[3]))
@@ -113,7 +113,7 @@ Error errorFromCode(const std::error_code& ec)
 {
 	if (!ec)
 		return Error::OK;
-#if defined(_WIN32)
+#if VFS_PLATFORM_WINDOWS
 	// Windows 上 std::filesystem 报告的多是 system_category 的 Win32 错误码，直接按 Win32 映射更准确
 	if (ec.category() == std::system_category())
 		return errorFromWin32(static_cast<unsigned long>(ec.value()));
@@ -125,7 +125,7 @@ Error errorFromCode(const std::error_code& ec)
 	return Error::IO_ERROR;
 }
 
-#if defined(_WIN32)
+#if VFS_PLATFORM_WINDOWS
 
 std::wstring toWidePath(std::string_view utf8)
 {
@@ -869,7 +869,7 @@ Error realName(std::string_view dir, std::string_view name, std::string& actual)
 	std::string full(dir);
 	full.push_back('/');
 	full.append(name);
-#if defined(__APPLE__)
+#if VFS_PLATFORM_APPLE
 	// getattrlist 返回目录项中存储的名字（不跟随最后一级符号链接）
 	struct attrlist al;
 	std::memset(&al, 0, sizeof(al));
@@ -997,7 +997,7 @@ Error renamePath(std::string_view from, std::string_view to)
 
 uint64_t processId()
 {
-#if defined(_WIN32)
+#if VFS_PLATFORM_WINDOWS
 	return static_cast<uint64_t>(::GetCurrentProcessId());
 #else
 	return static_cast<uint64_t>(::getpid());
@@ -1006,7 +1006,7 @@ uint64_t processId()
 
 // ---------------------------------------------------------------- 位置读
 
-#if defined(_WIN32)
+#if VFS_PLATFORM_WINDOWS
 
 namespace
 {

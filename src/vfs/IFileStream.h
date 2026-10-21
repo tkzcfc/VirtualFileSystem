@@ -36,7 +36,7 @@ NS_VFS_END
 
 NS_VFS_BEGIN
 
-#    if defined(_WIN32)
+#    if VFS_PLATFORM_WINDOWS
 using osfhnd_t = void*;
 #    else
 using osfhnd_t = int;

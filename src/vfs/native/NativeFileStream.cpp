@@ -1,7 +1,7 @@
 #include "NativeFileStream.h"
 #include <climits>
 
-#if defined(_WIN32)
+#if VFS_PLATFORM_WINDOWS
 #    ifndef WIN32_LEAN_AND_MEAN
 #        define WIN32_LEAN_AND_MEAN
 #    endif
@@ -32,7 +32,7 @@ static_assert(sizeof(off_t) == 8, "need 64-bit off_t: build with _FILE_OFFSET_BI
 
 NS_VFS_BEGIN
 
-#if defined(_WIN32)
+#if VFS_PLATFORM_WINDOWS
 static const osfhnd_t s_invalidHandle = INVALID_HANDLE_VALUE;
 #else
 static const osfhnd_t s_invalidHandle = -1;
@@ -70,7 +70,7 @@ NativeFileStream::~NativeFileStream()
 	close();
 }
 
-#if defined(_WIN32)
+#if VFS_PLATFORM_WINDOWS
 
 namespace
 {

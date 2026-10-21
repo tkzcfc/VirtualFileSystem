@@ -6,7 +6,7 @@
 #include <new>
 #include <map>
 
-#if defined(_WIN32)
+#if VFS_PLATFORM_WINDOWS
 #    include <fcntl.h>
 #    include <io.h>
 #    include <windows.h>
@@ -19,7 +19,7 @@ using namespace vfs::tool;
 namespace
 {
 
-#if defined(_WIN32)
+#if VFS_PLATFORM_WINDOWS
 // UTF-16 → UTF-8（只在 Windows 上用 Win32 API 转换，不依赖已废弃的 std::wstring_convert）
 std::string wideToUtf8(const wchar_t* wide)
 {
@@ -69,7 +69,7 @@ private:
 std::vector<std::string> utf8Arguments(int argc, char** argv)
 {
 	std::vector<std::string> args;
-#if defined(_WIN32)
+#if VFS_PLATFORM_WINDOWS
 	int wargc = 0;
 	LPWSTR* wargv = ::CommandLineToArgvW(::GetCommandLineW(), &wargc);
 	if (wargv)
@@ -169,7 +169,7 @@ void addKeyOptions(CLI::App* cmd, KeySource& key)
 
 int main(int argc, char** argv)
 {
-#if defined(_WIN32)
+#if VFS_PLATFORM_WINDOWS
 	// 控制台按 UTF-8 显示中文输出（退出时恢复原代码页）
 	ConsoleCodePageGuard codePageGuard;
 #endif
@@ -303,7 +303,7 @@ int main(int argc, char** argv)
 			return runList(list, std::cout, std::cerr);
 		if (catCmd->parsed())
 		{
-	#if defined(_WIN32)
+	#if VFS_PLATFORM_WINDOWS
 			// stdout 切到二进制模式，避免 "\n" 被转换成 "\r\n"
 			_setmode(_fileno(stdout), _O_BINARY);
 	#endif

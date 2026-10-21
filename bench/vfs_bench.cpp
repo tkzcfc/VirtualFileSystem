@@ -24,7 +24,7 @@
 #include <thread>
 #include <vector>
 
-#if defined(_WIN32)
+#if VFS_PLATFORM_WINDOWS
 #include <windows.h>
 #else
 #include <fcntl.h>
@@ -32,7 +32,7 @@
 #include <sys/types.h>
 #include <sys/utsname.h>
 #include <unistd.h>
-#if defined(__APPLE__)
+#if VFS_PLATFORM_APPLE
 #include <sys/sysctl.h>
 #endif
 #endif
@@ -341,7 +341,7 @@ bool buildDataset(const Options& opt, Dataset& ds)
 // 尽量把数据文件从页缓存中逐出（不需要 root）。目录项 / inode 缓存无法这样清除
 void dropCaches(const Dataset& ds)
 {
-#if defined(__linux__)
+#if (VFS_PLATFORM_LINUX || VFS_PLATFORM_ANDROID)
 	for (auto& p : ds.allNativeFiles)
 	{
 		int fd = ::open(p.c_str(), O_RDONLY);
@@ -414,7 +414,7 @@ public:
 
 // ---------------------------------------------------------------- 基线：C FILE*
 
-#if defined(_WIN32)
+#if VFS_PLATFORM_WINDOWS
 int seek64(FILE* f, int64_t off) { return ::_fseeki64(f, off, SEEK_SET); }
 #else
 int seek64(FILE* f, int64_t off) { return ::fseeko(f, static_cast<off_t>(off), SEEK_SET); }
@@ -630,7 +630,7 @@ public:
 
 // ---------------------------------------------------------------- 基线：POSIX pread / Win32 ReadFile
 
-#if defined(_WIN32)
+#if VFS_PLATFORM_WINDOWS
 
 std::wstring widen(const std::string& s)
 {
@@ -693,7 +693,7 @@ class OsTarget : public NativeBaseline
 public:
 	using NativeBaseline::NativeBaseline;
 
-#if defined(_WIN32)
+#if VFS_PLATFORM_WINDOWS
 	std::string name() const override { return "base:win32"; }
 #else
 	std::string name() const override { return "base:posix"; }
@@ -708,7 +708,7 @@ public:
 
 	int64_t readChunks(const std::string& rel, std::vector<uint8_t>& buf, const std::function<void()>& onChunk) override
 	{
-#if defined(_WIN32)
+#if VFS_PLATFORM_WINDOWS
 		HANDLE h = openOs(full(rel), false);
 		if (h == INVALID_HANDLE_VALUE)
 			return -1;
@@ -745,7 +745,7 @@ public:
 
 	bool openClose(const std::string& rel) override
 	{
-#if defined(_WIN32)
+#if VFS_PLATFORM_WINDOWS
 		HANDLE h = openOs(full(rel), false);
 		if (h == INVALID_HANDLE_VALUE)
 			return false;
@@ -762,7 +762,7 @@ public:
 
 	std::unique_ptr<Handle> openHandle(const std::string& rel) override
 	{
-#if defined(_WIN32)
+#if VFS_PLATFORM_WINDOWS
 		HANDLE h = openOs(full(rel), false);
 		return h == INVALID_HANDLE_VALUE ? nullptr : std::make_unique<OsHandle>(h);
 #else
@@ -773,7 +773,7 @@ public:
 
 	bool writeWhole(const std::string& rel, const uint8_t* data, size_t size) override
 	{
-#if defined(_WIN32)
+#if VFS_PLATFORM_WINDOWS
 		HANDLE h = openOs(full(rel), true);
 		if (h == INVALID_HANDLE_VALUE)
 			return false;
@@ -1412,7 +1412,7 @@ std::string compilerInfo()
 #endif
 }
 
-#if defined(_WIN32)
+#if VFS_PLATFORM_WINDOWS
 // 读注册表字符串值（HKLM），失败返回空串
 std::string regString(const wchar_t* subKey, const wchar_t* value)
 {
@@ -1438,7 +1438,7 @@ std::string trim(std::string s)
 
 std::string osInfo()
 {
-#if defined(_WIN32)
+#if VFS_PLATFORM_WINDOWS
 	// 产品名（注册表里 Windows 11 仍写作 "Windows 10"，以内部版本号为准）+ 版本号
 	const wchar_t* key = L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion";
 	std::string name = regString(key, L"ProductName");
@@ -1460,7 +1460,7 @@ std::string osInfo()
 
 std::string cpuInfo()
 {
-#if defined(__linux__)
+#if (VFS_PLATFORM_LINUX || VFS_PLATFORM_ANDROID)
 	std::ifstream f("/proc/cpuinfo");
 	std::string line;
 	while (std::getline(f, line))
@@ -1473,12 +1473,12 @@ std::string cpuInfo()
 				return trim(line.substr(p + 1));
 		}
 	}
-#elif defined(__APPLE__)
+#elif VFS_PLATFORM_APPLE
 	char buf[256];
 	size_t size = sizeof(buf);
 	if (::sysctlbyname("machdep.cpu.brand_string", buf, &size, nullptr, 0) == 0 && size > 0)
 		return trim(std::string(buf, strnlen(buf, size)));
-#elif defined(_WIN32)
+#elif VFS_PLATFORM_WINDOWS
 	std::string s = regString(L"HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0", L"ProcessorNameString");
 	if (!s.empty())
 		return trim(s);

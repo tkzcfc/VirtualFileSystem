@@ -187,7 +187,7 @@ TEST_SUITE("native")
 		CHECK(warn.exists("/data/hero.png") == !test::nativeCaseSensitive());
 	}
 
-#if !defined(_WIN32)
+#if !VFS_PLATFORM_WINDOWS
 	TEST_CASE("followSymlinks=false: symlinks escaping the root are rejected")
 	{
 		test::TempDir outside;

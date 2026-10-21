@@ -11,7 +11,7 @@
 #include "vfs/native/SingleFileBackend.h"
 #include <cstring>
 #include <set>
-#if !defined(_WIN32)
+#if !VFS_PLATFORM_WINDOWS
 #    include <sys/resource.h>
 #    include <sys/stat.h>
 #    include <unistd.h>
@@ -63,7 +63,7 @@ uint8_t* entryField(std::vector<uint8_t>& a, uint32_t index, size_t field)
 	return a.data() + indexOffset + index * ArchiveFormat::ENTRY_SIZE + field;
 }
 
-#if !defined(_WIN32)
+#if !VFS_PLATFORM_WINDOWS
 bool runningAsRoot()
 {
 	return ::geteuid() == 0;
@@ -279,7 +279,7 @@ TEST_SUITE("extreme")
 		}
 		CHECK(listNames(fs, "/a/nfc").size() == 2);
 		CHECK(listNames(fs, "/m/nfc").size() == 2);
-#if !defined(__APPLE__)
+#if !VFS_PLATFORM_APPLE
 		// macOS 的部分文件系统会做 Unicode 规范化，NFC/NFD 可能合并
 		CHECK(listNames(fs, "/n/nfc").size() == 2);
 #endif
@@ -431,7 +431,7 @@ TEST_SUITE("extreme")
 		REQUIRE_MESSAGE(re == Error::OK, "external file replace failed: " << re << " (stream still open: " << (open != nullptr) << ")");
 		CHECK(readAll(fs, "/n/f.txt") == "v2-longer");
 		CHECK(fs.fileSize("/n/f.txt") == 9);
-#if !defined(_WIN32)
+#if !VFS_PLATFORM_WINDOWS
 		// POSIX：已打开的流仍然指向旧文件（Windows 上取决于是否走了 POSIX 语义，不检查）
 		if (open)
 			CHECK(test::str(test::readStream(*open)) == "v1");
@@ -460,7 +460,7 @@ TEST_SUITE("extreme")
 
 	TEST_CASE("read-only native directory (chmod 0555): reads work, writes return PERMISSION_DENIED")
 	{
-#if defined(_WIN32)
+#if VFS_PLATFORM_WINDOWS
 		return;
 #else
 		if (runningAsRoot())
@@ -851,7 +851,7 @@ TEST_SUITE("extreme")
 
 	TEST_CASE("handle exhaustion: native streams fail cleanly and recover; archive streams use no OS handle")
 	{
-#if defined(_WIN32)
+#if VFS_PLATFORM_WINDOWS
 		return;   // Windows 的句柄上限很高，这里不模拟
 #else
 		test::TempDir dir;

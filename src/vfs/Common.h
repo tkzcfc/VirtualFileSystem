@@ -3,6 +3,7 @@
 #pragma once
 
 #include "Config.h"
+#include "Platform.h"
 
 #include <cstdint>
 #include <cstddef>
