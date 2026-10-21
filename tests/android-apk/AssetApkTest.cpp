@@ -286,8 +286,13 @@ static void runTests(android_app* app)
 
 void android_main(android_app* app)
 {
+	// Android may reuse the process for a new launch: start every run from clean counters
+	g_checks = 0;
+	g_failed = 0;
 	LOGI("START AndroidAssetBackend APK tests");
 	runTests(app);
+	// The AAssetManager belongs to this activity; do not leave it registered for a later run
+	AndroidAssetBackend::setAssetManager(nullptr);
 	const int n = g_checks, f = g_failed;
 	char summary[96];
 	std::snprintf(summary, sizeof summary, "SUMMARY: %s %d/%d", f ? "FAIL" : "PASS", f ? f : n, n);
