@@ -247,6 +247,7 @@ std::shared_ptr<const ArchiveIndex> ArchiveReader::open(std::shared_ptr<IArchive
 
 	// 1. 定位归档起点
 	int64_t base = options.baseOffset;
+	bool viaFooter = false;   // 起点是否由 footer 反推得到
 	if (base < 0)
 	{
 		uint8_t magic[8];
@@ -268,6 +269,7 @@ std::shared_ptr<const ArchiveIndex> ArchiveReader::open(std::shared_ptr<IArchive
 			if (archiveSize > static_cast<uint64_t>(fileSize) || archiveSize < HEADER_SIZE + FOOTER_SIZE)
 				return fail(Error::CORRUPTED);
 			base = fileSize - static_cast<int64_t>(archiveSize);
+			viaFooter = true;
 		}
 		else
 			return fail(Error::CORRUPTED);
@@ -295,9 +297,10 @@ std::shared_ptr<const ArchiveIndex> ArchiveReader::open(std::shared_ptr<IArchive
 		return fail(Error::CORRUPTED);
 	if (h.indexSize > VFS_MAX_INDEX_SIZE || static_cast<uint64_t>(h.entryCount) * ENTRY_SIZE > h.indexSize)
 		return fail(Error::CORRUPTED);
+	if (viaFooter)
 	{
-		// footer 必须紧跟在索引之后，magic 与 archiveSize 都要和 header 对得上（附加在其他文件后面时上面已经读过一次，
-		// 这里对两种情况统一检查）
+		// 起点由 footer 反推时，footer 必须紧跟在索引之后，archiveSize 要和 header 对得上，
+		// 否则可能把 exe 尾部的垃圾数据当成归档。起点为 0 或显式给出时按 format.md §6 不依赖 footer
 		uint8_t footer[FOOTER_SIZE];
 		e = readFully(*stream, base + static_cast<int64_t>(h.indexOffset + h.indexSize), footer, FOOTER_SIZE);
 		if (e != Error::OK)
