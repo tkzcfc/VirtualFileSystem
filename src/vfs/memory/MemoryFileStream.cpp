@@ -122,7 +122,12 @@ int MemoryFileStream::write(const void* buf, unsigned int size) const
 			// chunks is copied many more times while it grows (a 64 MiB file written in 1 MiB chunks ran at
 			// about 1/3 of the speed of writing to the OS file cache on Windows).
 			if (end > data.capacity())
-				data.reserve(static_cast<size_t>(std::max<uint64_t>(end, std::min<uint64_t>(data.max_size(), uint64_t(data.capacity()) * 2))));
+			{
+				// Near max_size, doubling would ask for more than can exist: then reserve exactly what is needed
+				const uint64_t cap = data.capacity();
+				const uint64_t want = cap <= data.max_size() / 2 ? std::max<uint64_t>(end, cap * 2) : end;
+				data.reserve(static_cast<size_t>(want));
+			}
 			data.resize(static_cast<size_t>(end));
 		}
 		catch (const std::bad_alloc&)

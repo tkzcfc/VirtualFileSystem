@@ -356,9 +356,10 @@ void dropCaches(const Dataset& ds)
 #endif
 }
 
-stdfs::path utf8Path(const std::string& s)
+// Paths here come from path::string() / argv, i.e. the native narrow encoding: let path convert them the same way
+stdfs::path nativePath(const std::string& s)
 {
-	return stdfs::path(std::u8string(reinterpret_cast<const char8_t*>(s.data()), s.size()));
+	return stdfs::path(s);
 }
 
 // Write the file's cached data to the device (outside any timed region)
@@ -372,9 +373,10 @@ void flushFileToDisk(const stdfs::path& p)
 	::FlushFileBuffers(h);
 	::CloseHandle(h);
 #elif VFS_PLATFORM_WASM
-	(void)p;   // node's fs has no fsync through NODERAWFS that is worth the cost; nothing to settle
+	(void)p;   // Not settled under WebAssembly: write numbers there include host writeback (documented in docs/bench/wasm.md)
 #else
-	int fd = ::open(p.c_str(), O_RDONLY);
+	// Writable descriptor: some systems reject fsync on a read-only one
+	int fd = ::open(p.c_str(), O_WRONLY);
 	if (fd < 0)
 		return;
 	::fsync(fd);
@@ -389,7 +391,7 @@ void flushFileToDisk(const stdfs::path& p)
 void settleWrites(const std::string& dir)
 {
 	std::error_code ec;
-	for (stdfs::recursive_directory_iterator it(utf8Path(dir), ec), end; !ec && it != end; it.increment(ec))
+	for (stdfs::recursive_directory_iterator it(nativePath(dir), ec), end; !ec && it != end; it.increment(ec))
 	{
 		if (it->is_regular_file(ec))
 			flushFileToDisk(it->path());
@@ -1920,7 +1922,7 @@ int main(int argc, char** argv)
 			  << fmt(std::chrono::duration<double>(Clock::now() - t0).count(), 1) << "s\n\n";
 	// The dataset itself is several hundred MiB of fresh writes: get it out of the write cache before measuring
 	for (auto& f : ds.allNativeFiles)
-		flushFileToDisk(utf8Path(f));
+		flushFileToDisk(nativePath(f));
 
 	auto readTargets = makeReadTargets(opt, ds);
 	auto writeTargets = makeWriteTargets(opt, ds);
