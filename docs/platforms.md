@@ -3,7 +3,7 @@
 | Platform | Native backend | Platform-specific | How it is verified |
 |---|---|---|---|
 | Windows (MSVC, MinGW) | Win32 API, UTF-8 <-> UTF-16, long paths | — | All tests, MSVC Release; MinGW cross-compile + wine |
-| Linux (GCC, Clang, libc++) | POSIX | — | All tests, plus a TSAN build |
+| Linux (GCC, Clang, libc++) | POSIX | — | All tests, plus TSAN (with `tests/tsan.supp`) and ASan+LSan+UBSan builds |
 | macOS | POSIX + `getattrlist` (case check) | — | All tests |
 | iOS / iPadOS | Same as macOS (the app bundle and sandbox directories are ordinary files) | No dedicated backend | Device (arm64) and simulator builds with zero warnings; all tests on a device (iPhone 14 Pro, iOS 26.5) and on the simulator |
 | Android (API 24+) | POSIX (internal storage, external storage) | `AndroidAssetBackend`: mount `assets/` inside the APK | NDK r27 cross-compile arm64-v8a / x86_64 / armeabi-v7a with zero warnings; all tests on an x86_64 emulator (Android 14) and on a real device (Redmi K80, Snapdragon 8 Gen 3, Android 16, arm64-v8a): vfs_tests, stress tests, examples, vfstool, vfs_bench |

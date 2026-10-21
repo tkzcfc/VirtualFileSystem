@@ -1,0 +1,9 @@
+# ThreadSanitizer suppressions.
+#
+# MemoryBackend locks directories top-down along the *current* tree, and
+# rename() (serialized by m_renameMutex) locks ancestors before descendants.
+# Moving a directory changes which node is the ancestor, so TSAN's global
+# lock-order graph sees A->B before the move and B->A after it, even in a
+# single thread. At any instant the order is consistent, so this is not a
+# real deadlock. Use with: TSAN_OPTIONS=suppressions=tests/tsan.supp
+deadlock:vfs::MemoryBackend::DirLock::lock
