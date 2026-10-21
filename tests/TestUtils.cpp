@@ -201,6 +201,16 @@ bool nativeCaseSensitive()
 	return s_value;
 }
 
+bool nativeCaseLookupOnly()
+{
+	static const bool s_value = [] {
+		TempDir dir;
+		dir.write("CaseProbe.txt", "x");
+		return !nativeCaseSensitive() && !dir.exists("caseprobe.txt");
+	}();
+	return s_value;
+}
+
 bool nativeReplaceOpenFile()
 {
 	static const bool s_value = [] {

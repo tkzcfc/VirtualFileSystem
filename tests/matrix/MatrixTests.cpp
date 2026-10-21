@@ -436,7 +436,7 @@ TEST_SUITE("matrix")
 	TEST_CASE_TEMPLATE("names: names differing only in case are different files (case-sensitive write layer)", E, VFS_ENVS)
 	{
 		E e;
-		if (!e.caseSensitive())
+		if (!e.caseSensitive() || e.caseLookupOnly())
 			return;
 		REQUIRE(e.fs.writeFile("/w/Case.txt", "upper") == Error::OK);
 		REQUIRE(e.fs.writeFile("/w/case.txt", "lower") == Error::OK);
@@ -455,7 +455,7 @@ TEST_SUITE("matrix")
 	TEST_CASE_TEMPLATE("names: on a case-insensitive write layer, names differing only in case are the same file", E, VFS_ENVS)
 	{
 		E e;
-		if (e.caseSensitive())
+		if (e.caseSensitive() || e.caseLookupOnly())
 			return;
 		// Windows / macOS 默认文件系统：这是平台能力，VFS 不做模拟（需要一致行为请开 NativeOptions::exactCase）
 		REQUIRE(e.fs.writeFile("/w/Case.txt", "upper") == Error::OK);

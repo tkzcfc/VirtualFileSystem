@@ -63,7 +63,9 @@ struct EnvBase
 	bool caseSensitive() const { return !nativeTop || test::nativeCaseSensitive(); }
 
 	// 底层文件是否按字节匹配名字（未开启 NativeOptions::exactCase 时，本机底层随文件系统）
-	bool baseCaseSensitive() const { return !nativeBase || test::nativeCaseSensitive(); }
+	bool baseCaseSensitive() const { return !nativeBase || test::nativeCaseSensitive() || test::nativeCaseLookupOnly(); }
+	// 写入层是“查找区分大小写、创建不区分”的本机目录（iOS 模拟器）：两个大小写测试的模型都不适用
+	bool caseLookupOnly() const { return nativeTop && test::nativeCaseLookupOnly(); }
 };
 
 // 单个本机目录

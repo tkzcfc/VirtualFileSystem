@@ -117,6 +117,12 @@ bool slowEnabled();
 bool nativeCaseSensitive();
 
 /**
+ * 运行时探测：查找区分大小写、但创建时只差大小写的名字仍然冲突（EEXIST）的文件系统，例如 iOS 模拟器
+ * （底层是宿主机不区分大小写的 APFS）。真实设备与常见桌面文件系统都不是这种情况。
+ */
+bool nativeCaseLookupOnly();
+
+/**
  * 运行时探测：本机文件系统能否替换（rename 覆盖）一个正被打开的文件。
  * POSIX 总是可以；Windows 需要 POSIX 语义的 FileRenameInfoEx（Windows 10 1709+ 的 NTFS），
  * FAT/exFAT、部分网络盘、旧系统和 Wine 不支持，此时替换会在其他句柄关闭前返回 PERMISSION_DENIED。
