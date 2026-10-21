@@ -175,7 +175,7 @@ vfs::Error buildArchive(const std::string& outPath, const std::vector<ArchiveFil
 	vfs::ArchiveWriter writer(options);
 	for (const auto& f : files)
 	{
-		vfs::Error e = f.path.back() == '/' ? writer.addDir(f.path) : writer.addData(f.path, f.content, f.options);
+		vfs::Error e = !f.path.empty() && f.path.back() == '/' ? writer.addDir(f.path) : writer.addData(f.path, f.content, f.options);
 		if (e != vfs::Error::OK)
 			return e;
 	}

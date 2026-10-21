@@ -1635,7 +1635,7 @@ std::vector<Scenario> makeScenarios(const Options& opt, const Dataset& ds)
 					}
 					const bool ok = w->close();
 					// Latency per append: the batch time (including open/close) divided evenly
-					const uint64_t per = elapsedNs(t0) / batch;
+					const uint32_t per = static_cast<uint32_t>(elapsedNs(t0) / batch);
 					for (size_t i = 0; i < batch; ++i)
 						st.latNs.push_back(per);
 					if (!ok)
