@@ -178,13 +178,13 @@ TEST_SUITE("native")
 		VirtualFileSystem fs;
 		REQUIRE(fs.mountNative("/", dir.path()) != 0);
 		INFO("nativeCaseSensitive=" << test::nativeCaseSensitive());
-		CHECK(fs.exists("/data/hero.png") == !test::nativeCaseSensitive());
+		CHECK(fs.exists("/data/hero.png") == !(test::nativeCaseSensitive() || test::nativeCaseLookupOnly()));
 		// strictCase 只打警告，不改变结果
 		NativeOptions o;
 		o.strictCase = true;
 		VirtualFileSystem warn;
 		REQUIRE(warn.mountNative("/", dir.path(), {}, o) != 0);
-		CHECK(warn.exists("/data/hero.png") == !test::nativeCaseSensitive());
+		CHECK(warn.exists("/data/hero.png") == !(test::nativeCaseSensitive() || test::nativeCaseLookupOnly()));
 	}
 
 #if !VFS_PLATFORM_WINDOWS
