@@ -81,7 +81,7 @@ Windows（MSVC）下用 `cmake --build build-bench --config Release`，可执行
 - 日期：2026-10-21（UTC+8）；命令：`vfs_bench --csv <platform>.csv --md <platform>.md`（默认参数：--scale 1，线程 1/2/4/8/N，3 次取中位数，热缓存），Release 构建。
 - 吞吐单位是 ops/s，越高越好；括号内为相对 `base:stdio`（同线程数）的倍数，> 1 表示比直接调用 C 文件 API 快。
 - 共享虚拟机（Linux）上的数字有 ±20% 左右的波动，比较时看数量级和趋势。
-- 图表由 [`bench/bench_charts.py`](../bench/bench_charts.py) 从 `--csv` 输出生成；全部场景、全部线程数的完整表格见 [Linux](bench/linux.md)、[macOS](bench/macos.md)、[Windows](bench/windows.md)。
+- 图表由 [`bench/bench_charts.py`](../bench/bench_charts.py) 从 `--csv` 输出生成；全部场景、全部线程数的完整表格见 [Linux](bench/linux.md)、[macOS](bench/macos.md)、[Windows](bench/windows.md)、[iOS](bench/ios.md)。
 
 ### Linux
 
@@ -194,6 +194,44 @@ Windows（MSVC）下用 `cmake --build build-bench --config Release`，可执行
 ![Windows meta.miss](images/bench/windows-meta.miss.svg)
 
 ![Windows write.churn](images/bench/windows-write.churn.svg)
+
+</details>
+
+### iOS
+
+- 设备：iPhone 14 Pro（Apple A16，6 核）；内存 6 GiB
+- 系统：iOS 26.5
+- 编译器：Apple clang 17.0.0，Release
+- 磁盘：内置闪存，APFS（应用沙盒）
+
+| 场景 | 线程 | base:stdio | native | memory | archive | archive-lz4 | archive+native | 3layer |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| read.small | 1 | 8.0k | 8.1k (1.01) | 2.00M (249.46) | 1.33M (165.32) | 530.0k (66.10) | 71.0k (8.85) | 70.7k (8.82) |
+| read.small | 8 | 56.5k | 55.9k (0.99) | 894.8k (15.85) | 1.14M (20.17) | 887.5k (15.72) | 167.6k (2.97) | 157.9k (2.80) |
+| read.large.rand | 1 | 359.7k | 760.9k (2.12) | 1.91M (5.31) | 928.3k (2.58) | 128.2k (0.36) | 885.1k (2.46) | 1.16M (3.22) |
+| read.large.rand | 8 | 381.6k | 588.5k (1.54) | 1.12M (2.93) | 1.12M (2.93) | 530.2k (1.39) | 1.08M (2.83) | 1.06M (2.79) |
+| meta.open | 1 | 27.2k | 27.3k (1.00) | 2.56M (94.20) | 3.61M (132.67) | 517.3k (19.00) | 66.1k (2.43) | 65.8k (2.42) |
+| meta.open | 8 | 66.9k | 64.2k (0.96) | 694.8k (10.39) | 2.08M (31.05) | 800.6k (11.97) | 160.8k (2.40) | 142.0k (2.12) |
+| meta.stat | 1 | 17.0k | 29.2k (1.72) | 3.20M (188.61) | 4.61M (271.22) | 4.71M (277.44) | 68.5k (4.04) | 68.7k (4.05) |
+| meta.stat | 8 | 40.3k | 73.9k (1.83) | 752.9k (18.67) | 6.97M (172.94) | 6.99M (173.34) | 158.5k (3.93) | 144.9k (3.59) |
+| meta.miss | 1 | 39.2k | 57.1k (1.46) | 2.33M (59.58) | 2.70M (68.82) | 2.70M (68.93) | 68.5k (1.75) | 68.8k (1.76) |
+| meta.miss | 8 | 135.4k | 121.5k (0.90) | 735.4k (5.43) | 5.08M (37.56) | 5.53M (40.83) | 152.7k (1.13) | 145.8k (1.08) |
+| write.churn | 1 | 1.5k | 1.7k (1.10) | 701.8k (454.15) | - | - | - | - |
+| write.churn | 8 | 2.7k | 2.8k (1.02) | 181.5k (66.40) | - | - | - | - |
+
+![iOS read.small](images/bench/ios-read.small.svg)
+
+![iOS meta.stat](images/bench/ios-meta.stat.svg)
+
+<details><summary>其他场景的柱状图</summary>
+
+![iOS read.large.rand](images/bench/ios-read.large.rand.svg)
+
+![iOS meta.open](images/bench/ios-meta.open.svg)
+
+![iOS meta.miss](images/bench/ios-meta.miss.svg)
+
+![iOS write.churn](images/bench/ios-write.churn.svg)
 
 </details>
 

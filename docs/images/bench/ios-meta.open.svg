@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="436" font-family="Segoe UI,Helvetica,Arial,sans-serif" font-size="12">
+<rect width="100%" height="100%" fill="white"/>
+<text x="10" y="22" font-size="15" font-weight="bold">ios — meta.open (ops/s, higher is better)</text>
+<text x="10" y="40" fill="#555">Apple A16 (iPhone 14 Pro), iOS 26.5, Apple clang 17.0.0 Release</text>
+<rect x="170" y="48" width="10" height="10" fill="#4e79a7"/>
+<text x="184" y="57">1 thread</text>
+<rect x="250" y="48" width="10" height="10" fill="#f28e2b"/>
+<text x="264" y="57">8 threads</text>
+<text x="162" y="82" text-anchor="end">base:stdio</text>
+<rect x="170" y="64" width="3.9" height="12" fill="#4e79a7"/>
+<text x="177.9" y="75">27.2k</text>
+<rect x="170" y="78" width="9.6" height="12" fill="#f28e2b"/>
+<text x="183.6" y="89">66.9k</text>
+<text x="162" y="120" text-anchor="end">base:posix</text>
+<rect x="170" y="102" width="4.0" height="12" fill="#4e79a7"/>
+<text x="178.0" y="113">27.9k</text>
+<rect x="170" y="116" width="9.6" height="12" fill="#f28e2b"/>
+<text x="183.6" y="127">66.6k</text>
+<text x="162" y="158" text-anchor="end">vfs:native</text>
+<rect x="170" y="140" width="3.9" height="12" fill="#4e79a7"/>
+<text x="177.9" y="151">27.3k</text>
+<rect x="170" y="154" width="9.2" height="12" fill="#f28e2b"/>
+<text x="183.2" y="165">64.2k</text>
+<text x="162" y="196" text-anchor="end">vfs:memory</text>
+<rect x="170" y="178" width="368.8" height="12" fill="#4e79a7"/>
+<text x="542.8" y="189">2.56M</text>
+<rect x="170" y="192" width="100.1" height="12" fill="#f28e2b"/>
+<text x="274.1" y="203">694.8k</text>
+<text x="162" y="234" text-anchor="end">vfs:archive</text>
+<rect x="170" y="216" width="520.0" height="12" fill="#4e79a7"/>
+<text x="694.0" y="227">3.61M</text>
+<rect x="170" y="230" width="299.6" height="12" fill="#f28e2b"/>
+<text x="473.6" y="241">2.08M</text>
+<text x="162" y="272" text-anchor="end">vfs:archive-lz4</text>
+<rect x="170" y="254" width="74.5" height="12" fill="#4e79a7"/>
+<text x="248.5" y="265">517.3k</text>
+<rect x="170" y="268" width="115.3" height="12" fill="#f28e2b"/>
+<text x="289.3" y="279">800.6k</text>
+<text x="162" y="310" text-anchor="end">vfs:archive+native</text>
+<rect x="170" y="292" width="9.5" height="12" fill="#4e79a7"/>
+<text x="183.5" y="303">66.1k</text>
+<rect x="170" y="306" width="23.2" height="12" fill="#f28e2b"/>
+<text x="197.2" y="317">160.8k</text>
+<text x="162" y="348" text-anchor="end">vfs:memory+archive</text>
+<rect x="170" y="330" width="377.4" height="12" fill="#4e79a7"/>
+<text x="551.4" y="341">2.62M</text>
+<rect x="170" y="344" width="135.4" height="12" fill="#f28e2b"/>
+<text x="309.4" y="355">939.9k</text>
+<text x="162" y="386" text-anchor="end">vfs:3layer</text>
+<rect x="170" y="368" width="9.5" height="12" fill="#4e79a7"/>
+<text x="183.5" y="379">65.8k</text>
+<rect x="170" y="382" width="20.5" height="12" fill="#f28e2b"/>
+<text x="194.5" y="393">142.0k</text>
+<line x1="170" y1="60" x2="170" y2="410" stroke="#888"/>
+</svg>

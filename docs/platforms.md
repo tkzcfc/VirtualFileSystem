@@ -5,7 +5,7 @@
 | Windows（MSVC、MinGW） | Win32 API，UTF-8 ↔ UTF-16，长路径 | — | MSVC Release 全部测试；MinGW 交叉编译 + wine |
 | Linux（GCC、Clang、libc++） | POSIX | — | 全部测试，另有 TSAN 构建 |
 | macOS | POSIX + `getattrlist`（大小写核对） | — | 全部测试 |
-| iOS / iPadOS | 与 macOS 相同（应用包与沙盒目录都是普通文件） | 不需要专门的后端 | 真机（arm64）与模拟器编译零警告；模拟器上运行全部测试 |
+| iOS / iPadOS | 与 macOS 相同（应用包与沙盒目录都是普通文件） | 不需要专门的后端 | 真机（arm64）与模拟器编译零警告；真机（iPhone 14 Pro，iOS 26.5）与模拟器上运行全部测试 |
 | Android（API 24+） | POSIX（内部存储、外部存储） | `AndroidAssetBackend`：挂载 APK 内的 `assets/` | NDK r27 交叉编译 arm64-v8a / x86_64 / armeabi-v7a 零警告；x86_64 模拟器（Android 14）上运行全部测试 |
 | WebAssembly（Emscripten） | POSIX over Emscripten FS（MEMFS、NODEFS、NODERAWFS 等） | — | node 上运行全部测试（pthread 构建） |
 
@@ -81,6 +81,20 @@ cmake --build build-ios -j
 # 在模拟器上运行测试
 xcrun simctl spawn <device-udid> build-ios/tests/vfs_tests.app/vfs_tests
 ```
+
+真机运行需要签名，用 Xcode 生成器：
+
+```bash
+cmake -S . -B build-ios-dev -G Xcode -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_ARCHITECTURES=arm64 \
+    -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0 -DVFS_BUILD_BENCH=ON -DCMAKE_XCODE_GENERATE_SCHEME=ON \
+    -DCMAKE_XCODE_ATTRIBUTE_DEVELOPMENT_TEAM=<team-id> -DVFS_APPLE_BUNDLE_ID_PREFIX=com.yourname.vfs
+xcodebuild -project build-ios-dev/VirtualFileSystem.xcodeproj -scheme vfs_tests -configuration Release \
+    -destination "id=<device-udid>" -allowProvisioningUpdates -allowProvisioningDeviceRegistration build
+xcrun devicectl device install app --device <device-id> build-ios-dev/tests/Release-iphoneos/vfs_tests.app
+xcrun devicectl device process launch --device <device-id> --console com.yourname.vfs.vfs-tests
+```
+
+每个可执行文件的包标识是 `VFS_APPLE_BUNDLE_ID_PREFIX` 加目标名（`_` 换成 `-`）。首次运行前要在 设置 > 通用 > VPN 与设备管理 里信任开发者证书。`vfs_bench` 在 iOS 上通过 UIKit 宿主入口启动（完整基准要跑几分钟，超过系统的启动看门狗时限），跑的时候保持屏幕常亮。
 
 注意：iOS 模拟器的文件系统（宿主机 APFS）查找时区分大小写，但创建只差大小写的名字仍会冲突（EEXIST），与真机（区分大小写的 APFS）不同。
 
