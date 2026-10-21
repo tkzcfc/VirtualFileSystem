@@ -29,3 +29,24 @@ function(vfs_add_long_path_manifest target)
         target_sources(${target} PRIVATE ${VFS_CMAKE_DIR}/longpath.manifest)
     endif()
 endfunction()
+
+# WebAssembly（Emscripten）
+# - 库本身不依赖线程也能编译（std::mutex 在无线程构建中是空操作），但测试、基准和多线程示例需要 pthread；
+#   VFS_WASM_THREADS=ON（默认）时所有目标统一加 -pthread（同一程序里的目标必须一致，否则无法链接共享内存）
+# - 作为顶层项目时，可执行文件（测试、vfstool、示例、基准）链接成 node 程序：NODERAWFS 让本机后端直接访问
+#   宿主文件系统，PROXY_TO_PTHREAD 让 main 运行在工作线程里（可以阻塞等待其他线程）。
+#   浏览器中的应用请使用自己的链接选项（例如 MEMFS / IDBFS / OPFS），见 docs/platforms.md
+if(EMSCRIPTEN)
+    option(VFS_WASM_THREADS "Build with -pthread under Emscripten" ON)
+    if(VFS_WASM_THREADS)
+        add_compile_options(-pthread)
+        add_link_options(-pthread)
+    endif()
+    if(VFS_IS_TOP_LEVEL)
+        # 多线程时内存增长会让 JS 侧访问变慢（emcc 会警告），所以固定 1.5 GiB 初始内存（基准的内存后端需要约 0.5 GiB）
+        add_link_options(-sNODERAWFS=1 -sINITIAL_MEMORY=1536MB -sSTACK_SIZE=4MB -sEXIT_RUNTIME=1)
+        if(VFS_WASM_THREADS)
+            add_link_options(-sPROXY_TO_PTHREAD=1 -sDEFAULT_PTHREAD_STACK_SIZE=2MB)
+        endif()
+    endif()
+endif()

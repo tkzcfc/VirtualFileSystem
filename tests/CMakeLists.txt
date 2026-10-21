@@ -37,9 +37,12 @@ foreach(suite path union native memory stream archive asset crypto tool concurre
 endforeach()
 
 # 命令行端到端：pack → info → list → cat → unpack → verify，以及两次打包哈希一致
+# 交叉编译（Emscripten 的 node、MinGW 的 wine）时通过模拟器运行 vfstool
+string(REPLACE ";" "|" VFS_E2E_EMULATOR "${CMAKE_CROSSCOMPILING_EMULATOR}")
 add_test(NAME vfstool.e2e
     COMMAND ${CMAKE_COMMAND}
         -DVFSTOOL=$<TARGET_FILE:vfstool>
+        "-DVFSTOOL_EMULATOR=${VFS_E2E_EMULATOR}"
         -DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/data/e2e
         -DWORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/e2e
         -P ${CMAKE_CURRENT_SOURCE_DIR}/cli_e2e.cmake

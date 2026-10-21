@@ -1,5 +1,6 @@
 # vfstool 端到端测试（cmake -P 脚本，跨平台，不依赖 shell）
 # 参数：VFSTOOL（可执行文件）、SOURCE_DIR（测试数据目录）、WORK_DIR（临时工作目录）
+# 可选：VFSTOOL_EMULATOR（交叉编译时运行 vfstool 的程序，例如 node、wine；多个参数用 '|' 分隔）
 cmake_minimum_required(VERSION 3.16)
 
 foreach(var VFSTOOL SOURCE_DIR WORK_DIR)
@@ -12,11 +13,14 @@ file(REMOVE_RECURSE "${WORK_DIR}")
 file(MAKE_DIRECTORY "${WORK_DIR}")
 # 避免外部环境变量影响结果
 unset(ENV{VFS_KEY})
+if(DEFINED VFSTOOL_EMULATOR)
+    string(REPLACE "|" ";" VFSTOOL_EMULATOR "${VFSTOOL_EMULATOR}")
+endif()
 
 # 运行 vfstool，检查退出码；输出写入 ${WORK_DIR}/<name>.out
 function(run name expected)
     execute_process(
-        COMMAND "${VFSTOOL}" ${ARGN}
+        COMMAND ${VFSTOOL_EMULATOR} "${VFSTOOL}" ${ARGN}
         OUTPUT_FILE "${WORK_DIR}/${name}.out"
         ERROR_FILE "${WORK_DIR}/${name}.err"
         RESULT_VARIABLE rc

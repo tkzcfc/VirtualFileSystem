@@ -1428,7 +1428,7 @@ std::string regString(const wchar_t* subKey, const wchar_t* value)
 }
 #endif
 
-std::string trim(std::string s)
+[[maybe_unused]] std::string trim(std::string s)   // 部分平台（如 WebAssembly）的 cpuInfo 用不到
 {
 	while (!s.empty() && (s.back() == ' ' || s.back() == '\t' || s.back() == '\n'))
 		s.pop_back();

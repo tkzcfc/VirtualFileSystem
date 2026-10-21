@@ -90,6 +90,12 @@ Error NativeBackend::toNative(std::string_view rel, std::string& out) const
 			end = rel.size();
 		if (!Path::isPortableComponent(rel.substr(start, end - start)))
 			return Error::INVALID_PATH;
+#if VFS_PLATFORM_WASM
+		// Emscripten 的文件系统层（包括 NODERAWFS）会把超过 255 字节的名字静默截断后照常创建，
+		// 结果写到另一个文件上；这里按常见文件系统的上限直接拒绝
+		if (end - start > 255)
+			return Error::INVALID_PATH;
+#endif
 		start = end + 1;
 	}
 
