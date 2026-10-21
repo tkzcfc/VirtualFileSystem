@@ -79,9 +79,9 @@ Windows（MSVC）下用 `cmake --build build-bench --config Release`，可执行
 ## 结果
 
 - 日期：2026-10-21（UTC+8）；命令：`vfs_bench --csv <platform>.csv --md <platform>.md`（默认参数：--scale 1，线程 1/2/4/8/N，3 次取中位数，热缓存），Release 构建。
-- “优化前”是同一台机器上 7b9e4a8 的结果。共享虚拟机（Linux）上的数字有 ±20% 左右的波动（例如 `read.large.rand` 归档 8 线程：本次 6.0M，优化前基线当天复测 4.6 ~ 7.4M），比较时看数量级和趋势。
-- 图表由 [`bench/bench_charts.py`](../bench/bench_charts.py) 从 `--csv` 输出生成；完整表格见 [Linux](bench/linux.md)、[macOS](bench/macos.md)、[Windows](bench/windows.md)。
-- 吞吐单位是 ops/s，越高越好；括号内为相对 `base:stdio`（同线程数）的倍数。
+- 吞吐单位是 ops/s，越高越好；括号内为相对 `base:stdio`（同线程数）的倍数，> 1 表示比直接调用 C 文件 API 快。
+- 共享虚拟机（Linux）上的数字有 ±20% 左右的波动，比较时看数量级和趋势。
+- 图表由 [`bench/bench_charts.py`](../bench/bench_charts.py) 从 `--csv` 输出生成；全部场景、全部线程数的完整表格见 [Linux](bench/linux.md)、[macOS](bench/macos.md)、[Windows](bench/windows.md)。
 
 ### Linux
 
@@ -89,7 +89,6 @@ Windows（MSVC）下用 `cmake --build build-bench --config Release`，可执行
 - 系统：Debian 13 (trixie)，Linux 6.12.94
 - 编译器：GCC 14.2.0，Release
 - 磁盘：virtio 块设备，ext4（工作目录 /tmp）
-- 优化前基线：7b9e4a8，2026-10-21 在同一台机器上重新测量（线程 1 / 8）
 
 | 场景 | 线程 | base:stdio | native | memory | archive | archive-lz4 | archive+native | 3layer |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
@@ -106,42 +105,15 @@ Windows（MSVC）下用 `cmake --build build-bench --config Release`，可执行
 | write.churn | 1 | 98.3k | 76.0k (0.77) | 525.6k (5.35) | - | - | - | - |
 | write.churn | 8 | 298.5k | 299.7k (1.00) | 729.5k (2.44) | - | - | - | - |
 
-优化前后（8 线程）：
-
-![Linux before/after](images/bench/linux-before-after.svg)
-
-| 场景 / 目标 | 线程 | 优化前 | 优化后 | 倍数 |
-|---|---:|---:|---:|---:|
-| read.small / vfs:archive | 1 | 447.6k | 841.6k | 1.88x |
-| read.small / vfs:archive | 8 | 1.28M | 3.10M | 2.42x |
-| read.large.rand / vfs:archive | 1 | 829.3k | 817.8k | 0.99x |
-| read.large.rand / vfs:archive | 8 | 7.36M | 6.03M | 0.82x |
-| meta.open / vfs:archive | 1 | 783.1k | 2.92M | 3.73x |
-| meta.open / vfs:archive | 8 | 1.30M | 3.21M | 2.47x |
-| meta.open / vfs:archive+native | 1 | 605.8k | 1.27M | 2.10x |
-| meta.open / vfs:archive+native | 8 | 1.34M | 3.89M | 2.91x |
-| meta.stat / vfs:native | 1 | 1.29M | 1.23M | 0.95x |
-| meta.stat / vfs:native | 8 | 2.23M | 6.11M | 2.74x |
-| meta.stat / vfs:archive | 1 | 3.27M | 3.87M | 1.18x |
-| meta.stat / vfs:archive | 8 | 2.64M | 20.31M | 7.69x |
-| meta.miss / vfs:native | 1 | 1.39M | 1.32M | 0.95x |
-| meta.miss / vfs:native | 8 | 2.26M | 5.03M | 2.23x |
-| meta.miss / vfs:archive+native | 1 | 1.35M | 1.38M | 1.02x |
-| meta.miss / vfs:archive+native | 8 | 2.16M | 4.80M | 2.22x |
-| write.churn / vfs:memory | 1 | 642.9k | 525.6k | 0.82x |
-| write.churn / vfs:memory | 8 | 161.0k | 729.5k | 4.53x |
-| read.small / vfs:archive+native | 1 | 378.5k | 654.5k | 1.73x |
-| read.small / vfs:archive+native | 8 | 1.36M | 3.99M | 2.93x |
-
-<details><summary>各场景 1 线程 / 8 线程柱状图</summary>
-
 ![Linux read.small](images/bench/linux-read.small.svg)
+
+![Linux meta.stat](images/bench/linux-meta.stat.svg)
+
+<details><summary>其他场景的柱状图</summary>
 
 ![Linux read.large.rand](images/bench/linux-read.large.rand.svg)
 
 ![Linux meta.open](images/bench/linux-meta.open.svg)
-
-![Linux meta.stat](images/bench/linux-meta.stat.svg)
 
 ![Linux meta.miss](images/bench/linux-meta.miss.svg)
 
@@ -155,7 +127,6 @@ Windows（MSVC）下用 `cmake --build build-bench --config Release`，可执行
 - 系统：macOS 26.5.1
 - 编译器：Apple clang 17.0.0，Release
 - 磁盘：内置 SSD，APFS
-- 优化前基线：7b9e4a8，2026-10-19 测量
 
 | 场景 | 线程 | base:stdio | native | memory | archive | archive-lz4 | archive+native | 3layer |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
@@ -172,42 +143,15 @@ Windows（MSVC）下用 `cmake --build build-bench --config Release`，可执行
 | write.churn | 1 | 12.8k | 12.5k (0.97) | 911.9k (71.04) | - | - | - | - |
 | write.churn | 8 | 17.3k | 17.1k (0.99) | 288.3k (16.69) | - | - | - | - |
 
-优化前后（8 线程）：
-
-![macOS before/after](images/bench/macos-before-after.svg)
-
-| 场景 / 目标 | 线程 | 优化前 | 优化后 | 倍数 |
-|---|---:|---:|---:|---:|
-| read.small / vfs:archive | 1 | 126.1k | 1.72M | 13.68x |
-| read.small / vfs:archive | 8 | 141.1k | 1.38M | 9.79x |
-| read.large.rand / vfs:archive | 1 | 1.39M | 1.91M | 1.37x |
-| read.large.rand / vfs:archive | 8 | 670.4k | 1.37M | 2.04x |
-| meta.open / vfs:archive | 1 | 131.7k | 4.81M | 36.53x |
-| meta.open / vfs:archive | 8 | 144.8k | 3.09M | 21.37x |
-| meta.open / vfs:archive+native | 1 | 116.1k | 867.6k | 7.47x |
-| meta.open / vfs:archive+native | 8 | 142.3k | 1.16M | 8.18x |
-| meta.stat / vfs:native | 1 | 590.9k | 733.3k | 1.24x |
-| meta.stat / vfs:native | 8 | 1.02M | 1.21M | 1.19x |
-| meta.stat / vfs:archive | 1 | 5.85M | 5.86M | 1.00x |
-| meta.stat / vfs:archive | 8 | 2.59M | 16.18M | 6.25x |
-| meta.miss / vfs:native | 1 | 831.3k | 865.7k | 1.04x |
-| meta.miss / vfs:native | 8 | 1.06M | 1.17M | 1.10x |
-| meta.miss / vfs:archive+native | 1 | 812.3k | 819.1k | 1.01x |
-| meta.miss / vfs:archive+native | 8 | 1.06M | 1.17M | 1.10x |
-| write.churn / vfs:memory | 1 | 1.01M | 911.9k | 0.90x |
-| write.churn / vfs:memory | 8 | 92.1k | 288.3k | 3.13x |
-| read.small / vfs:archive+native | 1 | 111.6k | 653.2k | 5.85x |
-| read.small / vfs:archive+native | 8 | 137.5k | 897.8k | 6.53x |
-
-<details><summary>各场景 1 线程 / 8 线程柱状图</summary>
-
 ![macOS read.small](images/bench/macos-read.small.svg)
+
+![macOS meta.stat](images/bench/macos-meta.stat.svg)
+
+<details><summary>其他场景的柱状图</summary>
 
 ![macOS read.large.rand](images/bench/macos-read.large.rand.svg)
 
 ![macOS meta.open](images/bench/macos-meta.open.svg)
-
-![macOS meta.stat](images/bench/macos-meta.stat.svg)
 
 ![macOS meta.miss](images/bench/macos-meta.miss.svg)
 
@@ -221,7 +165,6 @@ Windows（MSVC）下用 `cmake --build build-bench --config Release`，可执行
 - 系统：Windows 11 企业版 10.0.26100
 - 编译器：MSVC 19.51（VS2026），Release
 - 磁盘：Samsung SSD 980 1TB（NVMe），NTFS；Windows Defender 实时保护开启
-- 优化前基线：7b9e4a8，2026-10-19 测量
 
 | 场景 | 线程 | base:stdio | native | memory | archive | archive-lz4 | archive+native | 3layer |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
@@ -238,42 +181,15 @@ Windows（MSVC）下用 `cmake --build build-bench --config Release`，可执行
 | write.churn | 1 | 1.9k | 1.4k (0.70) | 439.6k (226.52) | - | - | - | - |
 | write.churn | 8 | 6.5k | 5.7k (0.86) | 676.3k (103.30) | - | - | - | - |
 
-优化前后（8 线程）：
-
-![Windows before/after](images/bench/windows-before-after.svg)
-
-| 场景 / 目标 | 线程 | 优化前 | 优化后 | 倍数 |
-|---|---:|---:|---:|---:|
-| read.small / vfs:archive | 1 | 57.8k | 306.2k | 5.30x |
-| read.small / vfs:archive | 8 | 38.4k | 875.1k | 22.79x |
-| read.large.rand / vfs:archive | 1 | 229.2k | 224.1k | 0.98x |
-| read.large.rand / vfs:archive | 8 | 294.5k | 301.8k | 1.02x |
-| meta.open / vfs:archive | 1 | 68.3k | 2.24M | 32.83x |
-| meta.open / vfs:archive | 8 | 42.0k | 5.68M | 135.34x |
-| meta.open / vfs:archive+native | 1 | 26.0k | 77.6k | 2.99x |
-| meta.open / vfs:archive+native | 8 | 25.8k | 324.4k | 12.57x |
-| meta.stat / vfs:native | 1 | 77.3k | 81.2k | 1.05x |
-| meta.stat / vfs:native | 8 | 352.1k | 348.3k | 0.99x |
-| meta.stat / vfs:archive | 1 | 2.80M | 2.85M | 1.02x |
-| meta.stat / vfs:archive | 8 | 4.20M | 11.23M | 2.67x |
-| meta.miss / vfs:native | 1 | 100.2k | 104.9k | 1.05x |
-| meta.miss / vfs:native | 8 | 490.2k | 489.1k | 1.00x |
-| meta.miss / vfs:archive+native | 1 | 39.0k | 83.0k | 2.13x |
-| meta.miss / vfs:archive+native | 8 | 26.9k | 329.0k | 12.23x |
-| write.churn / vfs:memory | 1 | 211.3k | 439.6k | 2.08x |
-| write.churn / vfs:memory | 8 | 371.4k | 676.3k | 1.82x |
-| read.small / vfs:archive+native | 1 | 22.5k | 60.2k | 2.67x |
-| read.small / vfs:archive+native | 8 | 25.2k | 256.6k | 10.18x |
-
-<details><summary>各场景 1 线程 / 8 线程柱状图</summary>
-
 ![Windows read.small](images/bench/windows-read.small.svg)
+
+![Windows meta.stat](images/bench/windows-meta.stat.svg)
+
+<details><summary>其他场景的柱状图</summary>
 
 ![Windows read.large.rand](images/bench/windows-read.large.rand.svg)
 
 ![Windows meta.open](images/bench/windows-meta.open.svg)
-
-![Windows meta.stat](images/bench/windows-meta.stat.svg)
 
 ![Windows meta.miss](images/bench/windows-meta.miss.svg)
 
@@ -281,29 +197,26 @@ Windows（MSVC）下用 `cmake --build build-bench --config Release`，可执行
 
 </details>
 
-## 本轮优化做了什么
+## 怎么选后端与组合
 
-| 瓶颈 | 原因 | 改动 | 效果（8 线程） |
-|---|---|---|---|
-| 元数据操作不随线程扩展 | 每次调用都锁同一把 `m_mutex`、增减同一个 `shared_ptr` 引用计数取挂载表快照 | 挂载表快照按线程分 16 个分片，读路径只碰本分片 | Linux `meta.stat` archive 2.6M → 20.3M；macOS 2.6M → 16.2M；Windows 4.2M → 11.2M |
-| 归档并发读 | 所有流共用一个句柄 + 锁；Linux 上共享 fd 的引用计数争用 | 按偏移读（`pread` / overlapped `ReadFile`），每个线程最多 8 个独立句柄槽 | `meta.open` archive：Windows 42k → 5.68M，macOS 145k → 3.09M |
-| Windows 本机覆盖层未命中 | 查询“中间目录不存在”的路径（`ERROR_PATH_NOT_FOUND`）在系统内部串行；之后还要逐级 `GetFileAttributesW` 区分 NOT_FOUND / NOT_DIR | 只读查询先确认父目录存在（每线程记住最近确认存在的父目录），父目录不存在时自顶向下分类 | `meta.miss` archive+native 26.9k → 329k，`meta.open` 25.8k → 324k |
-| `MemoryBackend` 写入抖动 | 整棵树一把读写锁 | 每个目录一把读写锁，逐级“先锁子目录再放父目录”；rename 额外一把全局锁 | `write.churn` memory：Linux 161k → 730k，macOS 92k → 288k |
-| Windows `vfs:native` 打开开销 | — | 测量后确认已与直接调用持平（`meta.open` 0.98 ~ 1.05 倍，`read.small` 0.99 ~ 1.09 倍），未再改动 | — |
+| 用法 | 推荐 | 依据（上表） |
+|---|---|---|
+| 发布版只读资源 | 明文或 XOR 归档（`vfs:archive`） | 打开、`stat`、未命中查询都在内存索引里完成。相对 stdio：小文件读取 Linux 2.5 ~ 3.1 倍、macOS 11 ~ 18 倍、Windows 5 ~ 7.5 倍；`meta.open` 分别为 3.2 ~ 4.2、24 ~ 47、19 ~ 32 倍；8 线程同样扩展 |
+| 需要压缩 | 只压缩脚本、配置等小文本（`--compress "*.lua"`） | LZ4 条目在打开时整体解压：小文件影响不大，64 MiB 大文件顺序读只有 stdio 的 0.06 ~ 0.3 倍，随机读需要先解压整个文件 |
+| 开发期本机覆盖归档 | `archive + native`，仅在开发版挂载 | 每次查找都要先查一次本机目录：未命中查询（`meta.miss`）约 0.64 ~ 0.99 倍；命中归档的文件仍比 stdio 快（`read.small` 1.5 ~ 7 倍）。发布版不要挂空的本机目录 |
+| 运行时生成 / 临时数据 | 内存后端（`vfs:memory`），可叠在归档上作可写层 | 没有系统调用：读、`stat`、写入 / 删除大多快数倍到上百倍（`write.churn` 2.4 ~ 226 倍）；Linux 8 线程未命中查询约 0.9 倍 |
+| 存档、日志等需要落盘的数据 | 本机目录（`vfs:native`），单独挂载点 | 单层时与直接调用基本持平（读、打开 0.95 ~ 1.3 倍，`stat` 1.2 ~ 1.9 倍）；写入前要确定写入层、检查父目录，创建 + 删除约 0.7 ~ 1.0 倍 |
+| 多层叠加 | 尽量少的层；同一路径上不要叠加不必要的空层 | 查找自上而下逐层进行，`nested8`（9 层）元数据操作约 0.4 ~ 1.0 倍 |
 
-## 仍然较慢的组合
-
-- **LZ4 归档读大文件**：压缩条目在 `open` 时整体解压，大文件不要压缩，只压缩脚本、配置等小文件。
-- **本机覆盖层**：同一挂载点上每多一个本机目录，每次查找多一次系统调用（Windows 上约 10 µs）；发布版本不需要本机覆盖时不要挂空目录。
-- **深层嵌套（nested8）**：查找要经过 9 层，`meta.miss` / `meta.open` 约 0.4 ~ 1.0 倍（Windows 上 `meta.stat` 因 stdio 基线本身较慢反而是 1.7 倍）。
-- **本机后端列目录**：VFS 要汇总各层、去重排序并转换文件名，Linux / Windows 约 0.56 ~ 0.77 倍，macOS 多线程时与直接调用持平。
+其他：
+- 列目录（`meta.list`）：归档与内存后端约 1.7 ~ 12.7 倍；本机后端要汇总、去重、排序并转换文件名，约 0.62 ~ 1.04 倍。
+- 多线程：所有后端的读和元数据查询都可以并发，挂载表查询不加全局锁；归档每个线程使用独立句柄按偏移读取。
 
 ## 重新生成图表
 
 ```bash
 ./build-bench/bench/vfs_bench --csv linux.csv --md linux.md
-python3 bench/bench_charts.py --platform linux --input linux.csv --before linux-old.md --out docs/images/bench \
-    --label "CPU, OS, compiler"
+python3 bench/bench_charts.py --platform linux --input linux.csv --out docs/images/bench --label "CPU, OS, compiler"
 ```
 
-`--input` / `--before` 接受 `--csv` 输出或 `--md` 生成的 Markdown 表格；只用 Python 标准库。
+`--input` 接受 `--csv` 输出或 `--md` 生成的 Markdown 表格；只用 Python 标准库。

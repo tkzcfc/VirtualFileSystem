@@ -4,11 +4,9 @@
 #
 # 用法：
 #   python3 bench/bench_charts.py --platform linux --input linux.csv --out docs/images/bench
-#   python3 bench/bench_charts.py --platform linux --input after.csv --before before.md --out docs/images/bench
 #
 # 输出：
 #   <platform>-<scenario>.svg     每个场景一张：各目标在 1 线程与 N 线程（默认 8）下的吞吐（ops/s）
-#   <platform>-before-after.svg   给了 --before 时：选定（场景, 目标）在 N 线程下优化前后的吞吐
 import argparse
 import csv
 import html
@@ -20,11 +18,6 @@ DEFAULT_SCENARIOS = ["read.small", "read.large.rand", "meta.open", "meta.stat", 
 # 柱状图里展示的目标（顺序即显示顺序）；不存在的自动跳过
 DEFAULT_TARGETS = ["base:stdio", "base:posix", "base:win32", "vfs:native", "vfs:memory", "vfs:archive",
                    "vfs:archive-lz4", "vfs:archive+native", "vfs:memory+archive", "vfs:3layer"]
-# 优化前后对比的组合
-DEFAULT_PAIRS = [("read.small", "vfs:archive"), ("read.large.rand", "vfs:archive"), ("meta.open", "vfs:archive"),
-                 ("meta.open", "vfs:archive+native"), ("meta.stat", "vfs:native"), ("meta.stat", "vfs:archive"),
-                 ("meta.miss", "vfs:native"), ("meta.miss", "vfs:archive+native"), ("write.churn", "vfs:memory")]
-
 COLORS = ["#4e79a7", "#f28e2b", "#59a14f", "#e15759"]
 
 
@@ -114,7 +107,6 @@ def main():
     ap = argparse.ArgumentParser(description="Convert vfs_bench results to SVG bar charts")
     ap.add_argument("--platform", required=True, help="platform name used in titles and file names, e.g. linux")
     ap.add_argument("--input", required=True, help="vfs_bench --csv output or Markdown tables")
-    ap.add_argument("--before", help="optional baseline (same formats) for the before/after chart")
     ap.add_argument("--out", required=True, help="output directory")
     ap.add_argument("--threads", type=int, default=8, help="multi-thread column to compare against 1 thread (default 8)")
     ap.add_argument("--label", default="", help="extra subtitle text, e.g. CPU model")
@@ -132,13 +124,6 @@ def main():
         bar_chart("%s — %s (ops/s, higher is better)" % (args.platform, sc), args.label, targets,
                   [[after.get((sc, t, 1)) for t in targets], [after.get((sc, t, n)) for t in targets]],
                   ["1 thread", "%d threads" % n], os.path.join(args.out, "%s-%s.svg" % (args.platform, sc)))
-    if args.before:
-        before = load(args.before)
-        pairs = [p for p in DEFAULT_PAIRS if (p[0], p[1], n) in after and (p[0], p[1], n) in before]
-        bar_chart("%s — before vs after, %d threads (ops/s)" % (args.platform, n), args.label,
-                  ["%s %s" % (sc, t.replace("vfs:", "")) for sc, t in pairs],
-                  [[before[(sc, t, n)] for sc, t in pairs], [after[(sc, t, n)] for sc, t in pairs]],
-                  ["before", "after"], os.path.join(args.out, "%s-before-after.svg" % args.platform))
 
 
 if __name__ == "__main__":
