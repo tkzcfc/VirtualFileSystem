@@ -46,6 +46,11 @@ Each thread does the same amount of work (weak scaling). Aggregate throughput = 
 | `meta.list` | List a directory of 10000 files, 10 times per thread |
 | `write.create` | Each thread creates and writes 64 KiB files in its own directory |
 | `write.churn` | Create and write a 4 KiB file, then delete it (one operation = create + delete) |
+| `write.large.seq` | Each thread creates its own 64 MiB file and writes it sequentially in 1 MiB chunks (one operation = one chunk; MiB/s is the headline number) |
+| `write.overwrite` | Each thread opens its own existing 16 MiB file read/write without truncation (VFS: `OVERLAPPED`; stdio: `r+b`; posix/win32: `O_RDWR` / `OPEN_EXISTING`) once, then writes 4 KiB at random 4 KiB-aligned offsets |
+| `write.append` | Each thread repeatedly opens its own log file in append mode, appends 16 x 4 KiB, and closes it (one operation = one 4 KiB append; open/close is amortised over the batch) |
+
+The three handle-based write scenarios run on `base:stdio`, `base:posix` / `base:win32`, and the VFS write targets; `base:fstream` and the read-only archive targets do not take part.
 
 ### Targets
 

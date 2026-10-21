@@ -67,7 +67,8 @@ import math
 # Columns (scenarios) in display order, with short headers.
 SCENARIOS = [("read.small", "small read"), ("read.medium", "medium read"), ("read.large.seq", "large seq"),
              ("read.large.rand", "large rand"), ("meta.open", "open"), ("meta.stat", "stat"),
-             ("meta.miss", "miss"), ("meta.list", "list"), ("write.create", "create"), ("write.churn", "churn")]
+             ("meta.miss", "miss"), ("meta.list", "list"), ("write.create", "create"), ("write.churn", "churn"),
+             ("write.large.seq", "large write"), ("write.overwrite", "overwrite"), ("write.append", "append")]
 # Rows (targets) in display order; missing ones are skipped.
 ROWS = ["base:stdio", "base:posix", "base:win32", "vfs:native", "vfs:memory", "vfs:archive", "vfs:archive-lz4",
         "vfs:archive+native", "vfs:memory+archive", "vfs:3layer"]

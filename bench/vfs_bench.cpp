@@ -371,6 +371,32 @@ public:
 };
 
 /**
+ * Write handle for the write.large.seq / write.overwrite / write.append scenarios.
+ */
+class WriteHandle
+{
+public:
+	virtual ~WriteHandle() = default;
+
+	// Write at the current position (append mode: at the end); false on failure
+	virtual bool write(const void* data, size_t size) = 0;
+
+	// Write at an absolute offset; false on failure
+	virtual bool writeAt(int64_t offset, const void* data, size_t size) = 0;
+
+	// Close and report errors from the close itself
+	virtual bool close() = 0;
+};
+
+// How a write handle is opened
+enum class WriteMode
+{
+	Create,   // create or truncate
+	Update,   // existing file, read/write, no truncation
+	Append,   // create if missing, every write goes to the end
+};
+
+/**
  * A target under test: a baseline (calling the OS / C / C++ file API directly) or some VFS combination.
  * Every method may be called concurrently from several threads. Paths are relative to the data-set root.
  */
@@ -410,6 +436,11 @@ public:
 	virtual bool writeWhole(const std::string& /*rel*/, const uint8_t* /*data*/, size_t /*size*/) { return false; }
 
 	virtual bool remove(const std::string& /*rel*/) { return false; }
+
+	// Handle-based write scenarios (write.large.seq / write.overwrite / write.append)
+	virtual bool supportsWriter() const { return false; }
+
+	virtual std::unique_ptr<WriteHandle> openWriter(const std::string& /*rel*/, WriteMode /*mode*/) { return nullptr; }
 };
 
 // ---------------------------------------------------------------- Baseline: C FILE*
@@ -432,6 +463,35 @@ public:
 		if (seek64(m_file, offset) != 0)
 			return -1;
 		return static_cast<int64_t>(std::fread(buf, 1, size, m_file));
+	}
+
+private:
+	FILE* m_file;
+};
+
+class StdioWriteHandle : public WriteHandle
+{
+public:
+	explicit StdioWriteHandle(FILE* f) : m_file(f) {}
+
+	~StdioWriteHandle() override
+	{
+		if (m_file)
+			std::fclose(m_file);
+	}
+
+	bool write(const void* data, size_t size) override { return std::fwrite(data, 1, size, m_file) == size; }
+
+	bool writeAt(int64_t offset, const void* data, size_t size) override
+	{
+		return seek64(m_file, offset) == 0 && write(data, size);
+	}
+
+	bool close() override
+	{
+		const bool ok = std::fclose(m_file) == 0;
+		m_file = nullptr;
+		return ok;
 	}
 
 private:
@@ -539,6 +599,14 @@ public:
 	{
 		FILE* f = std::fopen(full(rel).c_str(), "rb");
 		return f ? std::make_unique<StdioHandle>(f) : nullptr;
+	}
+
+	bool supportsWriter() const override { return true; }
+
+	std::unique_ptr<WriteHandle> openWriter(const std::string& rel, WriteMode mode) override
+	{
+		FILE* f = std::fopen(full(rel).c_str(), mode == WriteMode::Create ? "wb" : mode == WriteMode::Update ? "r+b" : "ab");
+		return f ? std::make_unique<StdioWriteHandle>(f) : nullptr;
 	}
 
 	bool writeWhole(const std::string& rel, const uint8_t* data, size_t size) override
@@ -668,7 +736,74 @@ private:
 	HANDLE m_handle;
 };
 
+class OsWriteHandle : public WriteHandle
+{
+public:
+	OsWriteHandle(HANDLE h, bool append) : m_handle(h), m_append(append) {}
+
+	~OsWriteHandle() override
+	{
+		if (m_handle != INVALID_HANDLE_VALUE)
+			::CloseHandle(m_handle);
+	}
+
+	bool write(const void* data, size_t size) override
+	{
+		DWORD put = 0;
+		return ::WriteFile(m_handle, data, static_cast<DWORD>(size), &put, nullptr) && put == size;
+	}
+
+	bool writeAt(int64_t offset, const void* data, size_t size) override
+	{
+		OVERLAPPED ov{};
+		ov.Offset = static_cast<DWORD>(static_cast<uint64_t>(offset) & 0xFFFFFFFFu);
+		ov.OffsetHigh = static_cast<DWORD>(static_cast<uint64_t>(offset) >> 32);
+		DWORD put = 0;
+		return !m_append && ::WriteFile(m_handle, data, static_cast<DWORD>(size), &put, &ov) && put == size;
+	}
+
+	bool close() override
+	{
+		const bool ok = ::CloseHandle(m_handle) != 0;
+		m_handle = INVALID_HANDLE_VALUE;
+		return ok;
+	}
+
+private:
+	HANDLE m_handle;
+	bool m_append;
+};
+
 #else
+
+class OsWriteHandle : public WriteHandle
+{
+public:
+	explicit OsWriteHandle(int fd) : m_fd(fd) {}
+
+	~OsWriteHandle() override
+	{
+		if (m_fd >= 0)
+			::close(m_fd);
+	}
+
+	bool write(const void* data, size_t size) override { return ::write(m_fd, data, size) == static_cast<ssize_t>(size); }
+
+	bool writeAt(int64_t offset, const void* data, size_t size) override
+	{
+		return ::pwrite(m_fd, data, size, static_cast<off_t>(offset)) == static_cast<ssize_t>(size);
+	}
+
+	bool close() override
+	{
+		const bool ok = ::close(m_fd) == 0;
+		m_fd = -1;
+		return ok;
+	}
+
+private:
+	int m_fd;
+};
 
 class OsHandle : public Handle
 {
@@ -771,6 +906,25 @@ public:
 #endif
 	}
 
+	bool supportsWriter() const override { return true; }
+
+	std::unique_ptr<WriteHandle> openWriter(const std::string& rel, WriteMode mode) override
+	{
+#if VFS_PLATFORM_WINDOWS
+		const DWORD access = mode == WriteMode::Append ? FILE_APPEND_DATA : GENERIC_WRITE;
+		const DWORD disposition = mode == WriteMode::Create ? CREATE_ALWAYS : mode == WriteMode::Update ? OPEN_EXISTING : OPEN_ALWAYS;
+		HANDLE h = ::CreateFileW(widen(full(rel)).c_str(), access, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+								 disposition, FILE_ATTRIBUTE_NORMAL, nullptr);
+		return h == INVALID_HANDLE_VALUE ? nullptr : std::make_unique<OsWriteHandle>(h, mode == WriteMode::Append);
+#else
+		const int flags = mode == WriteMode::Create ? (O_WRONLY | O_CREAT | O_TRUNC)
+						: mode == WriteMode::Update ? O_RDWR
+													: (O_WRONLY | O_CREAT | O_APPEND);
+		int fd = ::open(full(rel).c_str(), flags, 0644);
+		return fd < 0 ? nullptr : std::make_unique<OsWriteHandle>(fd);
+#endif
+	}
+
 	bool writeWhole(const std::string& rel, const uint8_t* data, size_t size) override
 	{
 #if VFS_PLATFORM_WINDOWS
@@ -803,6 +957,27 @@ public:
 			return -1;
 		return m_stream->read(buf, static_cast<unsigned int>(size));
 	}
+
+private:
+	std::unique_ptr<IFileStream> m_stream;
+};
+
+class VfsWriteHandle : public WriteHandle
+{
+public:
+	explicit VfsWriteHandle(std::unique_ptr<IFileStream> s) : m_stream(std::move(s)) {}
+
+	bool write(const void* data, size_t size) override
+	{
+		return m_stream->write(data, static_cast<unsigned int>(size)) == static_cast<int>(size);
+	}
+
+	bool writeAt(int64_t offset, const void* data, size_t size) override
+	{
+		return m_stream->seek(offset, SEEK_SET) == offset && write(data, size);
+	}
+
+	bool close() override { return m_stream->close() == 0; }
 
 private:
 	std::unique_ptr<IFileStream> m_stream;
@@ -892,6 +1067,18 @@ public:
 	}
 
 	bool remove(const std::string& rel) override { return m_fs.removeFile(full(rel)) == Error::OK; }
+
+	bool supportsWriter() const override { return true; }
+
+	std::unique_ptr<WriteHandle> openWriter(const std::string& rel, WriteMode mode) override
+	{
+		// Update uses OVERLAPPED: read/write, no truncation (the file already exists)
+		const IFileStream::Mode m = mode == WriteMode::Create ? IFileStream::Mode::WRITE
+								  : mode == WriteMode::Update ? IFileStream::Mode::OVERLAPPED
+															  : IFileStream::Mode::APPEND;
+		auto s = m_fs.openFileStream(full(rel), m);
+		return s ? std::make_unique<VfsWriteHandle>(std::move(s)) : nullptr;
+	}
 
 private:
 	std::string full(const std::string& rel) const { return m_prefix + "/" + rel; }
@@ -1120,6 +1307,7 @@ struct Scenario
 	// Preparation before each iteration (for example clearing the write area); false means failure
 	std::function<bool(Target&, int threads)> prepare;
 	std::function<Work(Target&)> make;
+	bool handleWrite = false;   // uses openWriter (only targets with supportsWriter() take part)
 };
 
 uint64_t xorshift(uint64_t& x)
@@ -1326,6 +1514,142 @@ std::vector<Scenario> makeScenarios(const Options& opt, const Dataset& ds)
 				}
 			};
 		}});
+
+	// ---- Handle-based write scenarios (targets that implement openWriter: stdio, posix/win32, VFS)
+	const uint64_t largeWrite = std::max<uint64_t>(4 * MiB, static_cast<uint64_t>(64.0 * MiB * opt.scale) / MiB * MiB);
+	const size_t overwriteOps = std::max<size_t>(256, static_cast<size_t>(4096 * opt.scale));
+	const size_t appendOps = std::max<size_t>(256, static_cast<size_t>(4096 * opt.scale));
+	static constexpr uint64_t OVERWRITE_FILE = 16 * MiB;
+	static constexpr size_t APPEND_BATCH = 16;
+	auto chunk = std::make_shared<std::vector<uint8_t>>(makeContent(1 * MiB, 77));
+
+	sc.push_back({"write.large.seq", true, false, true,
+		"each thread creates its own " + std::to_string(largeWrite / MiB) + "MiB file and writes it sequentially in 1MiB chunks; latency per chunk",
+		resetArea,
+		[chunk, largeWrite](Target& tg) -> Work
+		{
+			return [&tg, chunk, largeWrite](int tid, int, ThreadStats& st)
+			{
+				st.latNs.reserve(largeWrite / MiB);
+				auto w = tg.openWriter("w/t" + std::to_string(tid) + "/large.bin", WriteMode::Create);
+				if (!w)
+				{
+					st.failed = true;
+					return;
+				}
+				for (uint64_t done = 0; done < largeWrite; done += MiB)
+				{
+					auto t0 = Clock::now();
+					const bool ok = w->write(chunk->data(), MiB);
+					st.latNs.push_back(elapsedNs(t0));
+					if (!ok)
+					{
+						st.failed = true;
+						return;
+					}
+					st.bytes += MiB;
+					++st.ops;
+				}
+				st.failed |= !w->close();
+			};
+		}});
+	sc.back().handleWrite = true;
+
+	sc.push_back({"write.overwrite", true, false, true,
+		"each thread opens its own existing 16MiB file read/write (no truncation) once, then writes 4KiB at random 4KiB-aligned offsets; latency per write",
+		[chunk](Target& tg, int threads)
+		{
+			if (!tg.resetWriteArea(threads))
+				return false;
+			for (int t = 0; t < threads; ++t)
+			{
+				auto w = tg.openWriter("w/t" + std::to_string(t) + "/ow.bin", WriteMode::Create);
+				if (!w)
+					return false;
+				for (uint64_t done = 0; done < OVERWRITE_FILE; done += MiB)
+					if (!w->write(chunk->data(), MiB))
+						return false;
+				if (!w->close())
+					return false;
+			}
+			return true;
+		},
+		[chunk, overwriteOps](Target& tg) -> Work
+		{
+			return [&tg, chunk, overwriteOps](int tid, int, ThreadStats& st)
+			{
+				st.latNs.reserve(overwriteOps);
+				auto w = tg.openWriter("w/t" + std::to_string(tid) + "/ow.bin", WriteMode::Update);
+				if (!w)
+				{
+					st.failed = true;
+					return;
+				}
+				uint64_t x = 0x9E3779B97F4A7C15ull + static_cast<uint64_t>(tid) * 7919;
+				for (size_t i = 0; i < overwriteOps; ++i)
+				{
+					const int64_t off = static_cast<int64_t>(xorshift(x) % (OVERWRITE_FILE / (4 * KiB))) * static_cast<int64_t>(4 * KiB);
+					auto t0 = Clock::now();
+					const bool ok = w->writeAt(off, chunk->data() + (i % 64) * 4 * KiB, 4 * KiB);
+					st.latNs.push_back(elapsedNs(t0));
+					if (!ok)
+					{
+						st.failed = true;
+						return;
+					}
+					st.bytes += 4 * KiB;
+					++st.ops;
+				}
+				st.failed |= !w->close();
+			};
+		}});
+	sc.back().handleWrite = true;
+
+	sc.push_back({"write.append", true, false, true,
+		"each thread repeatedly opens its own log file in append mode, appends 16 x 4KiB, and closes it (one op = one 4KiB append; open/close amortised over the batch)",
+		resetArea,
+		[chunk, appendOps](Target& tg) -> Work
+		{
+			return [&tg, chunk, appendOps](int tid, int, ThreadStats& st)
+			{
+				st.latNs.reserve(appendOps);
+				const std::string path = "w/t" + std::to_string(tid) + "/log.bin";
+				size_t done = 0;
+				while (done < appendOps)
+				{
+					auto t0 = Clock::now();
+					auto w = tg.openWriter(path, WriteMode::Append);
+					if (!w)
+					{
+						st.failed = true;
+						return;
+					}
+					const size_t batch = std::min(APPEND_BATCH, appendOps - done);
+					for (size_t i = 0; i < batch; ++i)
+					{
+						if (!w->write(chunk->data() + ((done + i) % 64) * 4 * KiB, 4 * KiB))
+						{
+							st.failed = true;
+							return;
+						}
+					}
+					const bool ok = w->close();
+					// Latency per append: the batch time (including open/close) divided evenly
+					const uint64_t per = elapsedNs(t0) / batch;
+					for (size_t i = 0; i < batch; ++i)
+						st.latNs.push_back(per);
+					if (!ok)
+					{
+						st.failed = true;
+						return;
+					}
+					st.bytes += batch * 4 * KiB;
+					st.ops += batch;
+					done += batch;
+				}
+			};
+		}});
+	sc.back().handleWrite = true;
 	return sc;
 }
 
@@ -1573,6 +1897,8 @@ int main(int argc, char** argv)
 				if (!matchFilter(opt, s.name, tg->name()))
 					continue;
 				if (s.meta && !tg->supportsMeta())
+					continue;
+				if (s.handleWrite && !tg->supportsWriter())
 					continue;
 				Work work = s.make(*tg);
 				auto runPrepared = [&]() -> Result
