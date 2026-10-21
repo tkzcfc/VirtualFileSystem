@@ -1,96 +1,96 @@
-# 性能基准（vfs_bench）
+# Performance benchmarks (vfs_bench)
 
-`bench/vfs_bench.cpp` 是一个不依赖第三方库的基准程序，对比直接调用 C / C++ / OS 文件 API 的基线与各种 VFS 后端、分层组合在读、写、元数据操作上的吞吐和延迟。
+`bench/vfs_bench.cpp` is a benchmark with no third-party dependencies. It compares baselines that call the C / C++ / OS file APIs directly with VFS backends and layered combinations, measuring throughput and latency of reads, writes, and metadata operations.
 
-## 构建与运行
+## Build and run
 
-默认不构建，用 `VFS_BUILD_BENCH` 打开。务必使用 Release 构建，Debug 下的数字没有参考价值（程序启动时会提示构建类型）。
+It is not built by default; enable it with `VFS_BUILD_BENCH`. Always use a Release build. Numbers from Debug are not meaningful (the program prints the build type at startup).
 
 ```bash
 cmake -S . -B build-bench -DCMAKE_BUILD_TYPE=Release -DVFS_BUILD_BENCH=ON -DVFS_BUILD_TESTS=OFF
 cmake --build build-bench --target vfs_bench -j
-./build-bench/bench/vfs_bench                                  # 全部场景，线程 1,2,4,8,N，热缓存
-./build-bench/bench/vfs_bench --filter read.small,archive-lz4  # 只跑名字含任一子串的 "场景/目标"
-./build-bench/bench/vfs_bench --scale 0.1 --threads 1,4 --iterations 1   # 快速冒烟
-./build-bench/bench/vfs_bench --csv out.csv --md out.md        # 额外输出 CSV / Markdown
-./build-bench/bench/vfs_bench --cold --threads 1,8 --filter read.   # 冷缓存（仅 Linux）
+./build-bench/bench/vfs_bench                                  # all scenarios, threads 1,2,4,8,N, warm cache
+./build-bench/bench/vfs_bench --filter read.small,archive-lz4  # run only names containing any substring of "scenario/target"
+./build-bench/bench/vfs_bench --scale 0.1 --threads 1,4 --iterations 1   # quick smoke
+./build-bench/bench/vfs_bench --csv out.csv --md out.md        # also write CSV / Markdown
+./build-bench/bench/vfs_bench --cold --threads 1,8 --filter read.   # cold cache (Linux only)
 ```
 
-Windows（MSVC）下用 `cmake --build build-bench --config Release`，可执行文件在 `build-bench/bench/Release/vfs_bench.exe`。
+On Windows (MSVC) use `cmake --build build-bench --config Release`. The executable is `build-bench/bench/Release/vfs_bench.exe`.
 
-| 选项 | 说明 |
+| Option | Description |
 |---|---|
-| `--scale <x>` | 数据规模倍数，默认 1：小文件 10000 个 × 4 KiB（放在同一个目录里）、中文件 200 个 × 256 KiB、大文件 64 MiB；随机读次数、写入文件数同比缩放 |
-| `--threads <list>` | 线程数列表，`N` 表示硬件线程数，默认 `1,2,4,8,N`（重复的自动去掉） |
-| `--iterations <n>` | 每个组合重复次数，取耗时中位数的那一次，默认 3 |
-| `--filter <list>` | 逗号分隔的子串，匹配 `场景/目标`，任一命中即运行 |
-| `--csv <file>` / `--md <file>` | 额外输出 CSV / Markdown 表格 |
-| `--dir <path>` | 工作目录，默认系统临时目录；数据集约 0.5 GB（scale=1：原始文件 154 MiB + 三个归档） |
-| `--keep` | 结束后保留数据集 |
-| `--cold` | 每次迭代前用 `posix_fadvise(DONTNEED)` 把数据文件逐出页缓存（仅 Linux，不需要 root）；默认先预跑一次再计时（热缓存） |
-| `--list` | 列出场景与目标 |
+| `--scale <x>` | Data-size multiplier, default 1: 10000 small files x 4 KiB (in one directory), 200 medium files x 256 KiB, one 64 MiB file; random-read count and written file count scale the same way |
+| `--threads <list>` | Thread-count list. `N` is the hardware thread count. Default `1,2,4,8,N` (duplicates are dropped) |
+| `--iterations <n>` | Repetitions per combination; the run with the median elapsed time is kept. Default 3 |
+| `--filter <list>` | Comma-separated substrings matched against `scenario/target`; a hit on any one runs it |
+| `--csv <file>` / `--md <file>` | Also write a CSV / Markdown table |
+| `--dir <path>` | Working directory, default the system temp directory; the dataset is about 0.5 GB (scale=1: 154 MiB of raw files plus three archives) |
+| `--keep` | Keep the dataset when finished |
+| `--cold` | Before each iteration, drop data files from the page cache with `posix_fadvise(DONTNEED)` (Linux only, no root required); the default is one warmup run then timing (warm cache) |
+| `--list` | List scenarios and targets |
 
-### 场景
+### Scenarios
 
-每个线程做同样多的工作（弱扩展），总吞吐 = 全部线程的操作数 ÷ 墙钟时间。
+Each thread does the same amount of work (weak scaling). Aggregate throughput = operations across all threads / wall-clock time.
 
-| 场景 | 一次操作 |
+| Scenario | One operation |
 |---|---|
-| `read.small` | 打开 + 读完 4 KiB + 关闭；每个线程读全部小文件，起点错开 |
-| `read.medium` | 打开 + 以 64 KiB 分块读完 256 KiB + 关闭 |
-| `read.large.seq` | 以 1 MiB 分块顺序读完 64 MiB 大文件，每线程一遍；延迟按块统计 |
-| `read.large.rand` | 大文件打开一次，随机偏移读 4 KiB（seek + read，基线 posix 用 `pread`）；打开计入总时间但不计入单次延迟 |
-| `meta.open` | 只打开再关闭小文件 |
-| `meta.stat` | `stat` 已存在的小文件 |
-| `meta.miss` | `exists` 查询大目录中不存在的名字 |
-| `meta.list` | 列出含 10000 个文件的目录，每线程 10 次 |
-| `write.create` | 每个线程在自己的目录里新建并写入 64 KiB 文件 |
-| `write.churn` | 新建写入 4 KiB 文件再删除（一次操作 = 创建 + 删除） |
+| `read.small` | Open + read all 4 KiB + close; each thread reads every small file, with staggered start points |
+| `read.medium` | Open + read all 256 KiB in 64 KiB chunks + close |
+| `read.large.seq` | Sequentially read the 64 MiB file in 1 MiB chunks, once per thread; latency is per chunk |
+| `read.large.rand` | Open the large file once, then read 4 KiB at random offsets (seek + read; the posix baseline uses `pread`); open counts toward total time but not per-operation latency |
+| `meta.open` | Open and close a small file, nothing else |
+| `meta.stat` | `stat` an existing small file |
+| `meta.miss` | `exists` query for a name that is not in a large directory |
+| `meta.list` | List a directory of 10000 files, 10 times per thread |
+| `write.create` | Each thread creates and writes 64 KiB files in its own directory |
+| `write.churn` | Create and write a 4 KiB file, then delete it (one operation = create + delete) |
 
-### 目标
+### Targets
 
-| 目标 | 说明 |
+| Target | Description |
 |---|---|
-| `base:stdio` | `fopen` / `fread` / `fseeko`；**比值的基准**。`meta.stat`/`miss`/`list` 用 `std::filesystem`（status / exists / directory_iterator） |
+| `base:stdio` | `fopen` / `fread` / `fseeko`; **the baseline for ratios**. `meta.stat`/`miss`/`list` use `std::filesystem` (status / exists / directory_iterator) |
 | `base:fstream` | `std::ifstream` / `std::ofstream` |
-| `base:posix` / `base:win32` | POSIX `open`/`read`/`pread`；Windows 上是 `CreateFileW`/`ReadFile`（带 OVERLAPPED 偏移） |
-| `vfs:native` | `NativeBackend` 单独挂载 |
-| `vfs:memory` | `MemoryBackend`，预先装入全部数据 |
-| `vfs:archive` / `-xor` / `-lz4` | 同一数据集打成的三个归档：明文、全部 XOR 加密、全部 LZ4 压缩（42 MiB，约 3.7:1） |
-| `vfs:archive+native` | 归档在下 + 空的本机覆盖目录在上（开发期“本机文件覆盖归档”的用法），同一挂载点 |
-| `vfs:memory+archive` | 归档在下 + 空的可写内存层在上 |
-| `vfs:3layer` | 归档 + 本机覆盖 + 内存（WriteTarget）三层 |
-| `vfs:nested8` | 数据目录挂在 8 级深的路径上，每一级祖先都有一个空的内存挂载（查找要经过 9 层），另有 32 个无关挂载 |
+| `base:posix` / `base:win32` | POSIX `open`/`read`/`pread`; on Windows, `CreateFileW`/`ReadFile` (OVERLAPPED offsets) |
+| `vfs:native` | `NativeBackend` mounted alone |
+| `vfs:memory` | `MemoryBackend`, with all data preloaded |
+| `vfs:archive` / `-xor` / `-lz4` | Three archives of the same dataset: plaintext, fully XOR-encrypted, and fully LZ4-compressed (42 MiB, about 3.7:1) |
+| `vfs:archive+native` | Archive below + an empty native override directory above (the development "native files override the archive" layout), same mount point |
+| `vfs:memory+archive` | Archive below + an empty writable memory layer above |
+| `vfs:3layer` | Three layers: archive + native override + memory (WriteTarget) |
+| `vfs:nested8` | The data directory is mounted 8 levels deep, with an empty memory mount on every ancestor (lookup crosses 9 layers), plus 32 unrelated mounts |
 
-写场景的目标是三个基线、`vfs:native`、`vfs:memory`、`vfs:memory+archive`（写入落到内存层，父目录由 VFS 在写入层创建）。
+Write scenarios use the three baselines, `vfs:native`, `vfs:memory`, and `vfs:memory+archive` (writes land in the memory layer; the VFS creates parent directories in the write layer).
 
-### 指标
+### Metrics
 
-- `ops/s`：操作数 ÷ 墙钟时间；`MiB/s`：读写字节数 ÷ 墙钟时间（元数据场景为 `-`）。
-- `p50` / `p99`：所有线程合并后的单次操作延迟（微秒）。
-- `vs stdio`：同一场景、同一线程数下吞吐相对 `base:stdio` 的倍数，> 1 表示比 stdio 快。
+- `ops/s`: operations / wall-clock time; `MiB/s`: bytes read or written / wall-clock time (`-` for metadata scenarios).
+- `p50` / `p99`: per-operation latency in microseconds after merging all threads.
+- `vs stdio`: throughput relative to `base:stdio` for the same scenario and thread count. > 1 means faster than stdio.
 
-### 热缓存与冷缓存
+### Warm cache and cold cache
 
-- 默认是**热缓存**：先预跑一次，数据都在页缓存里，测到的是 API 与 VFS 本身的开销（系统调用、查找、拷贝、解密、解压）。游戏运行时反复读同一批资源时更接近这种情况。
-- `--cold` 在每次迭代前逐出数据文件的页缓存，测到的是首次加载的情况，结果主要取决于存储设备与预读。目录项 / inode 缓存不会被清除（需要 root），所以 `meta.*` 场景在冷缓存下差别不大。macOS / Windows 上 `--cold` 不起作用（可以用重启或 `purge`（macOS）代替）。
-- 虚拟机磁盘通常还有一层宿主机缓存，冷缓存数字会比真机的 SSD/HDD 乐观。
+- The default is a **warm cache**: one warmup run first, so the data is in the page cache. What is measured is the cost of the API and the VFS itself (system calls, lookup, copies, decryption, decompression). This is closer to a game repeatedly reading the same set of assets.
+- `--cold` drops data files from the page cache before each iteration, measuring a first load. Results depend mainly on the storage device and readahead. Directory-entry / inode caches are not cleared (that needs root), so `meta.*` scenarios change little under a cold cache. `--cold` has no effect on macOS / Windows (a reboot, or `purge` on macOS, can stand in).
+- VM disks usually have another host cache, so cold-cache numbers are more optimistic than a physical SSD/HDD.
 
-## 结果
+## Results
 
-- 日期：2026-10-21（UTC+8）；命令：`vfs_bench --csv <platform>.csv --md <platform>.md`（默认参数：--scale 1，线程 1/2/4/8/N，3 次取中位数，热缓存），Release 构建。
-- 吞吐单位是 ops/s，越高越好；括号内为相对 `base:stdio`（同线程数）的倍数，> 1 表示比直接调用 C 文件 API 快。
-- 共享虚拟机（Linux）上的数字有 ±20% 左右的波动，比较时看数量级和趋势。
-- 图表由 [`bench/bench_charts.py`](../bench/bench_charts.py) 从 `--csv` 输出生成；全部场景、全部线程数的完整表格见 [Linux](bench/linux.md)、[macOS](bench/macos.md)、[Windows](bench/windows.md)、[iOS](bench/ios.md)。
+- Date: 2026-10-21 (UTC+8); command: `vfs_bench --csv <platform>.csv --md <platform>.md` (defaults: --scale 1, threads 1/2/4/8/N, median of 3, warm cache), Release build.
+- Throughput is in ops/s, higher is better; the number in parentheses is the multiple of `base:stdio` at the same thread count. > 1 means faster than calling the C file API directly.
+- Numbers on the shared VM (Linux) fluctuate by about ±20%. Compare orders of magnitude and trends.
+- Charts are generated from `--csv` output by [`bench/bench_charts.py`](../bench/bench_charts.py). Full tables for every scenario and thread count: [Linux](bench/linux.md), [macOS](bench/macos.md), [Windows](bench/windows.md), [iOS](bench/ios.md).
 
 ### Linux
 
-- CPU：Intel Xeon（KVM 虚拟机），8 vCPU；内存 15 GiB
-- 系统：Debian 13 (trixie)，Linux 6.12.94
-- 编译器：GCC 14.2.0，Release
-- 磁盘：virtio 块设备，ext4（工作目录 /tmp）
+- CPU: Intel Xeon (KVM virtual machine), 8 vCPU; memory 15 GiB
+- OS: Debian 13 (trixie), Linux 6.12.94
+- Compiler: GCC 14.2.0, Release
+- Disk: virtio block device, ext4 (working directory /tmp)
 
-| 场景 | 线程 | base:stdio | native | memory | archive | archive-lz4 | archive+native | 3layer |
+| Scenario | Threads | base:stdio | native | memory | archive | archive-lz4 | archive+native | 3layer |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | read.small | 1 | 336.6k | 385.8k (1.15) | 1.12M (3.33) | 841.6k (2.50) | 401.1k (1.19) | 654.5k (1.94) | 691.4k (2.05) |
 | read.small | 8 | 987.4k | 1.27M (1.28) | 3.96M (4.01) | 3.10M (3.14) | 2.23M (2.26) | 3.99M (4.04) | 3.72M (3.76) |
@@ -109,7 +109,7 @@ Windows（MSVC）下用 `cmake --build build-bench --config Release`，可执行
 
 ![Linux meta.stat](images/bench/linux-meta.stat.svg)
 
-<details><summary>其他场景的柱状图</summary>
+<details><summary>Bar charts for the other scenarios</summary>
 
 ![Linux read.large.rand](images/bench/linux-read.large.rand.svg)
 
@@ -123,12 +123,12 @@ Windows（MSVC）下用 `cmake --build build-bench --config Release`，可执行
 
 ### macOS
 
-- CPU：Apple M4，10 核；内存 32 GiB
-- 系统：macOS 26.5.1
-- 编译器：Apple clang 17.0.0，Release
-- 磁盘：内置 SSD，APFS
+- CPU: Apple M4, 10 cores; memory 32 GiB
+- OS: macOS 26.5.1
+- Compiler: Apple clang 17.0.0, Release
+- Disk: built-in SSD, APFS
 
-| 场景 | 线程 | base:stdio | native | memory | archive | archive-lz4 | archive+native | 3layer |
+| Scenario | Threads | base:stdio | native | memory | archive | archive-lz4 | archive+native | 3layer |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | read.small | 1 | 93.6k | 94.6k (1.01) | 2.99M (31.97) | 1.72M (18.43) | 666.8k (7.12) | 653.2k (6.98) | 640.9k (6.85) |
 | read.small | 8 | 125.1k | 127.8k (1.02) | 1.24M (9.92) | 1.38M (11.05) | 1.37M (10.96) | 897.8k (7.18) | 776.7k (6.21) |
@@ -147,7 +147,7 @@ Windows（MSVC）下用 `cmake --build build-bench --config Release`，可执行
 
 ![macOS meta.stat](images/bench/macos-meta.stat.svg)
 
-<details><summary>其他场景的柱状图</summary>
+<details><summary>Bar charts for the other scenarios</summary>
 
 ![macOS read.large.rand](images/bench/macos-read.large.rand.svg)
 
@@ -161,12 +161,12 @@ Windows（MSVC）下用 `cmake --build build-bench --config Release`，可执行
 
 ### Windows
 
-- CPU：Intel Core i5-12400，6 核 12 线程；内存 32 GiB
-- 系统：Windows 11 企业版 10.0.26100
-- 编译器：MSVC 19.51（VS2026），Release
-- 磁盘：Samsung SSD 980 1TB（NVMe），NTFS；Windows Defender 实时保护开启
+- CPU: Intel Core i5-12400, 6 cores 12 threads; memory 32 GiB
+- OS: Windows 11 Enterprise 10.0.26100
+- Compiler: MSVC 19.51 (VS2026), Release
+- Disk: Samsung SSD 980 1TB (NVMe), NTFS; Windows Defender real-time protection on
 
-| 场景 | 线程 | base:stdio | native | memory | archive | archive-lz4 | archive+native | 3layer |
+| Scenario | Threads | base:stdio | native | memory | archive | archive-lz4 | archive+native | 3layer |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | read.small | 1 | 40.7k | 40.5k (0.99) | 1.13M (27.79) | 306.2k (7.53) | 236.2k (5.81) | 60.2k (1.48) | 58.1k (1.43) |
 | read.small | 8 | 171.6k | 185.1k (1.08) | 3.74M (21.80) | 875.1k (5.10) | 655.0k (3.82) | 256.6k (1.50) | 256.5k (1.50) |
@@ -185,7 +185,7 @@ Windows（MSVC）下用 `cmake --build build-bench --config Release`，可执行
 
 ![Windows meta.stat](images/bench/windows-meta.stat.svg)
 
-<details><summary>其他场景的柱状图</summary>
+<details><summary>Bar charts for the other scenarios</summary>
 
 ![Windows read.large.rand](images/bench/windows-read.large.rand.svg)
 
@@ -199,12 +199,12 @@ Windows（MSVC）下用 `cmake --build build-bench --config Release`，可执行
 
 ### iOS
 
-- 设备：iPhone 14 Pro（Apple A16，6 核）；内存 6 GiB
-- 系统：iOS 26.5
-- 编译器：Apple clang 17.0.0，Release
-- 磁盘：内置闪存，APFS（应用沙盒）
+- Device: iPhone 14 Pro (Apple A16, 6 cores); memory 6 GiB
+- OS: iOS 26.5
+- Compiler: Apple clang 17.0.0, Release
+- Disk: built-in flash, APFS (app sandbox)
 
-| 场景 | 线程 | base:stdio | native | memory | archive | archive-lz4 | archive+native | 3layer |
+| Scenario | Threads | base:stdio | native | memory | archive | archive-lz4 | archive+native | 3layer |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | read.small | 1 | 8.0k | 8.1k (1.01) | 2.00M (249.46) | 1.33M (165.32) | 530.0k (66.10) | 71.0k (8.85) | 70.7k (8.82) |
 | read.small | 8 | 56.5k | 55.9k (0.99) | 894.8k (15.85) | 1.14M (20.17) | 887.5k (15.72) | 167.6k (2.97) | 157.9k (2.80) |
@@ -223,7 +223,7 @@ Windows（MSVC）下用 `cmake --build build-bench --config Release`，可执行
 
 ![iOS meta.stat](images/bench/ios-meta.stat.svg)
 
-<details><summary>其他场景的柱状图</summary>
+<details><summary>Bar charts for the other scenarios</summary>
 
 ![iOS read.large.rand](images/bench/ios-read.large.rand.svg)
 
@@ -235,26 +235,26 @@ Windows（MSVC）下用 `cmake --build build-bench --config Release`，可执行
 
 </details>
 
-## 怎么选后端与组合
+## Choosing backends and combinations
 
-| 用法 | 推荐 | 依据（上表） |
+| Use | Recommendation | Basis (tables above) |
 |---|---|---|
-| 发布版只读资源 | 明文或 XOR 归档（`vfs:archive`） | 打开、`stat`、未命中查询都在内存索引里完成。相对 stdio：小文件读取 Linux 2.5 ~ 3.1 倍、macOS 11 ~ 18 倍、Windows 5 ~ 7.5 倍；`meta.open` 分别为 3.2 ~ 4.2、24 ~ 47、19 ~ 32 倍；8 线程同样扩展 |
-| 需要压缩 | 只压缩脚本、配置等小文本（`--compress "*.lua"`） | LZ4 条目在打开时整体解压：小文件影响不大，64 MiB 大文件顺序读只有 stdio 的 0.06 ~ 0.3 倍，随机读需要先解压整个文件 |
-| 开发期本机覆盖归档 | `archive + native`，仅在开发版挂载 | 每次查找都要先查一次本机目录：未命中查询（`meta.miss`）约 0.64 ~ 0.99 倍；命中归档的文件仍比 stdio 快（`read.small` 1.5 ~ 7 倍）。发布版不要挂空的本机目录 |
-| 运行时生成 / 临时数据 | 内存后端（`vfs:memory`），可叠在归档上作可写层 | 没有系统调用：读、`stat`、写入 / 删除大多快数倍到上百倍（`write.churn` 2.4 ~ 226 倍）；Linux 8 线程未命中查询约 0.9 倍 |
-| 存档、日志等需要落盘的数据 | 本机目录（`vfs:native`），单独挂载点 | 单层时与直接调用基本持平（读、打开 0.95 ~ 1.3 倍，`stat` 1.2 ~ 1.9 倍）；写入前要确定写入层、检查父目录，创建 + 删除约 0.7 ~ 1.0 倍 |
-| 多层叠加 | 尽量少的层；同一路径上不要叠加不必要的空层 | 查找自上而下逐层进行，`nested8`（9 层）元数据操作约 0.4 ~ 1.0 倍 |
+| Shipping read-only assets | Plaintext or XOR archive (`vfs:archive`) | Open, `stat`, and miss queries are served from the in-memory index. Versus stdio: small-file reads are 2.5-3.1x on Linux, 11-18x on macOS, 5-7.5x on Windows; `meta.open` is 3.2-4.2x, 24-47x, and 19-32x respectively; 8 threads scale the same way |
+| Compression needed | Compress only small text such as scripts and config (`--compress "*.lua"`) | An LZ4 entry is decompressed as a whole on open: small files are barely affected, sequential reads of a 64 MiB file are only 0.06-0.3x stdio, and random reads must decompress the whole file first |
+| Native override of the archive during development | `archive + native`, mounted only in development builds | Every lookup checks the native directory first: miss queries (`meta.miss`) are about 0.64-0.99x; files that hit the archive are still faster than stdio (`read.small` 1.5-7x). Do not mount an empty native directory in a shipping build |
+| Runtime-generated / temporary data | Memory backend (`vfs:memory`), optionally stacked on an archive as a writable layer | No system calls: reads, `stat`, writes, and deletes are mostly several times to hundreds of times faster (`write.churn` 2.4-226x); an 8-thread miss query on Linux is about 0.9x |
+| Data that must hit disk, such as saves and logs | Native directory (`vfs:native`), its own mount point | A single layer is roughly even with a direct call (reads and opens 0.95-1.3x, `stat` 1.2-1.9x); choosing the write layer and checking the parent before a write makes create + delete about 0.7-1.0x |
+| Stacking layers | As few layers as possible; do not stack needless empty layers on the same path | Lookup walks layers top-down. `nested8` (9 layers) metadata operations are about 0.4-1.0x |
 
-其他：
-- 列目录（`meta.list`）：归档与内存后端约 1.7 ~ 12.7 倍；本机后端要汇总、去重、排序并转换文件名，约 0.62 ~ 1.04 倍。
-- 多线程：所有后端的读和元数据查询都可以并发，挂载表查询不加全局锁；归档每个线程使用独立句柄按偏移读取。
+Other:
+- Directory listing (`meta.list`): archive and memory backends are about 1.7-12.7x; the native backend must merge, deduplicate, sort, and convert names, about 0.62-1.04x.
+- Threads: reads and metadata queries are concurrent on every backend, and mount-table lookup takes no global lock; each archive thread reads by offset on its own handle.
 
-## 重新生成图表
+## Regenerating charts
 
 ```bash
 ./build-bench/bench/vfs_bench --csv linux.csv --md linux.md
 python3 bench/bench_charts.py --platform linux --input linux.csv --out docs/images/bench --label "CPU, OS, compiler"
 ```
 
-`--input` 接受 `--csv` 输出或 `--md` 生成的 Markdown 表格；只用 Python 标准库。
+`--input` accepts `--csv` output or the Markdown table produced by `--md`; only the Python standard library is used.

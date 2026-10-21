@@ -29,7 +29,7 @@ bool lz4Decompress(const uint8_t* src, size_t size, uint8_t* dst, size_t dstSize
 {
 	if (size > static_cast<size_t>(INT_MAX) || dstSize > static_cast<size_t>(INT_MAX))
 		return false;
-	// LZ4_decompress_safe 会做完整的边界检查，可以安全处理损坏或恶意数据
+	// LZ4_decompress_safe does a full bounds check, so corrupted or malicious input is safe to feed it.
 	int n = LZ4_decompress_safe(reinterpret_cast<const char*>(src), reinterpret_cast<char*>(dst),
 								static_cast<int>(size), static_cast<int>(dstSize));
 	return n >= 0 && static_cast<size_t>(n) == dstSize;

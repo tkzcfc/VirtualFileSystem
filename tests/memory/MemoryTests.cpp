@@ -1,4 +1,4 @@
-// 内存后端测试
+// Memory backend tests
 #include "TestUtils.h"
 #include "vfs/memory/MemoryBackend.h"
 
@@ -43,10 +43,10 @@ TEST_SUITE("memory")
 		b->addFile("d2/g", "g");
 		b->addFile("x", "x");
 		b->createDir("empty");
-		CHECK(b->rename("x", "d1/f") == Error::OK);    // 文件覆盖文件
-		CHECK(b->rename("d1", "d2") == Error::NOT_EMPTY);   // 目录覆盖非空目录
-		CHECK(b->rename("d1", "empty") == Error::OK);  // 目录覆盖空目录
-		CHECK(b->rename("empty", "empty/sub") == Error::INVALID_PATH);   // 移到自身之下
+		CHECK(b->rename("x", "d1/f") == Error::OK);    // file replaces file
+		CHECK(b->rename("d1", "d2") == Error::NOT_EMPTY);   // directory replaces a non-empty directory
+		CHECK(b->rename("d1", "empty") == Error::OK);  // directory replaces an empty directory
+		CHECK(b->rename("empty", "empty/sub") == Error::INVALID_PATH);   // move into itself
 		CHECK(b->rename("d2/g", "empty") == Error::IS_DIR);
 		CHECK(b->rename("empty", "d2/g") == Error::NOT_DIR);
 		CHECK(b->rename("none", "y") == Error::NOT_FOUND);

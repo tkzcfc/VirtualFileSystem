@@ -1,6 +1,6 @@
-// 资源后端（AssetBackend）测试：用模拟的 IAssetProvider 在桌面平台上覆盖全部逻辑，
-// 行为按 AAssetManager 的语义模拟（打开目录失败、列目录只返回文件、未压缩资源可以拿到描述符）。
-// Android 上的真实 AAssetManager 需要 APK，见 docs/integration-axmol.md 的说明。
+// Asset backend (AssetBackend) tests: a simulated IAssetProvider covers all of the logic on desktop platforms.
+// Behavior follows AAssetManager semantics (opening a directory fails, listing a directory returns only files, an uncompressed asset can yield a descriptor).
+// A real AAssetManager on Android needs an APK; see the notes in docs/integration-axmol.md.
 #include "TestUtils.h"
 #include "vfs/VirtualFileSystem.h"
 #include "vfs/android/AssetBackend.h"
@@ -24,10 +24,10 @@ struct MockAsset
 {
 	std::vector<uint8_t> data;
 	bool compressed = false;
-	int64_t blobOffset = -1;   // 未压缩资源在 blob 文件中的位置
+	int64_t blobOffset = -1;   // Position of an uncompressed asset inside the blob file
 };
 
-// 模拟 AAsset：自带游标
+// Simulated AAsset: it has its own cursor.
 class MockAssetFile : public IAssetFile
 {
 public:
@@ -80,7 +80,7 @@ private:
 	int64_t m_pos = 0;
 };
 
-// 模拟 AAssetManager：路径 → 资源；未压缩资源依次写进一个 blob 文件（前面留一段垃圾数据，验证起点偏移）
+// Simulated AAssetManager: path -> asset; uncompressed assets are written in order into one blob file (garbage data is left in front to verify the start offset).
 class MockProvider : public IAssetProvider
 {
 public:
@@ -151,7 +151,7 @@ std::map<std::string, MockAsset> sampleAssets()
 		{"config.json", asset("{}")},
 		{"scripts/main.lua", asset("print(1)", true)},
 		{"scripts/lib/util.lua", asset("return {}")},
-		{"deep/only/sub/file.txt", asset("deep")},   // deep/ 和 deep/only/ 只含子目录
+		{"deep/only/sub/file.txt", asset("deep")},   // deep/ and deep/only/ contain only subdirectories
 		{"res/ui/title.txt", asset("Title")},
 		{"res/a.txt", asset("A")},
 		{"assets.lst", asset("# manifest\nconfig.json\nscripts/main.lua\r\nscripts/lib/util.lua\n\ndeep/only/sub/file.txt\nres/ui/title.txt\nres/a.txt\n")},
@@ -183,7 +183,7 @@ TEST_SUITE("asset")
 		CHECK(st.type == FileType::DIR);
 		CHECK(b->stat("missing.txt", st) == Error::NOT_FOUND);
 		CHECK(b->stat("config.json/x", st) == Error::NOT_DIR);
-		// 已知限制：只含子目录的目录在探测模式下看不到
+		// Known limitation: a directory that contains only subdirectories is invisible in probe mode.
 		CHECK(b->stat("deep", st) == Error::NOT_FOUND);
 		REQUIRE(b->stat("deep/only/sub", st) == Error::OK);
 
@@ -202,7 +202,7 @@ TEST_SUITE("asset")
 			CHECK(e == Error::READ_ONLY);
 		}
 
-		CHECK(names(*b, "scripts", &e) == std::vector<std::string>{"main.lua"});   // 子目录 lib 看不到
+		CHECK(names(*b, "scripts", &e) == std::vector<std::string>{"main.lua"});   // The subdirectory lib is not visible.
 		CHECK(e == Error::OK);
 		CHECK(names(*b, "", &e) == std::vector<std::string>{"assets.lst", "config.json"});
 		CHECK(names(*b, "config.json", &e).empty());
@@ -227,7 +227,7 @@ TEST_SUITE("asset")
 		CHECK(st.type == FileType::DIR);
 		REQUIRE(b->stat("scripts/lib/util.lua", st) == Error::OK);
 		CHECK(st.size == 9);
-		CHECK(b->stat("assets.lst", st) == Error::NOT_FOUND);   // 不在清单里的文件不可见
+		CHECK(b->stat("assets.lst", st) == Error::NOT_FOUND);   // A file that is not in the manifest is invisible.
 		CHECK(b->stat("config.json/x", st) == Error::NOT_DIR);
 		CHECK(b->stat("nope/x", st) == Error::NOT_FOUND);
 
@@ -305,7 +305,7 @@ TEST_SUITE("asset")
 			REQUIRE(s);
 			CHECK(s->size() == static_cast<int64_t>(big.size()));
 			CHECK(test::readStream(*s) == big);
-			// 随机位置读
+			// Random positional read
 			for (int64_t off : {int64_t(0), int64_t(1), int64_t(4095), int64_t(199990), int64_t(123457)})
 			{
 				REQUIRE(s->seek(off, SEEK_SET) == off);
@@ -327,7 +327,7 @@ TEST_SUITE("asset")
 			CHECK(s->read(&c, 1) == -1);
 		}
 #if VFS_PLATFORM_POSIX
-		CHECK(p->fds.load() == 1);   // 只有未压缩的资源走描述符
+		CHECK(p->fds.load() == 1);   // Only uncompressed assets use a descriptor.
 #endif
 	}
 

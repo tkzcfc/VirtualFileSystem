@@ -1,5 +1,5 @@
-// IFileStream 一致性测试：同一套用例跑遍所有后端。
-// 只读用例覆盖全部后端；写入用例只覆盖可写后端。
+// IFileStream conformance tests: the same cases run against every backend.
+// Read-only cases cover every backend; write cases cover only writable backends.
 #include "TestUtils.h"
 #include "vfs/archive/ArchiveBackend.h"
 #include "vfs/archive/ArchiveSource.h"
@@ -13,9 +13,9 @@ using Mode = IFileStream::Mode;
 namespace
 {
 
-// ---------------------------------------------------------------- 可写后端
+// ---------------------------------------------------------------- writable backends
 
-// 直接使用 NativeFileStream
+// Uses NativeFileStream directly.
 struct NativeFx
 {
 	test::TempDir dir;
@@ -42,7 +42,7 @@ struct NativeFx
 	std::vector<uint8_t> contents() { return test::readNative(file()); }
 };
 
-// 直接使用 MemoryBackend
+// Uses MemoryBackend directly.
 struct MemoryFx
 {
 	std::shared_ptr<MemoryBackend> backend = MemoryBackend::create();
@@ -65,7 +65,7 @@ struct MemoryFx
 	}
 };
 
-// 经过 VirtualFileSystem（TrackedFileStream 包装）的本机目录
+// Native directory through VirtualFileSystem (wrapped by TrackedFileStream).
 struct VfsNativeFx
 {
 	test::TempDir dir;
@@ -91,7 +91,7 @@ struct VfsNativeFx
 	}
 };
 
-// 经过 VirtualFileSystem 的内存后端
+// Memory backend through VirtualFileSystem.
 struct VfsMemoryFx
 {
 	VirtualFileSystem fs;
@@ -117,7 +117,7 @@ struct VfsMemoryFx
 	}
 };
 
-// 单文件挂载（mountFile）
+// Single-file mount (mountFile).
 struct SingleFileFx
 {
 	test::TempDir dir;
@@ -132,7 +132,7 @@ struct SingleFileFx
 	std::unique_ptr<IFileStream> open(Mode mode) { return fs.openFileStream("/config/one.bin", mode); }
 };
 
-// ---------------------------------------------------------------- 归档后端
+// ---------------------------------------------------------------- archive backends
 
 template <bool Encrypt, bool Compress, bool InMemory, bool ViaVfs>
 struct ArchiveFx
@@ -146,7 +146,7 @@ struct ArchiveFx
 		FileWriteOptions fo;
 		fo.encrypt = Encrypt;
 		fo.compress = Compress;
-		// 再放几个文件，确保目标文件不在数据区开头
+		// Add a few more files so the target file is not at the start of the data region.
 		std::vector<test::ArchiveFile> files = {
 			{"a/first.txt", test::bytes("hello"), {}},
 			{"目录/file.bin", content, fo},
@@ -180,7 +180,7 @@ using ArchiveXorLz4Fx = ArchiveFx<true, true, false, false>;
 using ArchiveMemoryFx = ArchiveFx<true, false, true, false>;
 using ArchiveVfsFx = ArchiveFx<true, false, false, true>;
 
-// 可压缩又不完全规则的内容（保证 LZ4 真的压缩）
+// Content that compresses but is not perfectly regular (so LZ4 actually compresses it).
 std::vector<uint8_t> sampleContent(size_t size)
 {
 	std::vector<uint8_t> out = test::randomBytes(size, 42);
@@ -215,7 +215,7 @@ TEST_SUITE("stream")
 		CHECK(test::readStream(*s) == content);
 		CHECK(s->tell() == 10000);
 
-		// EOF 之后 read 返回 0，不是 -1
+		// After EOF, read returns 0, not -1.
 		char buf[16];
 		CHECK(s->read(buf, sizeof(buf)) == 0);
 		CHECK(s->read(buf, 0) == 0);
@@ -238,7 +238,7 @@ TEST_SUITE("stream")
 		CHECK(s->read(&c, 1) == 1);
 		CHECK(c == content[4999]);
 
-		// 负的结果位置：返回 -1，errno = EINVAL，位置保持不变
+		// A negative resulting position: return -1, errno = EINVAL, position unchanged.
 		CHECK(s->seek(10, SEEK_SET) == 10);
 		errno = 0;
 		CHECK(s->seek(-11, SEEK_CUR) == -1);
@@ -247,7 +247,7 @@ TEST_SUITE("stream")
 		CHECK(s->seek(-5001, SEEK_END) == -1);
 		CHECK(s->tell() == 10);
 
-		// 越过 EOF：允许，read 返回 0
+		// Past EOF: allowed, read returns 0.
 		CHECK(s->seek(6000, SEEK_SET) == 6000);
 		CHECK(s->tell() == 6000);
 		CHECK(s->read(&c, 1) == 0);
@@ -320,7 +320,7 @@ TEST_SUITE("stream")
 		CHECK(s->seek(0, SEEK_SET) == -1);
 		CHECK(s->tell() == -1);
 		CHECK(s->size() == -1);
-		// 重复 close 无害
+		// Closing again is harmless.
 		s->close();
 	}
 
@@ -352,7 +352,7 @@ TEST_SUITE("stream")
 			CHECK(s->write("hello", 5) == 5);
 			CHECK(s->tell() == 5);
 			CHECK(s->size() == 5);
-			// WRITE 模式同时可读
+			// WRITE mode is also readable.
 			CHECK(s->seek(0, SEEK_SET) == 0);
 			char buf[5];
 			CHECK(s->read(buf, 5) == 5);
@@ -379,14 +379,14 @@ TEST_SUITE("stream")
 			REQUIRE(s);
 			CHECK(s->size() == 3);
 			CHECK(s->write("12", 2) == 2);
-			// 即使 seek 到开头，写入仍然追加
+			// Even after seeking to the start, writes still append.
 			s->seek(0, SEEK_SET);
 			CHECK(s->write("34", 2) == 2);
 			CHECK(s->size() == 7);
 		}
 		CHECK(test::str(fx.contents()) == "abc1234");
 
-		// 文件不存在时 APPEND 创建它
+		// APPEND creates the file when it does not exist.
 		fx.removeFile();
 		{
 			auto s = fx.open(Mode::APPEND);
@@ -428,7 +428,7 @@ TEST_SUITE("stream")
 			REQUIRE(s);
 			CHECK(s->write("ab", 2) == 2);
 			CHECK(s->seek(6, SEEK_SET) == 6);
-			CHECK(s->size() == 2);   // 只 seek 不改变大小
+			CHECK(s->size() == 2);   // Seeking alone does not change the size.
 			CHECK(s->write("z", 1) == 1);
 			CHECK(s->size() == 7);
 		}

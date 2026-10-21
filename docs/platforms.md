@@ -1,20 +1,20 @@
-# 平台支持与构建
+# Platform Support and Builds
 
-| 平台 | 本机后端 | 特有内容 | 验证方式 |
+| Platform | Native backend | Platform-specific | How it is verified |
 |---|---|---|---|
-| Windows（MSVC、MinGW） | Win32 API，UTF-8 ↔ UTF-16，长路径 | — | MSVC Release 全部测试；MinGW 交叉编译 + wine |
-| Linux（GCC、Clang、libc++） | POSIX | — | 全部测试，另有 TSAN 构建 |
-| macOS | POSIX + `getattrlist`（大小写核对） | — | 全部测试 |
-| iOS / iPadOS | 与 macOS 相同（应用包与沙盒目录都是普通文件） | 不需要专门的后端 | 真机（arm64）与模拟器编译零警告；真机（iPhone 14 Pro，iOS 26.5）与模拟器上运行全部测试 |
-| Android（API 24+） | POSIX（内部存储、外部存储） | `AndroidAssetBackend`：挂载 APK 内的 `assets/` | NDK r27 交叉编译 arm64-v8a / x86_64 / armeabi-v7a 零警告；x86_64 模拟器（Android 14）上运行全部测试 |
-| WebAssembly（Emscripten） | POSIX over Emscripten FS（MEMFS、NODEFS、NODERAWFS 等） | — | node 上运行全部测试（pthread 构建） |
+| Windows (MSVC, MinGW) | Win32 API, UTF-8 <-> UTF-16, long paths | — | All tests, MSVC Release; MinGW cross-compile + wine |
+| Linux (GCC, Clang, libc++) | POSIX | — | All tests, plus a TSAN build |
+| macOS | POSIX + `getattrlist` (case check) | — | All tests |
+| iOS / iPadOS | Same as macOS (the app bundle and sandbox directories are ordinary files) | No dedicated backend | Device (arm64) and simulator builds with zero warnings; all tests on a device (iPhone 14 Pro, iOS 26.5) and on the simulator |
+| Android (API 24+) | POSIX (internal storage, external storage) | `AndroidAssetBackend`: mount `assets/` inside the APK | NDK r27 cross-compile arm64-v8a / x86_64 / armeabi-v7a with zero warnings; all tests on an x86_64 emulator (Android 14) |
+| WebAssembly (Emscripten) | POSIX over the Emscripten FS (MEMFS, NODEFS, NODERAWFS, and so on) | — | All tests under node (pthread build) |
 
-平台判断统一使用 `src/vfs/Platform.h` 中的 `VFS_PLATFORM_WINDOWS / LINUX / ANDROID / MACOS / IOS / WASM`
-以及 `VFS_PLATFORM_APPLE`、`VFS_PLATFORM_POSIX`（都定义为 0 或 1，用 `#if` 判断）。
+Platform detection uses `VFS_PLATFORM_WINDOWS / LINUX / ANDROID / MACOS / IOS / WASM` from `src/vfs/Platform.h`,
+plus `VFS_PLATFORM_APPLE` and `VFS_PLATFORM_POSIX` (each defined as 0 or 1, tested with `#if`).
 
 ## Android
 
-### 构建
+### Build
 
 ```bash
 cmake -S . -B build-android -G Ninja \
@@ -23,66 +23,66 @@ cmake -S . -B build-android -G Ninja \
 cmake --build build-android -j
 ```
 
-在 Gradle 工程中用 `externalNativeBuild` 引入时，`add_subdirectory(VirtualFileSystem)` 后链接 `vfs` 即可；库会自动链接 `libandroid`。
-最低 API 24：32 位 ABI 上库使用 64 位文件偏移（`_FILE_OFFSET_BITS=64`），对应的 `lseek64`/`pread64` 等在 API 24 起完整可用。
+When a Gradle project pulls it in with `externalNativeBuild`, `add_subdirectory(VirtualFileSystem)` and link `vfs`; the library links `libandroid` itself.
+Minimum API 24: on 32-bit ABIs the library uses 64-bit file offsets (`_FILE_OFFSET_BITS=64`). The matching `lseek64` / `pread64` and related calls are fully available from API 24.
 
-### 运行测试
+### Running tests
 
-测试程序是普通的命令行可执行文件，可以推到设备或模拟器上运行：
+The test program is an ordinary command-line executable and can be pushed to a device or emulator:
 
 ```bash
 adb push build-android/tests/vfs_tests /data/local/tmp/
 adb shell "cd /data/local/tmp && TMPDIR=/data/local/tmp ./vfs_tests"
 ```
 
-`vfstool.e2e` 依赖宿主机运行 vfstool，交叉编译时不执行。
+`vfstool.e2e` needs the host to run vfstool, so it is not run for a cross build.
 
-### APK 内的资源：AndroidAssetBackend
+### Assets inside an APK: AndroidAssetBackend
 
-APK 的 `assets/` 不在文件系统中，`mountNative` 无法访问。`AndroidAssetBackend` 通过 `AAssetManager` 提供只读后端：
+APK `assets/` are not on the filesystem, so `mountNative` cannot reach them. `AndroidAssetBackend` is a read-only backend on top of `AAssetManager`:
 
 ```cpp
 #include "vfs/android/AndroidAssetBackend.h"
 
-// 1. 设置 AAssetManager（二选一）
-vfs::AndroidAssetBackend::setAssetManagerFromJava(env, javaAssetManager);   // JNI，内部持有全局引用
-vfs::AndroidAssetBackend::setAssetManager(ax::FileUtilsAndroid::getAssetManager());   // 已接入 axmol
+// 1. Set the AAssetManager (either one)
+vfs::AndroidAssetBackend::setAssetManagerFromJava(env, javaAssetManager);   // JNI; holds a global reference internally
+vfs::AndroidAssetBackend::setAssetManager(ax::FileUtilsAndroid::getAssetManager());   // already wired into axmol
 
-// 2. 挂载整个 assets/，或其中的子目录
-auto assets = vfs::AndroidAssetBackend::create();             // 或 create({"res"}) 只挂载 assets/res/
+// 2. Mount all of assets/, or a subdirectory
+auto assets = vfs::AndroidAssetBackend::create();             // or create({"res"}) to mount only assets/res/
 fs.mount("/res", assets);
 
-// 3. 也可以挂载 assets/ 中的 .vfs 归档（推荐：资源打包后只占一个 APK 条目）
+// 3. Or mount a .vfs archive inside assets/ (preferred: packed resources occupy a single APK entry)
 fs.mount("/res", vfs::ArchiveBackend::create(assets->archiveSource("game.vfs")));
 ```
 
-- **线程安全**：每个流持有自己的 `AAsset`，多个线程可以同时打开、读取同一个资源。
-- **读取方式**：未压缩存放的资源用 `AAsset_openFileDescriptor64` 拿到描述符后按偏移读取（`pread`），随机读不需要 seek；
-  压缩存放的资源用 `AAsset_read` / `AAsset_seek64`，随机读会反复解压，较慢。
-  `.vfs` 归档请保持未压缩：Gradle 中设置 `androidResources { noCompress += "vfs" }`。
-- **目录**：`AAssetManager` 只能列出目录中的文件，看不到子目录。默认的“探测模式”下，只含子目录的目录 `stat` 为 NOT_FOUND，
-  `list` 也不含子目录。需要完整目录结构时提供清单：`AssetOptions::manifest = "assets.lst"`，清单每行一个文件路径（相对 `root`），
-  可在构建时生成，例如 `cd app/src/main/assets && find . -type f | sed 's|^\./||' > assets.lst`。
-  使用归档时不需要清单（归档自带完整索引）。
-- **修改时间**：APK 资源没有 mtime，`Stat::mtime` 为 0。
-- **测试**：后端逻辑与平台无关（`AssetBackend` + `IAssetProvider`），`tests/asset/` 用模拟的资源来源在所有平台上运行，
-  覆盖两种目录模式、描述符 / 游标两种读取方式、并发读取与挂载归档；`AndroidAssetBackend` 只是 `AAssetManager` 的薄封装，需要 APK 才能端到端验证。
+- **Thread safety**: each stream holds its own `AAsset`. Multiple threads can open and read the same asset at the same time.
+- **How reads work**: uncompressed assets use `AAsset_openFileDescriptor64` and then read by offset (`pread`), so random reads do not seek.
+  Compressed assets use `AAsset_read` / `AAsset_seek64`; random reads inflate the asset repeatedly and are slower.
+  Keep `.vfs` archives uncompressed: in Gradle set `androidResources { noCompress += "vfs" }`.
+- **Directories**: `AAssetManager` can list files in a directory but not subdirectories. In the default "probe" mode, a directory that contains only subdirectories `stat`s as NOT_FOUND,
+  and `list` omits subdirectories. For a full tree, supply a manifest: `AssetOptions::manifest = "assets.lst"`. Each line is one file path (relative to `root`).
+  Generate it at build time, for example `cd app/src/main/assets && find . -type f | sed 's|^\./||' > assets.lst`.
+  An archive does not need a manifest (the archive already has a full index).
+- **Modification time**: APK assets have no mtime, so `Stat::mtime` is 0.
+- **Tests**: the backend logic is platform-independent (`AssetBackend` + `IAssetProvider`). `tests/asset/` runs a simulated asset source on every platform
+  and covers both directory modes, descriptor and cursor reads, concurrent reads, and mounting an archive. `AndroidAssetBackend` is a thin wrapper over `AAssetManager` and needs an APK for an end-to-end check.
 
 ## iOS
 
-不需要专门的后端：应用包（`[[NSBundle mainBundle] resourcePath]`）与沙盒目录（Documents、Library、tmp）都是普通的 POSIX 文件。
+No dedicated backend: the app bundle (`[[NSBundle mainBundle] resourcePath]`) and the sandbox directories (Documents, Library, tmp) are ordinary POSIX files.
 
 ```bash
-# 真机
+# Device
 cmake -S . -B build-ios -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_SYSROOT=iphoneos -DCMAKE_OSX_ARCHITECTURES=arm64 \
     -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0 -DCMAKE_BUILD_TYPE=Release
-# 模拟器：-DCMAKE_OSX_SYSROOT=iphonesimulator
+# Simulator: -DCMAKE_OSX_SYSROOT=iphonesimulator
 cmake --build build-ios -j
-# 在模拟器上运行测试
+# Run tests on the simulator
 xcrun simctl spawn <device-udid> build-ios/tests/vfs_tests.app/vfs_tests
 ```
 
-真机运行需要签名，用 Xcode 生成器：
+Running on a device needs signing. Use the Xcode generator:
 
 ```bash
 cmake -S . -B build-ios-dev -G Xcode -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_ARCHITECTURES=arm64 \
@@ -94,22 +94,22 @@ xcrun devicectl device install app --device <device-id> build-ios-dev/tests/Rele
 xcrun devicectl device process launch --device <device-id> --console com.yourname.vfs.vfs-tests
 ```
 
-每个可执行文件的包标识是 `VFS_APPLE_BUNDLE_ID_PREFIX` 加目标名（`_` 换成 `-`）。首次运行前要在 设置 > 通用 > VPN 与设备管理 里信任开发者证书。`vfs_bench` 在 iOS 上通过 UIKit 宿主入口启动（完整基准要跑几分钟，超过系统的启动看门狗时限），跑的时候保持屏幕常亮。
+Each executable's bundle identifier is `VFS_APPLE_BUNDLE_ID_PREFIX` plus the target name (`_` replaced with `-`). Before the first run, trust the developer certificate under Settings > General > VPN & Device Management. On iOS, `vfs_bench` starts through a UIKit host entry (a full benchmark takes several minutes and exceeds the system launch watchdog), so keep the screen awake while it runs.
 
-注意：iOS 模拟器的文件系统（宿主机 APFS）查找时区分大小写，但创建只差大小写的名字仍会冲突（EEXIST），与真机（区分大小写的 APFS）不同。
+Note: the iOS simulator filesystem (host APFS) is case-sensitive for lookup, but creating a name that differs only in case still conflicts (EEXIST). That differs from a device (case-sensitive APFS).
 
-## WebAssembly（Emscripten）
+## WebAssembly (Emscripten)
 
 ```bash
 emcmake cmake -S . -B build-wasm -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build-wasm -j
-cd build-wasm && ctest            # 用 node 运行测试与 vfstool
+cd build-wasm && ctest            # run tests and vfstool under node
 ```
 
-- `VFS_WASM_THREADS`（默认 ON）：所有目标加 `-pthread`。库本身在无线程构建（OFF）下也能使用（锁退化为空操作），
-  但测试、基准和多线程示例需要线程。
-- 作为顶层项目构建时，可执行文件按 node 程序链接：`-sNODERAWFS=1`（本机后端直接访问宿主文件系统）、
-  `-sPROXY_TO_PTHREAD`、固定 1.5 GiB 初始内存。作为子项目使用时这些选项不会加到你的程序上。
-- 浏览器中：本机后端工作在 Emscripten 的虚拟文件系统上（默认 MEMFS；持久化可用 IDBFS / OPFS），
-  用 `mountNative("/data", "/data")` 挂载其中的目录即可；资源也可以直接用内存后端或 `MemoryArchiveSource` 挂载下载得到的归档。
-- Emscripten 的文件系统会把超过 255 字节的名字静默截断后创建，本机后端在 WebAssembly 上直接拒绝这类名字（INVALID_PATH）。
+- `VFS_WASM_THREADS` (default ON): every target gets `-pthread`. The library itself still works in a threadless build (OFF); locks become no-ops.
+  Tests, the benchmark, and the multithreaded examples need threads.
+- When built as the top-level project, executables are linked as node programs: `-sNODERAWFS=1` (the native backend talks to the host filesystem directly),
+  `-sPROXY_TO_PTHREAD`, and a fixed 1.5 GiB initial memory. Used as a subdirectory, those options are not applied to your program.
+- In the browser the native backend runs on Emscripten's virtual filesystem (MEMFS by default; IDBFS / OPFS for persistence).
+  Mount a directory there with `mountNative("/data", "/data")`. Assets can also be mounted directly through the memory backend or `MemoryArchiveSource` from a downloaded archive.
+- Emscripten's filesystem silently truncates names longer than 255 bytes and still creates the file. On WebAssembly the native backend rejects those names outright (INVALID_PATH).

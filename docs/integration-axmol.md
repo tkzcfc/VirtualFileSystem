@@ -1,8 +1,8 @@
-# 接入 axmol
+# Integrating with axmol
 
-VFS 的流接口与 axmol 引擎的 `IFileStream` 逐字一致。打开 `VFS_WITH_AXMOL` 后，`vfs::IFileStream` 直接就是 `ax::IFileStream`，VFS 返回的流可以原样交给引擎；再写一个 `FileUtils` 子类把引擎的文件访问转发到 VFS，游戏代码和引擎模块就都能透明地读取归档和分层目录。
+VFS's stream interface is identical, word for word, to the axmol engine's `IFileStream`. With `VFS_WITH_AXMOL` on, `vfs::IFileStream` is `ax::IFileStream`, so a stream returned by VFS can be handed to the engine as-is. A `FileUtils` subclass then forwards the engine's file access to VFS, and both game code and engine modules read archives and layered directories transparently.
 
-## 1. 编译
+## 1. Build
 
 ```cmake
 set(VFS_WITH_AXMOL ON CACHE BOOL "" FORCE)
@@ -10,38 +10,38 @@ set(VFS_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
 set(VFS_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 add_subdirectory(VirtualFileSystem)
 
-# vfs 需要能找到 axmol 的头文件（以及 AX_DLL 等宏），链接引擎核心库目标即可
-target_link_libraries(vfs PUBLIC axmol)        # 目标名以所用引擎版本的 CMake 工程为准
+# vfs must be able to see axmol's headers (and macros such as AX_DLL); link the engine core-library target
+target_link_libraries(vfs PUBLIC axmol)        # target name depends on the CMake project of the engine version in use
 target_link_libraries(${APP_NAME} PRIVATE vfs)
 ```
 
-`VFS_WITH_AXMOL=1` 作为 PUBLIC 宏传给所有使用 `vfs` 的目标。`src/vfs/IFileStream.h` 按以下顺序查找引擎头文件：
+`VFS_WITH_AXMOL=1` is passed as a PUBLIC macro to every target that uses `vfs`. `src/vfs/IFileStream.h` looks for the engine header in this order:
 
-| axmol 版本 | 头文件位置 | include 写法 |
+| axmol version | Header location | Include |
 |---|---|---|
-| dev 分支（3.x） | `axmol/platform/IFileStream.h` | `"axmol/platform/IFileStream.h"` |
-| 2.x | `core/platform/IFileStream.h` | `"platform/IFileStream.h"`（`core/` 在 include 路径中） |
+| dev branch (3.x) | `axmol/platform/IFileStream.h` | `"axmol/platform/IFileStream.h"` |
+| 2.x | `core/platform/IFileStream.h` | `"platform/IFileStream.h"` (`core/` is on the include path) |
 
-前者存在时优先使用（`__has_include`），两个版本的 `IFileStream` 接口相同，VFS 代码无需任何改动。
+The first one that exists is preferred (`__has_include`). The `IFileStream` interface is the same in both versions, so VFS code does not change.
 
-## 2. FileUtils 子类
+## 2. FileUtils subclass
 
-axmol 通过 `FileUtils::getInstance()` 访问文件，`FileUtils::setDelegate()` 可以替换这个实例。需要转发的虚函数：
+axmol reaches files through `FileUtils::getInstance()`, and `FileUtils::setDelegate()` replaces that instance. Virtual functions to forward:
 
-| FileUtils 虚函数 | 转发到 | 说明 |
+| FileUtils virtual | Forwards to | Notes |
 |---|---|---|
-| `getContents` | `openFileStream` + `read` | **必须重写**：引擎默认实现直接构造本机 `FileStream`，不经过 `openFileStream` |
-| `openFileStream` | `openFileStream` | 引擎的写文件函数（`writeStringToFile`、`writeDataToFile` 等）都通过它写入 |
-| `isFileExistInternal` | `isFile` | 纯虚函数；搜索路径解析依赖它 |
+| `getContents` | `openFileStream` + `read` | **Must be overridden**: the engine's default implementation constructs a native `FileStream` directly and does not go through `openFileStream` |
+| `openFileStream` | `openFileStream` | The engine's write functions (`writeStringToFile`, `writeDataToFile`, and so on) all write through it |
+| `isFileExistInternal` | `isFile` | Pure virtual; search-path resolution depends on it |
 | `isDirectoryExistInternal` | `isDir` | |
 | `getFileSize` | `fileSize` | |
-| `listFiles` / `listFilesRecursively` | `list` / `walk` | 默认实现用 `std::filesystem` 遍历本机目录 |
+| `listFiles` / `listFilesRecursively` | `list` / `walk` | The default implementation walks native directories with `std::filesystem` |
 | `createDirectories` / `removeDirectory` / `removeFile` / `renameFile` | `createDirs` / `removeDir` / `removeFile` / `moveFile` | |
-| `getWritablePath` / `getNativeWritableAbsolutePath` | — | 纯虚函数：前者返回虚拟可写目录，后者返回真实的本机目录 |
+| `getWritablePath` / `getNativeWritableAbsolutePath` | — | Pure virtual: the first returns the virtual writable directory, the second returns the real native directory |
 
-虚拟路径以 `/` 开头，axmol 的 `isAbsolutePath` 在所有平台上都把它视为绝对路径（Windows 上视为“当前盘符的绝对路径”），所以 `fullPathForFilename("/res/a.png")` 原样返回，不需要重写 `isAbsolutePath`。把 `/res/` 设为默认资源根目录后，相对路径 `"a.png"` 会经搜索路径解析成 `/res/a.png`。
+A virtual path starts with `/`. axmol's `isAbsolutePath` treats that as absolute on every platform (on Windows, as "an absolute path on the current drive"), so `fullPathForFilename("/res/a.png")` returns the path unchanged and `isAbsolutePath` does not need to be overridden. After `/res/` is set as the default resource root, the relative path `"a.png"` is resolved through the search path to `/res/a.png`.
 
-下面以 dev 分支为例（2.x 的差异见代码后的说明）：
+The dev branch is shown below (differences in 2.x are noted after the code):
 
 ```cpp
 // VfsFileUtils.h
@@ -54,9 +54,9 @@ class VfsFileUtils : public ax::FileUtils
 {
 public:
 	/**
-	 * 创建并接管 FileUtils::getInstance()。
-	 * @param fs             已经挂载好的 VFS，需要在整个程序生命周期内有效
-	 * @param nativeWritable 真实的本机可写目录（供绕过 FileUtils 的模块使用）
+	 * Create the instance and take over FileUtils::getInstance().
+	 * @param fs             a VFS that is already mounted; it must stay alive for the whole process
+	 * @param nativeWritable the real native writable directory (for modules that bypass FileUtils)
 	 */
 	static VfsFileUtils* install(std::shared_ptr<vfs::VirtualFileSystem> fs, std::string nativeWritable)
 	{
@@ -64,13 +64,13 @@ public:
 		self->_defaultResRootPath = "/res/";
 		self->_writablePath = "/user/";
 		self->init();
-		ax::FileUtils::setDelegate(self);   // 会删除之前的实例
+		ax::FileUtils::setDelegate(self);   // deletes the previous instance
 		return self;
 	}
 
 	vfs::VirtualFileSystem& vfs() const { return *m_fs; }
 
-	// ---------------------------------------------------------------- 读
+	// ---------------------------------------------------------------- read
 	Status getContents(std::string_view filename, ax::ResizableBuffer* buffer) const override
 	{
 		if (filename.empty())
@@ -119,7 +119,7 @@ public:
 		return path.empty() ? -1 : m_fs->fileSize(path);
 	}
 
-	// 与引擎默认实现一致：返回完整路径，目录以 '/' 结尾
+	// Same as the engine default: return the full path, and end directories with '/'
 	std::vector<std::string> listFiles(std::string_view dirPath) const override
 	{
 		std::vector<std::string> files;
@@ -140,7 +140,7 @@ public:
 		});
 	}
 
-	// ---------------------------------------------------------------- 写
+	// ---------------------------------------------------------------- write
 	bool createDirectories(std::string_view path) const override { return m_fs->createDirs(path) == vfs::Error::OK; }
 
 	bool removeDirectory(std::string_view path) const override
@@ -163,7 +163,7 @@ public:
 		return renameFile(base + std::string(oldName), base + std::string(name));
 	}
 
-	// ---------------------------------------------------------------- 可写目录
+	// ---------------------------------------------------------------- writable directory
 	std::string getWritablePath() const override { return _writablePath; }
 
 	std::string getNativeWritableAbsolutePath() const override { return m_nativeWritable; }
@@ -180,7 +180,7 @@ private:
 };
 ```
 
-启动时（例如 `AppDelegate::applicationDidFinishLaunching` 中，在加载任何资源之前）：
+At startup (for example in `AppDelegate::applicationDidFinishLaunching`, before any resource is loaded):
 
 ```cpp
 auto fs = std::make_shared<vfs::VirtualFileSystem>();
@@ -189,7 +189,7 @@ const std::string nativeUser = ax::FileUtils::getInstance()->getNativeWritableAb
 
 fs->mountArchive("/res", nativeRes + "game.vfs");
 #if defined(_DEBUG)
-fs->mountNative("/res", "D:/project/assets", vfs::MountOptions{10});   // 开发时本机目录覆盖归档
+fs->mountNative("/res", "D:/project/assets", vfs::MountOptions{10});   // during development, the native directory overrides the archive
 #endif
 vfs::NativeOptions userOptions;
 userOptions.createRoot = true;
@@ -198,26 +198,26 @@ fs->mountNative("/user", nativeUser, vfs::MountOptions{0, vfs::MountFlags::Write
 VfsFileUtils::install(fs, nativeUser);
 ```
 
-**2.x 的差异**：头文件为 `"platform/FileUtils.h"`；`ResizableBuffer` 的接口是 `resize(size_t)` / `buffer()` / `size()`，`getContents` 中改为先 `buffer->resize(size)`，再循环 `read` 到 `buffer->buffer()`，读取不足时 `resize` 到实际长度并返回 `Status::ReadFailed`。其余虚函数签名与 dev 分支相同。
+**Differences in 2.x**: the header is `"platform/FileUtils.h"`; `ResizableBuffer` is `resize(size_t)` / `buffer()` / `size()`. In `getContents`, `buffer->resize(size)` first, then loop `read` into `buffer->buffer()`; if the read is short, `resize` to the actual length and return `Status::ReadFailed`. The other virtual signatures match the dev branch.
 
-## 3. 注意事项
+## 3. Notes
 
-- **在 Android 上**，安装包内的资源不在本机文件系统中，`mountNative` 无法挂载 APK 内的目录，改用 `AndroidAssetBackend`（见 [平台支持](platforms.md#apk-内的资源androidassetbackend)），直接复用引擎已经设置好的 `AAssetManager`：
+- **On Android**, resources inside the package are not on the native filesystem, so `mountNative` cannot mount a directory inside the APK. Use `AndroidAssetBackend` instead (see [Platforms](platforms.md#assets-inside-an-apk-androidassetbackend)) and reuse the `AAssetManager` the engine has already set up:
 
   ```cpp
   #if VFS_PLATFORM_ANDROID
   #include "vfs/android/AndroidAssetBackend.h"
   vfs::AndroidAssetBackend::setAssetManager(ax::FileUtilsAndroid::getAssetManager());
   auto assets = vfs::AndroidAssetBackend::create();
-  // 引擎的资源根目录在 Android 上是 "assets/"，nativeRes + "game.vfs" 不是文件系统路径，改为：
+  // On Android the engine's resource root is "assets/", so nativeRes + "game.vfs" is not a filesystem path. Use:
   fs->mount("/res", vfs::ArchiveBackend::create(assets->archiveSource("game.vfs")));
   #endif
   ```
 
-  `.vfs` 在 APK 中要保持未压缩（Gradle：`androidResources { noCompress += "vfs" }`），这样归档内的文件按偏移直接读取。
-  可写目录（`getNativeWritableAbsolutePath()`）是普通文件系统路径，照常用 `mountNative`。
-- **绕过 FileUtils 的模块**（例如某些平台的音频解码、视频播放、按本机路径打开文件的第三方库）看不到 VFS 中的文件。对这类资源，要么在 VFS 外保留本机副本，要么通过 `realPath()` 取得本机路径（只对本机后端上的文件有效）。`getNativeWritableAbsolutePath()` 返回真实目录，就是为这类模块准备的。
-- **全路径缓存**：`FileUtils` 会缓存 `fullPathForFilename` 的结果。挂载、卸载或 `remount` 之后调用 `FileUtils::purgeCachedEntries()`；可以用 `VirtualFileSystem::generation()` 判断是否发生了变化。
-- **线程**：VFS 的所有接口线程安全，单个流对象只能在一个线程中使用。`FileUtils` 自身的搜索路径缓存不是线程安全的，后台线程加载资源时应传入已经解析好的完整路径（与引擎的一般约定一致）。
-- **路径大小写**：VFS 区分大小写。Windows / macOS 上开发时可以给本机层打开 `NativeOptions::strictCase`，尽早发现与归档中的大小写不一致。
-- **版本差异**：上面的代码按 axmol dev 分支与 2.x 的 `FileUtils.h` 编写。升级引擎时核对这些虚函数的签名，尤其是 `getContents` 与 `ResizableBuffer`。
+  `.vfs` must stay uncompressed inside the APK (Gradle: `androidResources { noCompress += "vfs" }`) so files inside the archive are read by offset.
+  The writable directory (`getNativeWritableAbsolutePath()`) is an ordinary filesystem path; keep using `mountNative` for it.
+- **Modules that bypass FileUtils** (for example audio decode or video playback on some platforms, or a third-party library that opens a native path) cannot see files that exist only in VFS. For those assets, either keep a native copy outside VFS or obtain a native path with `realPath()` (valid only for files on a native backend). `getNativeWritableAbsolutePath()` returns the real directory for exactly these modules.
+- **Full-path cache**: `FileUtils` caches the result of `fullPathForFilename`. After mount, unmount, or `remount`, call `FileUtils::purgeCachedEntries()`. `VirtualFileSystem::generation()` tells whether anything changed.
+- **Threads**: every VFS API is thread-safe, and a single stream object may be used from only one thread. `FileUtils`'s own search-path cache is not thread-safe. A background thread that loads resources should be given an already resolved full path (the same convention the engine uses in general).
+- **Path case**: VFS is case-sensitive. During development on Windows / macOS, turn on `NativeOptions::strictCase` for the native layer so a case mismatch with the archive shows up early.
+- **Version differences**: the code above is written against `FileUtils.h` on the axmol dev branch and on 2.x. When upgrading the engine, check those virtual signatures, especially `getContents` and `ResizableBuffer`.

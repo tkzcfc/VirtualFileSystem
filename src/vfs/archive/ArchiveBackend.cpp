@@ -56,7 +56,7 @@ std::unique_ptr<IFileStream> ArchiveBackend::open(std::string_view rel, IFileStr
 
 	if (entry->compression != CompressionType::NONE)
 	{
-		// 压缩文件不能按偏移流式读：整体解压到内存（适合配置、脚本等小文件）
+		// A compressed file cannot be read by offset as a stream: it is decompressed entirely into memory (suitable for small files such as configs and scripts)
 		auto buffer = std::make_shared<MemoryBuffer>();
 		Error e = ArchiveReader::readEntry(*m_index, *entry, buffer->data);
 		if (e != Error::OK)
@@ -69,7 +69,7 @@ std::unique_ptr<IFileStream> ArchiveBackend::open(std::string_view rel, IFileStr
 		return std::make_unique<MemoryFileStream>(std::move(buffer), IFileStream::Mode::READ);
 	}
 
-	// 未压缩：来源支持位置读时直接按偏移读取（打开文件没有系统调用）；否则每次打开一个独立的来源流。读取时都不加锁
+	// Uncompressed: when the source supports positional reads, read directly by offset (opening a file makes no system call); otherwise open an independent source stream each time. Neither path takes a lock while reading
 	if (m_index->source->supportsReadAt())
 	{
 		setError(err, Error::OK);

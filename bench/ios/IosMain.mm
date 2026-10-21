@@ -1,6 +1,7 @@
-// iOS 宿主入口：iOS 会在约 20 秒内杀掉没有完成启动流程的进程（看门狗），
-// 而完整基准要跑几分钟。这里走正常的 UIApplicationMain，启动完成后在
-// 后台线程里调用真正的 vfs_bench_main，结束后直接退出进程。
+// iOS host entry point: iOS kills a process that has not finished launching
+// within about 20 seconds (watchdog), while a full benchmark runs for several
+// minutes. This goes through the normal UIApplicationMain, then calls the real
+// vfs_bench_main on a background thread after launch and exits the process when it returns.
 #import <UIKit/UIKit.h>
 
 #include <cstdio>
@@ -17,7 +18,7 @@ static char** g_argv = nullptr;
 @implementation VfsBenchAppDelegate
 - (BOOL)application:(UIApplication*)application didFinishLaunchingWithOptions:(NSDictionary*)launchOptions
 {
-	// 跑基准期间保持屏幕常亮，避免锁屏后被挂起
+	// Keep the screen awake while the benchmark runs so the app is not suspended after lock.
 	application.idleTimerDisabled = YES;
 	[NSThread detachNewThreadWithBlock:^{
 		int rc = vfs_bench_main(g_argc, g_argv);

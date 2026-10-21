@@ -12,7 +12,7 @@ namespace
 
 constexpr size_t COPY_BUFFER_SIZE = 64 * 1024;
 
-// 所有返回 Error 的接口都经过这里返回：失败时同时设置 errno = toErrno(e)（见 api.md）
+// Every API that returns Error goes through here: on failure it also sets errno = toErrno(e) (see api.md)
 inline Error report(Error e)
 {
 	if (e != Error::OK)
@@ -20,7 +20,7 @@ inline Error report(Error e)
 	return e;
 }
 
-// 进程内唯一的临时文件名：并发的 copy-up / writeFileAtomic 针对同一路径时不会共用同一个临时文件
+// A process-unique temporary file name: concurrent copy-up / writeFileAtomic on the same path do not share one temporary file
 std::string uniqueTempName(std::string_view base, const char* tag)
 {
 	static std::atomic<uint64_t> s_counter{0};
@@ -34,10 +34,10 @@ std::string uniqueTempName(std::string_view base, const char* tag)
 }
 
 /**
- * VFS 返回给调用方的流包装：
- * - 持有后端的 shared_ptr，保证惰性卸载后后端仍然存活；
- * - 维护挂载的打开流计数，供 UnmountFlags::FailIfBusy 使用。
- * 所有调用直接转发给内部流，开销只是一次虚函数调用。
+ * Stream wrapper the VFS returns to the caller:
+ * - holds the backend's shared_ptr so the backend stays alive after a lazy unmount;
+ * - maintains the mount's open-stream count for UnmountFlags::FailIfBusy.
+ * Every call is forwarded straight to the inner stream; the cost is one virtual call.
  */
 class TrackedFileStream : public IFileStream
 {
@@ -59,7 +59,7 @@ public:
 
 	virtual bool open(std::string_view /*path*/, IFileStream::Mode /*mode*/) override
 	{
-		// 流只能通过 VirtualFileSystem::openFileStream 获得
+		// A stream can only be obtained through VirtualFileSystem::openFileStream
 		errno = ENOTSUP;
 		return false;
 	}
@@ -147,7 +147,7 @@ private:
 	std::shared_ptr<MountState> m_state;
 };
 
-// 失败时设置错误并返回空流
+// On failure, set the error and return an empty stream
 std::unique_ptr<IFileStream> failStream(Error* err, Error e)
 {
 	setError(err, e);
@@ -156,7 +156,7 @@ std::unique_ptr<IFileStream> failStream(Error* err, Error e)
 
 constexpr size_t SNAPSHOT_SHARDS = 16;
 
-// 当前线程使用的快照分片：线程第一次使用时轮流分配，之后固定
+// Snapshot shard for the current thread: assigned round-robin the first time the thread uses one, then fixed
 size_t threadShard()
 {
 	static std::atomic<size_t> s_next{0};
@@ -164,8 +164,8 @@ size_t threadShard()
 	return t_shard;
 }
 
-// 为一个分片生成快照引用：外层 shared_ptr 有自己的控制块（指向同一张表），
-// 不同分片复制引用时修改的是不同的计数，不会在线程之间争抢同一个缓存行
+// Build a snapshot reference for one shard: the outer shared_ptr has its own control block (pointing at the same table),
+// so copying the reference for different shards updates different counters and threads do not fight over one cache line
 std::shared_ptr<const MountTable> shardReference(const std::shared_ptr<const MountTable>& table)
 {
 	auto holder = std::make_shared<std::shared_ptr<const MountTable>>(table);
@@ -177,9 +177,9 @@ std::shared_ptr<const MountTable> shardReference(const std::shared_ptr<const Mou
 
 struct VirtualFileSystem::SnapshotShard
 {
-	std::mutex mutex;                           // 只保护 table 的复制与替换，几乎不会有竞争
+	std::mutex mutex;                           // only protects copying and replacing the table; almost never contended
 	std::shared_ptr<const MountTable> table;
-	char padding[64];                           // 隔开相邻分片，避免伪共享
+	char padding[64];                           // separate adjacent shards to avoid false sharing
 };
 
 VirtualFileSystem::VirtualFileSystem()
@@ -196,11 +196,11 @@ VirtualFileSystem::~VirtualFileSystem()
 {
 }
 
-// ================================================================ 挂载管理
+// ================================================================ Mount management
 
 std::shared_ptr<const MountTable> VirtualFileSystem::snapshot() const
 {
-	// 锁只保护本分片的指针复制，之后的查询都在这份不可变快照上进行
+	// The lock only protects copying this shard's pointer; later queries run on that immutable snapshot
 	SnapshotShard& shard = m_shards[threadShard()];
 	std::lock_guard<std::mutex> lock(shard.mutex);
 	return shard.table;
@@ -227,7 +227,7 @@ Error VirtualFileSystem::modifyTable(Fn&& fn)
 		old.push_back(std::move(m_shards[i].table));
 		m_shards[i].table = std::move(ref);
 	}
-	// 旧引用在分片锁外释放：如果它持有最后一个后端引用，后端析构可能较慢
+	// The old reference is released outside the shard lock: if it holds the last backend reference, destroying the backend can be slow
 	old.clear();
 	bump();
 	return report(Error::OK);
@@ -308,9 +308,9 @@ Error VirtualFileSystem::unmount(MountId id, uint32_t flags)
 		auto it = std::find_if(table.mounts.begin(), table.mounts.end(), [id](const MountEntry& m) { return m.id == id; });
 		if (it == table.mounts.end())
 			return report(Error::NOT_FOUND);
-		// 严格模式：仍有打开的流时拒绝卸载（相当于 umount 默认的 EBUSY）
-		// 先标记 closing 再读计数；打开流的一方先增加计数再读 closing（都是 seq_cst）。
-		// 两者至少有一方能看到对方：要么这里看到计数 > 0 返回 BUSY，要么打开方看到 closing 放弃这次打开并重试
+		// Strict mode: refuse to unmount while streams are still open (like umount's default EBUSY)
+		// Mark closing, then read the count; the opener increments the count, then reads closing (both seq_cst).
+		// At least one side sees the other: either this side sees count > 0 and returns BUSY, or the opener sees closing, drops this open, and retries
 		if (flags & UnmountFlags::FailIfBusy)
 		{
 			it->state->closing.store(true);
@@ -320,7 +320,7 @@ Error VirtualFileSystem::unmount(MountId id, uint32_t flags)
 				return report(Error::BUSY);
 			}
 		}
-		// 惰性卸载：只从命名空间移除；已打开的流持有后端，直到最后一个流关闭才真正释放
+		// Lazy unmount: remove it from the namespace only; open streams hold the backend until the last stream closes
 		table.mounts.erase(it);
 		return report(Error::OK);
 	});
@@ -336,8 +336,8 @@ Error VirtualFileSystem::remount(MountId id, std::shared_ptr<IBackend> backend)
 		{
 			if (m.id == id)
 			{
-				// 旧流继续持有旧后端；打开流计数沿用同一个 MountState，
-				// 所以 remount 之后 FailIfBusy 卸载仍然能看到 remount 之前打开、尚未关闭的流
+				// Old streams keep the old backend; the open-stream count stays on the same MountState,
+				// so a FailIfBusy unmount after remount still sees streams opened before the remount that have not closed yet
 				m.backend = backend;
 				return report(Error::OK);
 			}
@@ -365,14 +365,14 @@ Error VirtualFileSystem::addAlias(std::string_view prefix, std::string_view targ
 	if (e != Error::OK)
 		return report(e);
 	if (normTarget == "/")
-		normTarget.clear();   // 映射到根目录时避免出现 "//"
+		normTarget.clear();   // avoid "//" when mapping onto the root
 	return modifyTable([&](MountTable& table)
 	{
 		auto& aliases = table.aliases;
 		aliases.erase(std::remove_if(aliases.begin(), aliases.end(), [&](const auto& a) { return a.first == prefix; }),
 					  aliases.end());
 		aliases.emplace_back(std::string(prefix), normTarget);
-		// 最长前缀优先
+		// Longest prefix wins
 		std::stable_sort(aliases.begin(), aliases.end(),
 						 [](const auto& a, const auto& b) { return a.first.size() > b.first.size(); });
 		return report(Error::OK);
@@ -392,7 +392,7 @@ Error VirtualFileSystem::removeAlias(std::string_view prefix)
 	});
 }
 
-// ================================================================ 内部工具
+// ================================================================ Internal helpers
 
 Error VirtualFileSystem::normalize(const MountTable& table, std::string_view raw, std::string& out) const
 {
@@ -406,7 +406,7 @@ Error VirtualFileSystem::resolve(const MountTable& table, std::string_view path,
 {
 	table.collectLayers(path, layers);
 	visible = -1;
-	bool invalid = false;   // 有层认为这个名字不合法（例如本机后端拒绝 "con"）
+	bool invalid = false;   // some layer considers this name illegal (for example the native backend rejects "con")
 	for (size_t i = 0; i < layers.size(); ++i)
 	{
 		const Layer& layer = layers[i];
@@ -414,17 +414,17 @@ Error VirtualFileSystem::resolve(const MountTable& table, std::string_view path,
 		Error e = layer.mount->backend->stat(layer.rel, s);
 		if (e == Error::OK)
 		{
-			// 挂载点的祖先必须是目录：底层在这个位置上的文件被挂载路径遮蔽，否则挂载点会变得不可达
+			// An ancestor of a mount point must be a directory: a file at that location on a lower layer is hidden by the mount path, otherwise the mount would be unreachable
 			if (s.type != FileType::DIR && table.isVirtualDir(path))
 				continue;
-			// 最高层命中即为可见项
+			// A hit on the highest layer is the visible entry
 			visible = static_cast<int>(i);
 			st = s;
 			st.mount = layer.mount->id;
 			st.writable = layer.mount->writable();
 			return report(Error::OK);
 		}
-		// 这一层没有该路径，或者这个名字在该后端上不合法（例如 Native 拒绝 "con"）：看下一层
+		// This layer does not have the path, or the name is illegal on that backend (for example Native rejects "con"): look at the next layer
 		if (e == Error::NOT_FOUND)
 			continue;
 		if (e == Error::INVALID_PATH)
@@ -434,8 +434,8 @@ Error VirtualFileSystem::resolve(const MountTable& table, std::string_view path,
 		}
 		if (e == Error::NOT_DIR)
 		{
-			// overlay 规则：只有当父路径在合并视图中不是目录时，“上层文件遮蔽下层目录”才成立；
-			// 如果更高层把父路径提供为目录，那么这一层的文件已被遮蔽，相当于没有该项
+			// Overlay rule: "an upper file hides a lower directory" holds only when the parent path is not a directory in the merged view;
+			// if a higher layer provides the parent path as a directory, this layer's file is already hidden, as if the entry were absent
 			if (path.size() > 1)
 			{
 				std::string parent(Path::parent(path));
@@ -451,20 +451,20 @@ Error VirtualFileSystem::resolve(const MountTable& table, std::string_view path,
 		return report(e);
 	}
 
-	// 挂载点的祖先合成为只读虚拟目录
+	// Ancestors of a mount point are synthesized as read-only virtual directories
 	if (table.isVirtualDir(path))
 	{
 		st = Stat();
 		st.type = FileType::DIR;
 		return report(Error::OK);
 	}
-	// 没有任何层提供它：如果有层拒绝了这个名字，报告 INVALID_PATH（与写入时后端返回的错误一致，见 mount-rules.md §1）
+	// No layer provides it: if some layer rejected the name, report INVALID_PATH (the same error the backend returns on write; see mount-rules.md section 1)
 	return report(invalid ? Error::INVALID_PATH : Error::NOT_FOUND);
 }
 
 int VirtualFileSystem::chooseWriteTarget(const std::vector<Layer>& layers)
 {
-	// 显式标记 WriteTarget 的可写层优先，其次是优先级最高的可写层
+	// A writable layer explicitly marked WriteTarget wins, otherwise the writable layer with the highest priority
 	for (size_t i = 0; i < layers.size(); ++i)
 	{
 		if ((layers[i].mount->flags & MountFlags::WriteTarget) && layers[i].mount->writable())
@@ -480,7 +480,7 @@ int VirtualFileSystem::chooseWriteTarget(const std::vector<Layer>& layers)
 
 Error VirtualFileSystem::ensureParents(const Layer& layer, std::string_view relParent)
 {
-	// 父目录在合并视图中存在时，在写入层中 mkdir -p 出相对路径链（overlay 的 copy-up 目录）
+	// When the parent directory exists in the merged view, mkdir -p the relative path chain in the write layer (overlay copy-up directories)
 	if (relParent.empty())
 		return report(Error::OK);
 	IBackend* backend = layer.mount->backend.get();
@@ -501,7 +501,7 @@ Error VirtualFileSystem::ensureParents(const Layer& layer, std::string_view relP
 		else if (e == Error::NOT_FOUND)
 		{
 			e = backend->createDir(prefix);
-			// 并发创建同一目录时可能返回 EXISTS，不算错误；但并发出现的也可能是同名文件，要确认类型
+			// Concurrent creation of the same directory may return EXISTS, which is not an error; a concurrent same-named file is also possible, so confirm the type
 			if (e == Error::EXISTS)
 			{
 				e = backend->stat(prefix, st);
@@ -527,14 +527,14 @@ Error VirtualFileSystem::copyUp(const Layer& src, const Layer& dst)
 	if (!in)
 		return report(e);
 
-	// 支持 rename 的后端：先写临时文件再 rename，保证中途失败不会留下半个文件
+	// Backends that support rename: write a temporary file, then rename, so a failure halfway does not leave a partial file
 	const bool atomic = (dst.mount->backend->capabilities() & BackendCaps::Rename) != 0;
 	std::string target(dst.rel);
 	std::string tmp = atomic ? uniqueTempName(target, "vfs-copyup") : target;
 	std::unique_ptr<IFileStream> out;
 	try
 	{
-		std::vector<uint8_t> buf(COPY_BUFFER_SIZE);   // 在创建临时文件之前分配：分配失败不会留下临时文件
+		std::vector<uint8_t> buf(COPY_BUFFER_SIZE);   // allocate before creating the temporary file: a failed allocation must not leave a temporary file
 		out = dst.mount->backend->open(tmp, IFileStream::Mode::WRITE, &e);
 		if (!out)
 			return report(e);
@@ -544,7 +544,7 @@ Error VirtualFileSystem::copyUp(const Layer& src, const Layer& dst)
 	}
 	catch (const std::bad_alloc&)
 	{
-		// 错误通过返回值报告（Error.h），不让异常穿过 VFS 接口
+		// Errors are reported by return value (Error.h); exceptions must not cross the VFS API
 		e = Error::IO_ERROR;
 	}
 	const bool created = out != nullptr;
@@ -566,14 +566,14 @@ Error VirtualFileSystem::copyUp(const Layer& src, const Layer& dst)
 
 namespace
 {
-// openOnce 中 track 发现挂载正在被 FailIfBusy 卸载时置位，openFileStream 据此重试
+// Set when track inside openOnce sees the mount being unmounted with FailIfBusy; openFileStream retries on that
 thread_local bool t_openRetry = false;
 }
 
 std::unique_ptr<IFileStream> VirtualFileSystem::track(const MountEntry& mount, std::unique_ptr<IFileStream> stream) const
 {
 	auto tracked = std::make_unique<TrackedFileStream>(std::move(stream), mount.backend, mount.state);
-	// 构造函数已经增加计数，这里再看 closing（见 unmount）：正在严格卸载时放弃这个流
+	// The constructor already incremented the count; look at closing here (see unmount): drop this stream if a strict unmount is in progress
 	if (mount.state->closing.load())
 	{
 		t_openRetry = true;
@@ -585,7 +585,7 @@ std::unique_ptr<IFileStream> VirtualFileSystem::track(const MountEntry& mount, s
 std::unique_ptr<IFileStream> VirtualFileSystem::openFileStream(std::string_view rawPath, IFileStream::Mode mode,
 															   Error* err) const
 {
-	// 与 FailIfBusy 卸载竞争时重试：卸载要么完成（重试时挂载已经不在快照里），要么因为计数 > 0 撤销标记
+	// Retry when racing a FailIfBusy unmount: the unmount either finishes (on retry the mount is gone from the snapshot) or clears the flag because the count is > 0
 	for (int attempt = 0; attempt < 1000; ++attempt)
 	{
 		t_openRetry = false;
@@ -598,7 +598,7 @@ std::unique_ptr<IFileStream> VirtualFileSystem::openFileStream(std::string_view 
 	return failStream(err, Error::BUSY);
 }
 
-// ================================================================ 查询
+// ================================================================ Queries
 
 Error VirtualFileSystem::stat(std::string_view rawPath, Stat& out) const
 {
@@ -650,11 +650,11 @@ Error VirtualFileSystem::listIn(const MountTable& table, const std::string& path
 	if (st.type != FileType::DIR)
 		return report(Error::NOT_DIR);
 
-	// 按名字去重，高层先插入所以高层决定类型；std::map 保证按名字字节序输出
+	// Deduplicate by name; higher layers are inserted first so they decide the type; std::map emits names in byte order
 	std::map<std::string, FileType, std::less<>> merged;
 	for (const auto& layer : layers)
 	{
-		// 这一层没有该目录（或者是文件）时跳过；其他错误（I/O 错误、权限）原样返回，不能当作空目录
+		// Skip when this layer does not have the directory (or it is a file); other errors (I/O, permissions) are returned as-is and must not be treated as an empty directory
 		e = layer.mount->backend->list(layer.rel, [&merged](const DirEntry& entry)
 		{
 			merged.emplace(entry.name, entry.type);
@@ -664,14 +664,14 @@ Error VirtualFileSystem::listIn(const MountTable& table, const std::string& path
 			return report(e);
 	}
 
-	// 挂载点的祖先合成为虚拟目录：例如挂载在 /a/b，列 / 时能看到 a
+	// Ancestors of a mount point are synthesized as virtual directories: mounting at /a/b, listing / shows a
 	for (const auto& m : table.mounts)
 	{
 		if (!Path::isStrictAncestor(path, m.point))
 			continue;
 		std::string_view rest = std::string_view(m.point).substr(path.size() == 1 ? 1 : path.size() + 1);
 		std::string_view name = rest.substr(0, rest.find('/'));
-		// 子项类型由它自身的解析结果决定（例如单文件挂载点是文件；挂载点的祖先即使在底层是文件也显示为目录）
+		// A child's type comes from resolving that child (for example a single-file mount point is a file; an ancestor of a mount point is shown as a directory even if the lower layer has a file there)
 		std::string child = Path::join(path, name);
 		std::vector<Layer> childLayers;
 		int childVisible = -1;
@@ -680,7 +680,7 @@ Error VirtualFileSystem::listIn(const MountTable& table, const std::string& path
 		if (ce == Error::OK)
 			merged[std::string(name)] = cs.type;
 		else if (ce != Error::NOT_FOUND && ce != Error::NOT_DIR && ce != Error::INVALID_PATH)
-			return report(ce);   // 与层 list 一样：I/O 错误、权限错误让整次 list 失败
+			return report(ce);   // same as a layer list: an I/O or permission error fails the whole list
 	}
 
 	DirEntry entry;
@@ -740,8 +740,8 @@ Error VirtualFileSystem::walkIn(const MountTable& table, const std::string& path
 			e = walkIn(table, full, cb, stop);
 			if (stop)
 				return report(Error::OK);
-			// 子目录在列出之后被并发删除或替换成文件（NOT_FOUND / NOT_DIR）不算错误；
-			// 其他错误（I/O、权限）让整次 walk 失败，与 list 一致，避免调用方把不完整的遍历当成成功
+			// A subdirectory deleted or replaced by a file after it was listed (NOT_FOUND / NOT_DIR) is not an error;
+			// other errors (I/O, permissions) fail the whole walk, same as list, so the caller does not treat a partial walk as success
 			if (e != Error::OK && e != Error::NOT_FOUND && e != Error::NOT_DIR)
 				return report(e);
 		}
@@ -775,7 +775,7 @@ std::string VirtualFileSystem::realPath(std::string_view rawPath) const
 	return layers[visible].mount->backend->realPath(layers[visible].rel);
 }
 
-// ================================================================ 流
+// ================================================================ Streams
 
 std::unique_ptr<IFileStream> VirtualFileSystem::openOnce(std::string_view rawPath, IFileStream::Mode mode,
 													 Error* err) const
@@ -789,8 +789,8 @@ std::unique_ptr<IFileStream> VirtualFileSystem::openOnce(std::string_view rawPat
 	std::vector<Layer> layers;
 	if (mode == IFileStream::Mode::READ)
 	{
-		// 快速路径：路径只落在一个挂载上（最常见的情况）时直接 open，省掉一次 stat（本机后端上是一次系统调用）。
-		// 成功说明它是该层的文件，就是可见项；IS_DIR 与慢速路径的结果相同；其他错误交给慢速路径，保证错误码完全一致
+		// Fast path: when the path falls on only one mount (the common case), open directly and skip a stat (one system call on the native backend).
+		// Success means it is a file on that layer, which is the visible entry; IS_DIR matches the slow path; other errors go to the slow path so the error code stays identical
 		table->collectLayers(path, layers);
 		if (layers.size() == 1 && !table->isVirtualDir(path))
 		{
@@ -811,7 +811,7 @@ std::unique_ptr<IFileStream> VirtualFileSystem::openOnce(std::string_view rawPat
 
 	if (mode == IFileStream::Mode::READ)
 	{
-		// 读：取最高层命中
+		// Read: take the highest-layer hit
 		if (e != Error::OK)
 			return failStream(err, e);
 		if (st.type == FileType::DIR)
@@ -826,7 +826,7 @@ std::unique_ptr<IFileStream> VirtualFileSystem::openOnce(std::string_view rawPat
 
 	if (e == Error::OK && st.type == FileType::DIR)
 		return failStream(err, Error::IS_DIR);
-	// 只是某些层不接受这个名字：写入层可能接受（由写入层的后端决定）
+	// Only some layers reject this name: the write layer may accept it (the write layer's backend decides)
 	if (e == Error::INVALID_PATH)
 		e = Error::NOT_FOUND;
 	if (e != Error::OK && e != Error::NOT_FOUND)
@@ -836,7 +836,7 @@ std::unique_ptr<IFileStream> VirtualFileSystem::openOnce(std::string_view rawPat
 	int target = -1;
 	if (found && layers[visible].mount->writable())
 	{
-		// 可见项所在的层可写，就写在原处
+		// If the layer that holds the visible entry is writable, write in place
 		target = visible;
 		const Layer& layer = layers[target];
 		auto stream = layer.mount->backend->open(layer.rel, mode, &e);
@@ -847,16 +847,16 @@ std::unique_ptr<IFileStream> VirtualFileSystem::openOnce(std::string_view rawPat
 		return track(*layer.mount, std::move(stream));
 	}
 
-	// 否则写入覆盖该路径的最高优先级可写挂载
+	// Otherwise write to the highest-priority writable mount that covers the path
 	target = chooseWriteTarget(layers);
 	if (target < 0)
 		return failStream(err, Error::READ_ONLY);
-	// 写入层比持有可见项的只读层低，写了也读不到，拒绝
+	// The write layer is below the read-only layer that holds the visible entry, so a write would not be readable; reject it
 	if (found && target > visible)
 		return failStream(err, Error::READ_ONLY);
 	if (!found)
 	{
-		// 父目录必须在合并视图中存在（与 open(O_CREAT) 一致，不会凭空创建父目录）
+		// The parent directory must exist in the merged view (same as open(O_CREAT); parents are not created out of nothing)
 		std::string parent(Path::parent(path));
 		std::vector<Layer> parentLayers;
 		int parentVisible = -1;
@@ -870,24 +870,24 @@ std::unique_ptr<IFileStream> VirtualFileSystem::openOnce(std::string_view rawPat
 	const Layer& dst = layers[target];
 	if (dst.rel.empty())
 	{
-		// 路径正好是写入层的挂载点：目录挂载的根是目录；单文件挂载的根就是那个文件，照常打开
+		// The path is exactly the write layer's mount point: the root of a directory mount is a directory; the root of a single-file mount is that file, opened as usual
 		Stat rs;
 		if (dst.mount->backend->stat("", rs) != Error::OK || rs.type == FileType::DIR)
 			return failStream(err, Error::IS_DIR);
 	}
 
-	// 写入层里的 copy-up、创建与打开在同一把（按路径分段的）锁内完成，直到流打开为止：
-	// - 多个线程同时追加同一个只读层文件时，只有第一个复制，其余线程在锁内看到写入层已有副本后直接打开它；
-	// - copy-up 的 rename 不会覆盖另一个线程刚在写入层创建（WRITE）的同名文件；
-	// - 复制完成之后、打开之前，副本不会被另一次 copy-up 替换
+	// Copy-up, create, and open in the write layer finish inside the same (path-striped) lock, until the stream is open:
+	// - when several threads append the same read-only-layer file, only the first copies; the others see the copy already in the write layer while holding the lock and open it;
+	// - the copy-up rename does not overwrite a same-named file another thread just created (WRITE) in the write layer;
+	// - after the copy finishes and before it is opened, the copy is not replaced by another copy-up
 	std::lock_guard<std::recursive_mutex> lock(copyUpLock(*dst.mount, dst.rel));
 	e = ensureParents(dst, Path::parentRelative(dst.rel));
 	if (e != Error::OK)
 	{
-		bump();   // 可能已经创建了一部分父目录
+		bump();   // some parent directories may already have been created
 		return failStream(err, e);
 	}
-	// APPEND/OVERLAPPED 修改只读层中的文件时，先把下层内容完整复制到写入层
+	// When APPEND/OVERLAPPED modifies a file on a read-only layer, copy the lower contents into the write layer first
 	if (found && (mode == IFileStream::Mode::APPEND || mode == IFileStream::Mode::OVERLAPPED))
 	{
 		Stat copied;
@@ -902,7 +902,7 @@ std::unique_ptr<IFileStream> VirtualFileSystem::openOnce(std::string_view rawPat
 		}
 	}
 	auto stream = dst.mount->backend->open(dst.rel, mode, &e);
-	// 即使打开失败，父目录或 copy-up 的副本也可能已经出现在写入层里：命名空间变了
+	// Even if open fails, parent directories or the copy-up copy may already be in the write layer: the namespace changed
 	bump();
 	if (!stream)
 		return failStream(err, e);
@@ -916,7 +916,7 @@ std::recursive_mutex& VirtualFileSystem::copyUpLock(const MountEntry& mount, std
 	return m_copyUpLocks[h % COPY_UP_STRIPES];
 }
 
-// ================================================================ 修改
+// ================================================================ Mutations
 
 Error VirtualFileSystem::createDirIn(const MountTable& table, const std::string& path) const
 {
@@ -926,10 +926,10 @@ Error VirtualFileSystem::createDirIn(const MountTable& table, const std::string&
 	int visible = -1;
 	Stat st;
 	Error e = resolve(table, path, layers, visible, st);
-	// 已经是目录或文件都返回 EXISTS
+	// Already a directory or a file: return EXISTS
 	if (e == Error::OK)
 		return report(Error::EXISTS);
-	// 只是某些层不接受这个名字：写入层可能接受（由写入层的后端决定）
+	// Only some layers reject this name: the write layer may accept it (the write layer's backend decides)
 	if (e == Error::INVALID_PATH)
 		e = Error::NOT_FOUND;
 	if (e != Error::NOT_FOUND)
@@ -941,7 +941,7 @@ Error VirtualFileSystem::createDirIn(const MountTable& table, const std::string&
 	Stat ps;
 	e = resolve(table, parent, parentLayers, parentVisible, ps);
 	if (e != Error::OK)
-		return report(e);   // NOT_FOUND / NOT_DIR / 其他错误（IO_ERROR 等）原样返回
+		return report(e);   // NOT_FOUND / NOT_DIR / other errors (IO_ERROR and so on) are returned as-is
 	if (ps.type != FileType::DIR)
 		return report(Error::NOT_DIR);
 
@@ -980,9 +980,9 @@ Error VirtualFileSystem::createDirs(std::string_view rawPath) const
 	if (path == "/")
 		return report(Error::OK);
 
-	// 逐级处理每个前缀：已是目录则跳过，不存在则创建。
-	// 并发：其他线程可能在两步之间删掉刚创建（或刚检查过）的上级目录，此时 createDirIn 返回 NOT_FOUND，
-	// 从头重来；有上限，持续被删除时最终返回 NOT_FOUND（mkdir -p 在同样情况下也会失败）
+	// Handle each prefix in order: skip if it is already a directory, create it if it is missing.
+	// Concurrency: another thread may delete a just-created (or just-checked) parent between the two steps, and createDirIn then returns NOT_FOUND;
+	// start over. There is a limit; if it keeps being deleted, eventually return NOT_FOUND (mkdir -p fails in the same situation)
 	const int MAX_RESTARTS = 16;
 	for (int attempt = 0;; ++attempt)
 	{
@@ -1005,12 +1005,12 @@ Error VirtualFileSystem::createDirs(std::string_view rawPath) const
 				e = createDirIn(*table, prefix);
 				if (e == Error::EXISTS)
 				{
-					// 并发创建了同名项：确认它是目录（也可能是文件，或已经又被删掉）
+					// A same-named entry was created concurrently: confirm it is a directory (it might be a file, or it might already have been deleted again)
 					e = resolve(*table, prefix, layers, visible, st);
 				}
 				else if (e == Error::NOT_FOUND && pos > 1)
 				{
-					restart = true;   // 上级目录在检查之后消失了
+					restart = true;   // the parent directory disappeared after the check
 					break;
 				}
 				else if (e != Error::OK)
@@ -1045,7 +1045,7 @@ Error VirtualFileSystem::createDirs(std::string_view rawPath) const
 namespace
 {
 
-// 递归删除后端内的目录树（只在已经通过“先检查”的可写层上调用）
+// Recursively delete a directory tree inside a backend (called only on a writable layer that already passed the "check first" step)
 Error removeTree(IBackend* backend, const std::string& rel)
 {
 	std::vector<DirEntry> children;
@@ -1084,11 +1084,11 @@ Error VirtualFileSystem::removeDir(std::string_view rawPath, bool recursive) con
 		return report(e);
 	if (st.type != FileType::DIR)
 		return report(Error::NOT_DIR);
-	// 挂载点本身和它的祖先（包括根目录、合成的虚拟目录）不能删除
+	// The mount point itself and its ancestors (including the root and synthesized virtual directories) cannot be deleted
 	if (table->isMountPointOrAncestor(path))
 		return report(Error::BUSY);
 
-	// 先检查，再执行。统计有多少层在合并视图中提供了这个目录
+	// Check first, then act. Count how many layers provide this directory in the merged view
 	int contributor = -1;
 	int count = 0;
 	for (size_t i = 0; i < layers.size(); ++i)
@@ -1101,11 +1101,11 @@ Error VirtualFileSystem::removeDir(std::string_view rawPath, bool recursive) con
 			++count;
 		}
 		else if (le != Error::OK && le != Error::NOT_FOUND && le != Error::NOT_DIR && le != Error::INVALID_PATH)
-			return report(le);   // 无法确定这一层有没有该目录（I/O、权限错误）：什么都不删
+			return report(le);   // cannot tell whether this layer has the directory (I/O or permission error): delete nothing
 	}
 	if (count == 0)
 		return report(Error::NOT_FOUND);
-	// 还有其他层（只读层或非写入层）贡献了该目录或其子孙：什么都不删，返回 EROFS
+	// Other layers (read-only or not the write layer) still contribute this directory or its descendants: delete nothing and return EROFS
 	if (count > 1 || !layers[contributor].mount->writable())
 		return report(Error::READ_ONLY);
 
@@ -1119,7 +1119,7 @@ Error VirtualFileSystem::removeDir(std::string_view rawPath, bool recursive) con
 			empty = false;
 			return false;
 		});
-		// list 失败时不能当作空目录
+		// A failed list must not be treated as an empty directory
 		if (e != Error::OK)
 			return report(e);
 		if (!empty)
@@ -1131,7 +1131,7 @@ Error VirtualFileSystem::removeDir(std::string_view rawPath, bool recursive) con
 	else
 	{
 		e = removeTree(backend, std::string(layer.rel));
-		// 递归删除失败时可能已经删掉了一部分，命名空间同样变了
+		// A failed recursive delete may already have removed part of the tree, so the namespace changed as well
 		bump();
 	}
 	return report(e);
@@ -1153,10 +1153,10 @@ Error VirtualFileSystem::removeFile(std::string_view rawPath) const
 		return report(e);
 	if (st.type == FileType::DIR || visible < 0)
 		return report(Error::IS_DIR);
-	// 单文件挂载点本身不能删除
+	// A single-file mount point itself cannot be deleted
 	if (table->isMountPoint(path))
 		return report(Error::BUSY);
-	// 只删可见项；可见项在只读层时返回 EROFS
+	// Delete only the visible entry; if it is on a read-only layer, return EROFS
 	const Layer& layer = layers[visible];
 	if (!layer.mount->writable())
 		return report(Error::READ_ONLY);
@@ -1176,7 +1176,7 @@ Error VirtualFileSystem::checkSingleLayerDir(const std::vector<Layer>& layers, i
 		Error e = layers[i].mount->backend->stat(layers[i].rel, s);
 		if (e == Error::OK && s.type == FileType::DIR)
 			return report(Error::READ_ONLY);
-		// 无法确定这一层有没有该目录：不冒险
+		// Cannot tell whether this layer has the directory: do not take the risk
 		if (e != Error::OK && e != Error::NOT_FOUND && e != Error::NOT_DIR && e != Error::INVALID_PATH)
 			return report(e);
 	}
@@ -1202,21 +1202,21 @@ Error VirtualFileSystem::rename(std::string_view rawFrom, std::string_view rawTo
 		return report(e);
 	if (from == to)
 		return report(Error::OK);
-	// 挂载点及其祖先不能改名
+	// A mount point and its ancestors cannot be renamed
 	if (fromVisible < 0 || table->isMountPointOrAncestor(from) || table->isMountPointOrAncestor(to))
 		return report(Error::BUSY);
 	const Layer& src = fromLayers[fromVisible];
 	if (!src.mount->writable())
 		return report(Error::READ_ONLY);
-	// 目录由多个层合并而成时，只能移动写入层中的那一部分，其余层的内容会留在原处；
-	// 与 removeDir 的规则一致，直接拒绝
+	// When a directory is merged from several layers, only the part in the write layer could be moved and the rest would stay behind;
+	// same rule as removeDir, so reject it outright
 	if (fromStat.type == FileType::DIR)
 	{
 		e = checkSingleLayerDir(fromLayers, fromVisible);
 		if (e != Error::OK)
 			return report(e);
 	}
-	// 不能把目录移到它自己的子树里
+	// A directory cannot be moved into its own subtree
 	if (fromStat.type == FileType::DIR && Path::isStrictAncestor(from, to))
 		return report(Error::INVALID_PATH);
 
@@ -1224,7 +1224,7 @@ Error VirtualFileSystem::rename(std::string_view rawFrom, std::string_view rawTo
 	int toVisible = -1;
 	Stat toStat;
 	e = resolve(*table, to, toLayers, toVisible, toStat);
-	// INVALID_PATH：只是某些层不接受这个名字，写入层可能接受（由写入层的后端决定）
+	// INVALID_PATH: only some layers reject this name; the write layer may accept it (the write layer's backend decides)
 	if (e == Error::INVALID_PATH)
 		e = Error::NOT_FOUND;
 	if (e != Error::OK && e != Error::NOT_FOUND)
@@ -1264,9 +1264,9 @@ Error VirtualFileSystem::rename(std::string_view rawFrom, std::string_view rawTo
 
 	if (toFound && toStat.type == FileType::DIR)
 	{
-		// 目录覆盖已有目录：写入层里的目标是否为空由后端原子地判断（POSIX rename）；
-		// 这里检查其他层：其他层里同名目录下有内容时，改名“成功”后那些内容会出现在移过来的目录里，
-		// 合并视图中的目标并不是空目录，按 rename(2) 返回 NOT_EMPTY
+		// Directory replacing an existing directory: whether the target in the write layer is empty is decided atomically by the backend (POSIX rename);
+		// other layers are checked here: if a same-named directory on another layer has contents, those contents would show up inside the moved directory after a "successful" rename,
+		// so the target in the merged view is not an empty directory and rename(2) returns NOT_EMPTY
 		for (size_t i = 0; i < toLayers.size(); ++i)
 		{
 			if (static_cast<int>(i) == target)
@@ -1285,7 +1285,7 @@ Error VirtualFileSystem::rename(std::string_view rawFrom, std::string_view rawTo
 	}
 
 	const Layer& dst = toLayers[target];
-	// 只有源和目标落在同一个挂载上才能原子 rename，否则 EXDEV
+	// An atomic rename is possible only when source and target fall on the same mount; otherwise EXDEV
 	if (dst.mount->id != src.mount->id)
 		return report(Error::CROSS_DEVICE);
 	if (!(src.mount->backend->capabilities() & BackendCaps::Rename))
@@ -1293,11 +1293,11 @@ Error VirtualFileSystem::rename(std::string_view rawFrom, std::string_view rawTo
 	e = ensureParents(dst, Path::parentRelative(dst.rel));
 	if (e != Error::OK)
 	{
-		bump();   // 可能已经创建了一部分父目录
+		bump();   // some parent directories may already have been created
 		return report(e);
 	}
 	e = src.mount->backend->rename(src.rel, dst.rel);
-	bump();   // 成功，或者失败但 ensureParents 已经在写入层创建了父目录
+	bump();   // success, or failure after ensureParents already created parents in the write layer
 	return report(e);
 }
 
@@ -1306,11 +1306,11 @@ Error VirtualFileSystem::moveFile(std::string_view from, std::string_view to) co
 	Error e = rename(from, to);
 	if (e != Error::CROSS_DEVICE && e != Error::UNSUPPORTED)
 		return report(e);
-	// 跨挂载：退化为复制 + 删除，只支持文件，不保证原子性
+	// Across mounts: fall back to copy + delete, files only, not atomic
 	Stat st;
 	Error se = stat(from, st);
 	if (se != Error::OK)
-		return report(se);   // 源在 rename 之后被并发删除：报告 NOT_FOUND，而不是 CROSS_DEVICE
+		return report(se);   // the source was deleted concurrently after the rename: report NOT_FOUND, not CROSS_DEVICE
 	if (st.type != FileType::FILE)
 		return report(e);
 	e = copyFile(from, to);
@@ -1324,8 +1324,8 @@ Error VirtualFileSystem::copyFile(std::string_view from, std::string_view to) co
 	Error e = Error::OK;
 	std::string nt;
 	{
-		// 复制到自身：可见项可写时什么都不做（否则以 WRITE 打开目标会先截断源文件）；
-		// 可见项在只读层时照常复制，相当于显式 copy-up
+		// Copy onto itself: if the visible entry is writable, do nothing (opening the target WRITE would truncate the source first);
+		// if the visible entry is on a read-only layer, copy as usual, which is an explicit copy-up
 		auto table = snapshot();
 		std::string nf;
 		e = normalize(*table, from, nf);
@@ -1350,8 +1350,8 @@ Error VirtualFileSystem::copyFile(std::string_view from, std::string_view to) co
 	if (!in)
 		return report(e);
 
-	// 先复制到目标旁边的临时文件，再 rename 成目标：中途失败不会截断或遮住原来的目标
-	// （与 copy-up、writeFileAtomic 一致）。临时文件写不了（例如单文件挂载）或与目标不在同一层时退化为直接写
+	// Copy to a temporary file next to the target, then rename it into place: a failure halfway does not truncate or hide the original target
+	// (same as copy-up and writeFileAtomic). If the temporary file cannot be written (for example a single-file mount) or is not on the same layer as the target, fall back to a direct write
 	const std::string tmp = uniqueTempName(nt, "vfs-copy");
 	auto out = openFileStream(tmp, IFileStream::Mode::WRITE, &e);
 	const bool viaTemp = out != nullptr;
@@ -1375,7 +1375,7 @@ Error VirtualFileSystem::copyFile(std::string_view from, std::string_view to) co
 	e = rename(tmp, nt);
 	if (e == Error::CROSS_DEVICE || e == Error::UNSUPPORTED)
 	{
-		// 临时文件和目标落在不同的层：退化为直接复制
+		// The temporary file and the target land on different layers: fall back to a direct copy
 		removeFile(tmp);
 		in = openFileStream(from, IFileStream::Mode::READ, &e);
 		if (!in)
@@ -1414,7 +1414,7 @@ Error VirtualFileSystem::copyStream(IFileStream& in, IFileStream& out)
 	}
 }
 
-// ================================================================ 便利函数
+// ================================================================ Convenience functions
 
 Error VirtualFileSystem::readFile(std::string_view path, std::vector<uint8_t>& out) const
 {
@@ -1426,7 +1426,7 @@ Error VirtualFileSystem::readFile(std::string_view path, std::vector<uint8_t>& o
 	out.clear();
 	if (size > 0)
 		out.reserve(static_cast<size_t>(size));
-	// 单次读写上限约 2 GB，这里分块循环读到 EOF
+	// A single read or write is limited to about 2 GB; loop in chunks until EOF
 	std::vector<uint8_t> buf(COPY_BUFFER_SIZE);
 	while (true)
 	{
@@ -1476,8 +1476,8 @@ Error VirtualFileSystem::writeFile(std::string_view path, std::string_view data)
 
 Error VirtualFileSystem::writeFileAtomic(std::string_view path, const void* data, size_t size) const
 {
-	// 先规范化（例如去掉结尾的 '/'），临时文件就在目标旁边：path.vfs-N.tmp。
-	// 每次调用使用不同的临时文件：并发写同一路径时互不干扰
+	// Normalize first (for example drop a trailing '/'); the temporary file sits next to the target: path.vfs-N.tmp.
+	// Each call uses a different temporary file: concurrent writes of the same path do not interfere
 	std::string norm;
 	{
 		auto table = snapshot();
@@ -1491,20 +1491,20 @@ Error VirtualFileSystem::writeFileAtomic(std::string_view path, const void* data
 	Error e = writeFile(tmp, data, size);
 	if (e == Error::READ_ONLY)
 	{
-		// 临时文件所在位置不可写（例如目标是单文件挂载，旁边没有可写层）：直接写目标，不再原子
+		// The temporary file's location is not writable (for example the target is a single-file mount and there is no writable layer beside it): write the target directly, no longer atomic
 		removeFile(tmp);
 		return report(writeFile(norm, data, size));
 	}
 	if (e != Error::OK)
 	{
-		// 写到一半失败也不留下临时文件
+		// A failure halfway through the write must not leave the temporary file either
 		removeFile(tmp);
 		return report(e);
 	}
 	e = rename(tmp, norm);
 	if (e == Error::CROSS_DEVICE || e == Error::UNSUPPORTED)
 	{
-		// 临时文件和目标落在不同的层：退化为直接写入（不再原子）
+		// The temporary file and the target land on different layers: fall back to a direct write (no longer atomic)
 		removeFile(tmp);
 		return report(writeFile(norm, data, size));
 	}

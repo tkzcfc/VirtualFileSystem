@@ -39,7 +39,7 @@ uint32_t MemoryBackend::capabilities() const
 }
 
 /**
- * 一个目录节点上的锁（共享或独占），析构时释放。只在 MemoryBackend 内部使用。
+ * A lock (shared or exclusive) on one directory node, released on destruction. Used only inside MemoryBackend.
  */
 class MemoryBackend::DirLock
 {
@@ -71,7 +71,7 @@ public:
 		m_node = nullptr;
 	}
 
-	// 把锁的所有权转给 other（other 原来持有的锁先释放）
+	// Transfer ownership of the lock to other (any lock other already holds is released first).
 	void moveTo(DirLock& other)
 	{
 		other.unlock();
@@ -90,14 +90,14 @@ private:
 namespace
 {
 
-// 在已加锁的目录中查找子项；没有返回 nullptr
+// Look up a child in an already-locked directory; return nullptr if it is absent.
 MemoryNode* findChild(const MemoryNode* dir, std::string_view name)
 {
 	auto it = dir->children.find(name);
 	return it == dir->children.end() ? nullptr : it->second.get();
 }
 
-// ancestor 是否是 path 的祖先（""是所有非空路径的祖先）
+// Whether ancestor is an ancestor of path ("" is an ancestor of every non-empty path).
 bool isAncestorPath(std::string_view ancestor, std::string_view path)
 {
 	if (ancestor.empty())
@@ -106,10 +106,10 @@ bool isAncestorPath(std::string_view ancestor, std::string_view path)
 		   path[ancestor.size()] == '/';
 }
 
-// 两个互不包含的目录路径的最近公共祖先（按路径段比较，"" 表示根）
+// Nearest common ancestor of two directory paths that do not contain each other (compared by path segment; "" is the root).
 std::string_view commonAncestor(std::string_view a, std::string_view b)
 {
-	size_t lastSep = std::string_view::npos;   // 共同前缀中最后一个完整路径段的结束位置
+	size_t lastSep = std::string_view::npos;   // End of the last complete path segment in the common prefix
 	size_t i = 0;
 	while (i < a.size() && i < b.size() && a[i] == b[i])
 	{
@@ -117,7 +117,7 @@ std::string_view commonAncestor(std::string_view a, std::string_view b)
 			lastSep = i;
 		++i;
 	}
-	// 一边恰好在段边界处结束的情况属于“包含”关系，调用方已经排除；这里只按完整的路径段截取
+	// The case where one side ends exactly on a segment boundary is a "contains" relationship, which the caller has already excluded; here we cut only on complete path segments.
 	return lastSep == std::string_view::npos ? std::string_view() : a.substr(0, lastSep);
 }
 
@@ -143,7 +143,7 @@ Error MemoryBackend::lockDir(std::string_view dirRel, bool exclusive, DirLock& o
 			return Error::NOT_FOUND;
 		if (child->type != FileType::DIR)
 			return Error::NOT_DIR;
-		// 先锁子目录再放父目录：子目录在我们拿到它的锁之前不会被删除（删除者需要父目录的独占锁）
+		// Lock the child directory before releasing the parent: the child cannot be deleted before we hold its lock (a deleter needs the parent's exclusive lock).
 		DirLock next;
 		next.lock(child, end == dirRel.size() ? exclusive : false);
 		next.moveTo(cur);
@@ -163,7 +163,7 @@ Error MemoryBackend::addFile(std::string_view rel, std::vector<uint8_t> data)
 	if (norm.empty())
 		return Error::IS_DIR;
 
-	// 节点在锁外分配；被覆盖的旧节点在锁外释放
+	// Nodes are allocated outside the lock; an overwritten old node is released outside the lock.
 	auto file = std::make_shared<MemoryNode>();
 	file->type = FileType::FILE;
 	file->buffer = std::make_shared<MemoryBuffer>();
@@ -171,7 +171,7 @@ Error MemoryBackend::addFile(std::string_view rel, std::vector<uint8_t> data)
 	file->buffer->mtime.store(currentUnixTime());
 	std::shared_ptr<MemoryNode> old;
 
-	// mkdir -p 父目录：逐级持有独占锁下行（预填数据的接口，不追求并发）
+	// mkdir -p the parents: walk downward holding an exclusive lock at each level (a data-prefill API; concurrency is not the goal).
 	DirLock cur;
 	MemoryNode* node = m_root.get();
 	cur.lock(node, true);
@@ -207,7 +207,7 @@ Error MemoryBackend::addFile(std::string_view rel, std::vector<uint8_t> data)
 	{
 		if (it->second->type == FileType::DIR)
 			return Error::IS_DIR;
-		// 覆盖时换一个新的缓冲区，已经打开旧文件的流继续读旧数据（与 unlink+create 一致）
+		// On overwrite, switch to a new buffer; streams that already opened the old file keep reading the old data (same as unlink+create).
 		old = std::move(it->second);
 		it->second = std::move(file);
 	}
@@ -249,7 +249,7 @@ Error MemoryBackend::stat(std::string_view rel, Stat& out) const
 		}
 		buffer = node->buffer;
 	}
-	// 目录锁释放之后再锁缓冲区：大文件写入持有缓冲区锁时，不会因此挡住同目录里的创建、删除
+	// Lock the buffer only after releasing the directory lock: a large write holding the buffer lock does not block create or delete in the same directory.
 	std::shared_lock<SharedMutex> bufLock(buffer->mutex);
 	out.size = static_cast<int64_t>(buffer->data.size());
 	out.mtime = buffer->mtime.load(std::memory_order_relaxed);
@@ -274,7 +274,7 @@ std::unique_ptr<IFileStream> MemoryBackend::open(std::string_view rel, IFileStre
 	const std::string_view name = Path::fileName(rel);
 	std::shared_ptr<MemoryBuffer> buffer;
 	{
-		// 先用共享锁查找；只有需要创建文件时才对父目录加独占锁（并重新查找）
+		// Look up under a shared lock first; take an exclusive lock on the parent (and look up again) only when a file must be created.
 		DirLock parent;
 		Error e = lockDir(parentRel, false, parent);
 		if (e != Error::OK)
@@ -286,7 +286,7 @@ std::unique_ptr<IFileStream> MemoryBackend::open(std::string_view rel, IFileStre
 		if (!node && writeMode)
 		{
 			parent.unlock();
-			// 新节点在锁外分配
+			// The new node is allocated outside the lock.
 			auto file = std::make_shared<MemoryNode>();
 			file->type = FileType::FILE;
 			file->buffer = std::make_shared<MemoryBuffer>();
@@ -300,7 +300,7 @@ std::unique_ptr<IFileStream> MemoryBackend::open(std::string_view rel, IFileStre
 			node = findChild(parent.node(), name);
 			if (!node)
 			{
-				// WRITE/APPEND/OVERLAPPED：不存在则创建，父目录必须存在（与 O_CREAT 一致）
+				// WRITE/APPEND/OVERLAPPED: create if missing; the parent directory must exist (same as O_CREAT).
 				buffer = file->buffer;
 				parent.node()->children.emplace(std::string(name), std::move(file));
 				parent.node()->mtime = currentUnixTime();
@@ -322,7 +322,7 @@ std::unique_ptr<IFileStream> MemoryBackend::open(std::string_view rel, IFileStre
 		}
 	}
 
-	// WRITE 模式截断已有内容
+	// WRITE mode truncates existing content.
 	if (mode == IFileStream::Mode::WRITE)
 	{
 		std::unique_lock<SharedMutex> bufLock(buffer->mutex);
@@ -335,7 +335,7 @@ std::unique_ptr<IFileStream> MemoryBackend::open(std::string_view rel, IFileStre
 
 Error MemoryBackend::list(std::string_view relDir, const std::function<bool(const DirEntry&)>& cb) const
 {
-	// 先在锁内复制目录项，再在锁外回调，避免回调里访问 VFS 造成死锁
+	// Copy the directory entries while the lock is held, then invoke the callback outside the lock, so a callback that touches the VFS cannot deadlock.
 	std::vector<DirEntry> entries;
 	{
 		DirLock dir;
@@ -380,10 +380,10 @@ Error MemoryBackend::removeDir(std::string_view rel)
 {
 	if (m_readOnly.load())
 		return Error::READ_ONLY;
-	// 后端根目录就是挂载点（与 VFS 删除挂载点一致）
+	// The backend root is the mount point (same as the VFS refusing to delete a mount point).
 	if (rel.empty())
 		return Error::BUSY;
-	std::shared_ptr<MemoryNode> victim;   // 在所有锁释放之后才析构
+	std::shared_ptr<MemoryNode> victim;   // Destroyed only after every lock is released
 	DirLock parent;
 	Error err = lockDir(Path::parentRelative(rel), true, parent);
 	if (err != Error::OK)
@@ -394,7 +394,7 @@ Error MemoryBackend::removeDir(std::string_view rel)
 	if (it->second->type != FileType::DIR)
 		return Error::NOT_DIR;
 	{
-		// 锁住目标目录：等正在里面查找、创建的操作结束，之后它就不可达了
+		// Lock the target directory: wait for lookups and creates inside it to finish; after that it is unreachable.
 		DirLock target;
 		target.lock(it->second.get(), true);
 		if (!it->second->children.empty())
@@ -410,10 +410,10 @@ Error MemoryBackend::removeFile(std::string_view rel)
 {
 	if (m_readOnly.load())
 		return Error::READ_ONLY;
-	// 后端根目录是目录
+	// The backend root is a directory.
 	if (rel.empty())
 		return Error::IS_DIR;
-	std::shared_ptr<MemoryNode> victim;   // 在锁释放之后才析构（缓冲区可能很大）
+	std::shared_ptr<MemoryNode> victim;   // Destroyed only after the lock is released (the buffer may be large)
 	DirLock parent;
 	Error err = lockDir(Path::parentRelative(rel), true, parent);
 	if (err != Error::OK)
@@ -423,7 +423,7 @@ Error MemoryBackend::removeFile(std::string_view rel)
 		return Error::NOT_FOUND;
 	if (it->second->type == FileType::DIR)
 		return Error::IS_DIR;
-	// unlink 语义：只移除名字，缓冲区由仍然打开的流继续持有
+	// unlink semantics: only the name is removed; the buffer stays held by streams that are still open.
 	victim = std::move(it->second);
 	parent.node()->children.erase(it);
 	parent.node()->mtime = currentUnixTime();
@@ -434,22 +434,22 @@ Error MemoryBackend::rename(std::string_view from, std::string_view to)
 {
 	if (m_readOnly.load())
 		return Error::READ_ONLY;
-	// 后端根目录不能作为改名的源或目标：这是非法参数而不是“忙”（VFS 层在调用后端之前就对挂载点返回 BUSY，
-	// 见 mount-rules.md §9、§12）
+	// The backend root cannot be the source or target of a rename: that is an invalid argument, not "busy" (the VFS layer returns BUSY for a mount point before calling the backend;
+	// see mount-rules.md sections 9 and 12).
 	if (from.empty() || to.empty())
 		return Error::INVALID_PATH;
 	if (from == to)
 		return Error::OK;
-	// 不能把目录移到它自己的子树里（源不存在或是文件时，在下面查到源之后再报告 NOT_FOUND / NOT_DIR）
+	// A directory cannot be moved into its own subtree (if the source is missing or is a file, report NOT_FOUND / NOT_DIR after the source is looked up below).
 	const bool intoSelf = isAncestorPath(from, to);
 
-	// 同一时刻只有一个 rename：祖先关系（下面的加锁顺序依赖它）在改名期间不会被其他 rename 改变
+	// Only one rename runs at a time: ancestor relationships (the lock order below depends on them) cannot be changed by another rename while this one runs.
 	std::lock_guard<std::mutex> renameLock(m_renameMutex);
-	std::shared_ptr<MemoryNode> victim;   // 被覆盖的目标，在所有锁释放之后才析构
+	std::shared_ptr<MemoryNode> victim;   // The overwritten target, destroyed only after every lock is released
 
 	if (intoSelf)
 	{
-		// 只需确认源：存在且是目录 → INVALID_PATH；是文件 → 目标的父路径穿过了文件，NOT_DIR
+		// Only the source needs to be confirmed: if it exists and is a directory -> INVALID_PATH; if it is a file -> the target's parent path crosses a file, NOT_DIR.
 		Stat st;
 		Error se = stat(from, st);
 		if (se != Error::OK)
@@ -472,7 +472,7 @@ Error MemoryBackend::rename(std::string_view from, std::string_view to)
 	}
 	else if (isAncestorPath(fromDir, toDir) || isAncestorPath(toDir, fromDir))
 	{
-		// 一个是另一个的祖先：先锁祖先，再从祖先往下锁后代（与查找的加锁顺序一致，不会死锁）
+		// One is an ancestor of the other: lock the ancestor first, then lock descendants downward from it (the same lock order as lookup, so this cannot deadlock).
 		const bool fromIsAncestor = isAncestorPath(fromDir, toDir);
 		const std::string_view up = fromIsAncestor ? fromDir : toDir;
 		const std::string_view down = fromIsAncestor ? toDir : fromDir;
@@ -487,15 +487,15 @@ Error MemoryBackend::rename(std::string_view from, std::string_view to)
 	}
 	else
 	{
-		// 互不包含：先对最近公共祖先加共享锁并一直持有，再从它分别往下锁两边。
-		// 这样持有一边的锁时不会再去等待它的祖先（否则会和“持有父目录独占锁、等待子目录”的 removeDir 互相等待）
+		// Neither contains the other: take a shared lock on the nearest common ancestor and hold it, then lock both sides downward from there.
+		// Holding one side then never waits on its ancestor (otherwise this would wait against removeDir, which holds the parent's exclusive lock and waits for the child).
 		const std::string_view lca = commonAncestor(fromDir, toDir);
 		DirLock lcaLock;
 		err = lockDir(lca, false, lcaLock);
 		if (err != Error::OK)
 			return err;
 		auto below = [&](std::string_view dir) { return lca.empty() ? dir : dir.substr(lca.size() + 1); };
-		// 两边按路径的字典序加锁：rename 之间本来就由 m_renameMutex 串行，固定顺序只是让锁序检查工具（TSAN）也能看懂
+		// Lock the two sides in lexicographic path order: renames are already serialized by m_renameMutex; the fixed order only lets lock-order checkers (TSAN) follow it.
 		const bool fromFirst = fromDir < toDir;
 		err = lockDir(below(fromFirst ? fromDir : toDir), true, first, lcaLock.node());
 		if (err != Error::OK)
@@ -505,7 +505,7 @@ Error MemoryBackend::rename(std::string_view from, std::string_view to)
 			return err;
 		fromParent = fromFirst ? first.node() : second.node();
 		toParent = fromFirst ? second.node() : first.node();
-		// lcaLock 在这里释放：两边的独占锁已经拿到，改名只修改这两个目录
+		// lcaLock is released here: both exclusive locks are held, and the rename only modifies these two directories.
 	}
 
 	auto fromIt = fromParent->children.find(Path::fileName(from));
@@ -516,7 +516,7 @@ Error MemoryBackend::rename(std::string_view from, std::string_view to)
 	auto toIt = toParent->children.find(toName);
 	if (toIt != toParent->children.end())
 	{
-		// 与 POSIX rename 一致的覆盖规则
+		// Overwrite rules matching POSIX rename.
 		MemoryNode* target = toIt->second.get();
 		if (node->type == FileType::FILE && target->type == FileType::DIR)
 			return Error::IS_DIR;
@@ -524,7 +524,7 @@ Error MemoryBackend::rename(std::string_view from, std::string_view to)
 			return Error::NOT_DIR;
 		if (target->type == FileType::DIR)
 		{
-			// 目标是源的祖先（例如 "a/b" -> "a"）：它至少包含源，一定非空；它已经被我们锁住，不能再锁一次
+			// The target is an ancestor of the source (for example "a/b" -> "a"): it contains at least the source, so it is not empty; we already hold its lock and must not lock it again.
 			if (isAncestorPath(to, from))
 				return Error::NOT_EMPTY;
 			DirLock targetLock;
@@ -537,7 +537,7 @@ Error MemoryBackend::rename(std::string_view from, std::string_view to)
 			victim = std::move(toIt->second);
 		toParent->children.erase(toIt);
 	}
-	// 先插入目标再删除源：插入时分配内存失败抛异常的话，源仍然在原处，不会丢失
+	// Insert the target before deleting the source: if allocation throws while inserting, the source is still in place and is not lost.
 	toParent->children.emplace(std::string(toName), fromIt->second);
 	fromParent->children.erase(fromIt);
 	const int64_t now = currentUnixTime();

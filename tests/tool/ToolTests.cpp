@@ -1,4 +1,4 @@
-// vfstool 核心逻辑测试：glob 规则与各子命令（直接调用 run* 函数，不经过进程）
+// vfstool core-logic tests: glob rules and each subcommand (call run* directly, not through a process)
 #include "TestUtils.h"
 #include "core/Commands.h"
 #include "core/Glob.h"
@@ -10,14 +10,14 @@ using namespace vfs::tool;
 namespace
 {
 
-// 构造一个源目录
+// Build a source directory
 void makeSource(const test::TempDir& dir)
 {
 	dir.write("src/main.lua", "print('hello')\n");
 	dir.write("src/lib/util.lua", std::string(2000, 'u'));
 	dir.write("src/res/bg.bin", test::randomBytes(5000, 1));
 	dir.write("src/res/sub/icon.bin", test::randomBytes(300, 2));
-	dir.write("src/res/copy.bin", test::randomBytes(5000, 1));   // 与 bg.bin 相同，触发去重
+	dir.write("src/res/copy.bin", test::randomBytes(5000, 1));   // identical to bg.bin, so dedup triggers
 	dir.write("src/文档/说明.txt", "中文内容");
 	dir.write("src/.git/HEAD", "ref: refs/heads/main");
 	dir.write("src/.DS_Store", "junk");
@@ -58,11 +58,11 @@ TEST_SUITE("tool")
 	TEST_CASE("Glob::match: * ? ** [] and escapes")
 	{
 		CHECK(Glob::match("*.lua", "main.lua"));
-		CHECK(Glob::match("*.lua", "a/b/main.lua"));      // 不含 '/' 的模式匹配文件名
+		CHECK(Glob::match("*.lua", "a/b/main.lua"));      // a pattern with no '/' matches the file name
 		CHECK_FALSE(Glob::match("*.lua", "main.luac"));
 		CHECK(Glob::match("a/*.lua", "a/x.lua"));
-		CHECK_FALSE(Glob::match("a/*.lua", "a/b/x.lua")); // * 不跨目录
-		CHECK(Glob::match("a/**/x.lua", "a/x.lua"));      // **/ 可以匹配零层
+		CHECK_FALSE(Glob::match("a/*.lua", "a/b/x.lua")); // * does not cross directories
+		CHECK(Glob::match("a/**/x.lua", "a/x.lua"));      // **/ may match zero directories
 		CHECK(Glob::match("a/**/x.lua", "a/b/c/x.lua"));
 		CHECK(Glob::match("**/*.bin", "res/sub/icon.bin"));
 		CHECK(Glob::match("**/*.bin", "top.bin"));
@@ -76,7 +76,7 @@ TEST_SUITE("tool")
 		CHECK(Glob::match("[!a-c]x", "dx"));
 		CHECK(Glob::match("\\*.txt", "*.txt"));
 		CHECK_FALSE(Glob::match("\\*.txt", "a.txt"));
-		CHECK(Glob::match("/top.txt", "top.txt"));        // 前导 '/' 锚定到根
+		CHECK(Glob::match("/top.txt", "top.txt"));        // a leading '/' anchors to the root
 		CHECK_FALSE(Glob::match("/top.txt", "a/top.txt"));
 		CHECK(Glob::match("中文/*.txt", "中文/说明.txt"));
 	}
@@ -153,7 +153,7 @@ TEST_SUITE("tool")
 		CHECK(dir.read("unpacked/文档/说明.txt") == "中文内容");
 		CHECK_FALSE(dir.exists("unpacked/.git"));
 
-		// 已存在的文件：不加 --force 时失败
+		// An existing file: fails unless --force is set
 		std::ostringstream uout2, uerr2;
 		CHECK(runUnpack(uo, uout2, uerr2) != 0);
 		uo.force = true;
@@ -190,7 +190,7 @@ TEST_SUITE("tool")
 		CHECK(l4.find("lib/util.lua") != std::string::npos);
 		CHECK(l4.find("bg.bin") == std::string::npos);
 
-		// --dry-run 不生成文件
+		// --dry-run does not create files
 		PackOptions p4 = packOptions(dir, "5.vfs");
 		p4.dryRun = true;
 		std::ostringstream dout, derr;
@@ -221,7 +221,7 @@ TEST_SUITE("tool")
 		CHECK(runInfo(io, iout3, ierr3) == 0);
 		CHECK(iout3.str().find("1") != std::string::npos);
 
-		// 密钥文件
+		// Key file
 		dir.write("key.txt", hex + "\n");
 		io.archive.key.keyHex.clear();
 		io.archive.key.keyFile = dir.sub("key.txt");
@@ -230,7 +230,7 @@ TEST_SUITE("tool")
 		CHECK(runInfo(io, iout4, ierr4) == 0);
 		CHECK(iout4.str().find('{') != std::string::npos);
 
-		// 损坏
+		// Corruption
 		auto data = test::readNative(dir.sub("k.vfs"));
 		data[200] ^= 0xFF;
 		test::writeNative(dir.sub("bad.vfs"), data);
@@ -241,7 +241,7 @@ TEST_SUITE("tool")
 		int rc = runVerify(vo, vout, verr);
 		CHECK((rc == static_cast<int>(ExitCode::INTEGRITY) || rc == static_cast<int>(ExitCode::FORMAT)));
 
-		// 不是归档
+		// Not an archive
 		dir.write("not.vfs", "hello");
 		InfoOptions bad;
 		bad.archive = archiveArgs(dir.sub("not.vfs"));

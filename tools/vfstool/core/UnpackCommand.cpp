@@ -1,4 +1,4 @@
-// vfstool unpack：把整个归档解包到目录
+// vfstool unpack: extract the whole archive into a directory.
 #include "Commands.h"
 
 NS_VFS_BEGIN
@@ -22,7 +22,7 @@ int runUnpack(const UnpackOptions& options, std::ostream& out, std::ostream& err
 	for (const auto& r : options.filterRules)
 		hasInclude = hasInclude || r.positive;
 
-	// 整个解包过程复用一个来源流，避免每个文件都重新打开归档
+	// Reuse one source stream for the whole unpack so each file does not reopen the archive.
 	Error e = Error::OK;
 	auto stream = index->source->openStream(&e);
 	if (!stream)

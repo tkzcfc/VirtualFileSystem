@@ -1,6 +1,6 @@
-// 本文件：单文件多字节 XOR 加密。
-// 第 i 个存储字节 = 原字节 ^ key[i % keyLen]，i 是该文件存储数据内的偏移，所以可以从任意位置开始解密，支持随机 seek。
-// 注意：这只是混淆，提高提取资源的门槛，不是真正的安全加密。
+// This file: multi-byte XOR encryption for a single file.
+// Stored byte i = original byte ^ key[i % keyLen], where i is the offset within that file's stored data, so decryption can start at any position and random seek is supported.
+// Note: this is only obfuscation. It raises the cost of extracting assets; it is not real cryptographic security.
 #pragma once
 
 #include "../Common.h"
@@ -8,19 +8,19 @@
 NS_VFS_BEGIN
 
 /**
- * 原地 XOR（加密和解密相同）。
- * @param data   数据
- * @param len    长度
- * @param key    密钥
- * @param keyLen 密钥长度；为 0 时什么也不做
- * @param offset data[0] 在文件存储数据中的偏移
+ * In-place XOR (encryption and decryption are the same).
+ * @param data   Data
+ * @param len    Length
+ * @param key    Key
+ * @param keyLen Key length; when 0, do nothing
+ * @param offset Offset of data[0] within the file's stored data
  */
 inline void xorCipher(uint8_t* data, size_t len, const uint8_t* key, size_t keyLen, uint64_t offset)
 {
 	if (keyLen == 0 || len == 0)
 		return;
 	size_t k = static_cast<size_t>(offset % keyLen);
-	// 先处理到密钥边界，之后整段整段地异或，循环体简单，编译器可以自动向量化
+	// First advance to a key boundary, then XOR whole key-sized chunks. The loop body stays simple so the compiler can auto-vectorize it
 	size_t head = keyLen - k;
 	if (head > len)
 		head = len;

@@ -1,6 +1,6 @@
 #include "Hash.h"
 
-// header-only 方式使用 xxHash，所有符号都是 static inline，不会与宿主程序里的 xxHash 冲突
+// Use xxHash header-only. Every symbol is static inline, so it does not clash with xxHash in the host program.
 #define XXH_INLINE_ALL
 #include "xxhash.h"
 

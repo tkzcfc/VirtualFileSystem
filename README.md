@@ -1,32 +1,34 @@
 # VirtualFileSystem
 
-面向游戏资源管理的分层虚拟文件系统，C++20 实现。
+English | [简体中文](README.zh-CN.md)
 
-把本机目录、内存、`.vfs` 归档、单个文件或自定义后端挂载到任意虚拟路径，多层按优先级合并成一个统一视图；读写、建删目录都遵循确定性的规则；全部接口线程安全。文件流接口与 [axmol](https://github.com/axmolengine/axmol) 的 `IFileStream` 完全一致，可以直接接入引擎。
+A layered virtual file system for game asset management, implemented in C++20.
 
-配套命令行工具 `vfstool` 负责打包、解包和检查 `.vfs` 归档。
+Mount a native directory, memory, a `.vfs` archive, a single file, or a custom backend at any virtual path. Layers merge by priority into one view; reads, writes, and directory create/delete follow deterministic rules; every API is thread-safe. The file-stream interface matches [axmol](https://github.com/axmolengine/axmol)'s `IFileStream` exactly, so it can be wired into the engine directly.
 
-**性能**：各后端与分层组合相对直接调用 C 文件 API 的开销（Linux、macOS、Windows，1 / 8 线程）以及选型建议见 [性能基准](docs/benchmark.md)。
+The companion command-line tool `vfstool` packs, unpacks, and inspects `.vfs` archives.
 
-## 特性
+**Performance**: overhead of each backend and layer combination versus calling the C file API directly (Linux, macOS, Windows, 1 / 8 threads), plus selection advice, is in [Benchmarks](docs/benchmark.md).
 
-- **多种挂载**：本机目录、单个本机文件、内存目录树、`.vfs` 归档（来自文件或内存），以及实现 `IBackend` 的自定义后端。
-- **分层合并视图**：按优先级叠加，同名文件高层优先、目录内容合并；支持遮蔽（`Opaque`）、只读（`ReadOnly`）、指定默认写入层（`WriteTarget`）。
-- **确定性写入规则**：写入、copy-up、删除、`rmdir`、`rename` 的落点和错误都有明确定义，见 [挂载规则](docs/mount-rules.md)。
-- **线程安全**：挂载表采用 copy-on-write 快照，查询不加锁；挂载、卸载可以与读取并发进行；卸载是惰性的，已打开的流可以读完。
-- **`.vfs` 归档**：按文件可选 XOR 加密（支持随机 seek）和 LZ4 压缩，索引用 ChaCha20 加密，内容去重，数据对齐，header 与索引带损坏校验，**同一输入每次打包逐字节一致**。每个流独立持有句柄、按偏移读取，多线程读互不干扰。
-- **跨平台**：Windows（UTF-8 路径自动转 UTF-16，支持长路径）、Linux、macOS、iOS、Android（含 APK 资源后端 `AndroidAssetBackend`）、WebAssembly（Emscripten）；只依赖标准库和 `3rd/` 中的 doctest、xxHash、LZ4、CLI11。
+## Features
 
-| 平台 | 状态 |
+- **Several mount types**: a native directory, a single native file, an in-memory directory tree, a `.vfs` archive (from a file or from memory), and a custom backend that implements `IBackend`.
+- **Layered merged view**: stacked by priority, a higher layer wins for the same file name, and directory contents are merged; supports occlusion (`Opaque`), read-only (`ReadOnly`), and a designated default write layer (`WriteTarget`).
+- **Deterministic write rules**: where a write, copy-up, delete, `rmdir`, or `rename` lands, and which error it returns, is defined in [Mount rules](docs/mount-rules.md).
+- **Thread safety**: the mount table is a copy-on-write snapshot, so lookups take no lock; mount and unmount can run concurrently with reads; unmount is lazy, and a stream that is already open can finish reading.
+- **`.vfs` archives**: optional per-file XOR encryption (random seek is supported) and LZ4 compression, ChaCha20-encrypted index, content dedup, data alignment, and corruption checks on the header and index. **The same input packs to the same bytes every time.** Each stream holds its own handle and reads by offset, so concurrent readers do not interfere.
+- **Cross-platform**: Windows (UTF-8 paths converted to UTF-16, long paths supported), Linux, macOS, iOS, Android (including the APK asset backend `AndroidAssetBackend`), and WebAssembly (Emscripten). Dependencies are the standard library plus doctest, xxHash, LZ4, and CLI11 under `3rd/`.
+
+| Platform | Status |
 |---|---|
-| Windows / Linux / macOS | 全部测试 |
-| iOS | 真机与模拟器编译；模拟器运行全部测试 |
-| Android（API 24+） | arm64-v8a / x86_64 / armeabi-v7a 交叉编译；x86_64 模拟器运行全部测试；APK 资源后端 |
-| WebAssembly | Emscripten 构建，node 上运行全部测试 |
+| Windows / Linux / macOS | Full test suite |
+| iOS | Device and simulator builds; full test suite on the simulator |
+| Android (API 24+) | Cross-compile for arm64-v8a / x86_64 / armeabi-v7a; full test suite on an x86_64 emulator; APK asset backend |
+| WebAssembly | Emscripten build; full test suite under node |
 
-各平台的构建方法与注意事项见 [平台支持](docs/platforms.md)。
+How to build on each platform, and the caveats, are in [Platforms](docs/platforms.md).
 
-## 快速上手
+## Quick start
 
 ```cpp
 #include "vfs/VirtualFileSystem.h"
@@ -34,22 +36,22 @@
 
 USING_NS_VFS;
 
-// 假设 game.vfs 由 `vfstool pack assets -o game.vfs` 打出，含 config.json 和 scripts/main.lua；
-// assets_dev/ 目录里只有 textures/hero.png
+// Assume game.vfs was produced by `vfstool pack assets -o game.vfs` and contains config.json and scripts/main.lua;
+// assets_dev/ contains only textures/hero.png
 int main()
 {
 	VirtualFileSystem fs;
 
-	// 只读资源：归档在下，开发目录在上（同名文件以开发目录为准）
+	// Read-only assets: archive below, dev directory above (the dev directory wins for the same name)
 	fs.mountArchive("/res", "game.vfs");
 	fs.mountNative("/res", "assets_dev", MountOptions{10});
 
-	// 可写数据：单独挂在 /user
+	// Writable data: mounted on its own at /user
 	NativeOptions userDir;
 	userDir.createRoot = true;
 	fs.mountNative("/user", "save", MountOptions{0, MountFlags::WriteTarget}, userDir);
 
-	// 别名：res://scripts/main.lua 等价于 /res/scripts/main.lua
+	// Alias: res://scripts/main.lua is the same as /res/scripts/main.lua
 	fs.addAlias("res://", "/res");
 
 	std::string config;
@@ -61,7 +63,7 @@ int main()
 
 	for (const auto& entry : fs.list("res://"))
 		std::printf("%s%s\n", entry.name.c_str(), entry.type == FileType::DIR ? "/" : "");
-	// 输出（两层合并，按名字排序）：
+	// Output (the two layers merged, sorted by name):
 	// config.json
 	// scripts/
 	// textures/
@@ -69,7 +71,7 @@ int main()
 }
 ```
 
-打包资源：
+Pack assets:
 
 ```bash
 vfstool pack assets -o game.vfs --compress "*.lua" --compress "*.json" --encrypt "**/*.png"
@@ -77,22 +79,22 @@ vfstool list game.vfs -l
 vfstool verify game.vfs
 ```
 
-更多示例见 [`examples/`](examples/)（`-DVFS_BUILD_EXAMPLES=ON` 构建）：
+More samples are in [`examples/`](examples/) (build with `-DVFS_BUILD_EXAMPLES=ON`):
 
-| 示例 | 内容 |
+| Example | Contents |
 |---|---|
-| [`basic`](examples/basic/main.cpp) | 最小示例：内存中打包归档，与可写内存层叠加 |
-| [`layers`](examples/layers/main.cpp) | 分层挂载、遮蔽、只读层与别名 |
-| [`archive`](examples/archive/main.cpp) | 打包与读取归档：自定义索引密钥、XOR 加密、LZ4 压缩、去重 |
-| [`custom_backend`](examples/custom_backend/main.cpp) | 实现 `IBackend` 挂载程序生成的内容 |
-| [`multithread`](examples/multithread/main.cpp) | 8 线程并发读取，同时热更新（`remount`）归档 |
-| [`stream`](examples/stream/main.cpp) | 流式 API：分块写入、seek、追加、分块读取 |
+| [`basic`](examples/basic/main.cpp) | Minimal sample: pack an archive in memory and stack a writable memory layer on it |
+| [`layers`](examples/layers/main.cpp) | Layered mounts, occlusion, a read-only layer, and aliases |
+| [`archive`](examples/archive/main.cpp) | Pack and read an archive: custom index key, XOR encryption, LZ4 compression, dedup |
+| [`custom_backend`](examples/custom_backend/main.cpp) | Implement `IBackend` to mount content generated by the program |
+| [`multithread`](examples/multithread/main.cpp) | Eight threads reading concurrently while the archive is hot-updated (`remount`) |
+| [`stream`](examples/stream/main.cpp) | Stream API: chunked write, seek, append, chunked read |
 
-API 细节见 [API 文档](docs/api.md)。
+API details are in [API reference](docs/api.md).
 
-## 构建与测试
+## Build and test
 
-需要 CMake ≥ 3.16 和支持 C++20 的编译器（GCC、Clang、Apple Clang、MSVC 均可）。
+Requires CMake >= 3.16 and a C++20 compiler (GCC, Clang, Apple Clang, or MSVC).
 
 ```bash
 cmake -S . -B build
@@ -100,79 +102,79 @@ cmake --build build -j
 cd build && ctest --output-on-failure
 ```
 
-| CMake 选项 | 默认值 | 说明 |
+| CMake option | Default | Description |
 |---|---|---|
-| `VFS_BUILD_TOOLS` | 作为顶层项目时 ON | 构建 `vfstool` |
-| `VFS_BUILD_TESTS` | 作为顶层项目时 ON | 构建测试（会同时构建 `vfstool`） |
-| `VFS_BUILD_EXAMPLES` | OFF | 构建 `examples/` |
-| `VFS_BUILD_BENCH` | OFF | 构建性能基准 `vfs_bench`，见 [性能基准](docs/benchmark.md) |
-| `VFS_WITH_AXMOL` | OFF | 使用 axmol 的 `ax::IFileStream`，见 [接入 axmol](docs/integration-axmol.md) |
-| `VFS_WARNINGS_AS_ERRORS` | OFF | 把编译警告当作错误 |
-| `VFS_WASM_THREADS` | ON | 仅 Emscripten：所有目标加 `-pthread`，见 [平台支持](docs/platforms.md#webassemblyemscripten) |
+| `VFS_BUILD_TOOLS` | ON when this is the top-level project | Build `vfstool` |
+| `VFS_BUILD_TESTS` | ON when this is the top-level project | Build tests (also builds `vfstool`) |
+| `VFS_BUILD_EXAMPLES` | OFF | Build `examples/` |
+| `VFS_BUILD_BENCH` | OFF | Build the `vfs_bench` benchmark; see [Benchmarks](docs/benchmark.md) |
+| `VFS_WITH_AXMOL` | OFF | Use axmol's `ax::IFileStream`; see [Integrating with axmol](docs/integration-axmol.md) |
+| `VFS_WARNINGS_AS_ERRORS` | OFF | Treat compiler warnings as errors |
+| `VFS_WASM_THREADS` | ON | Emscripten only: add `-pthread` to every target; see [Platforms](docs/platforms.md#webassembly-emscripten) |
 
-作为子项目使用：
+Use it as a subdirectory:
 
 ```cmake
 add_subdirectory(VirtualFileSystem)
-target_link_libraries(my_game PRIVATE vfs)   # 或 vfs::vfs
+target_link_libraries(my_game PRIVATE vfs)   # or vfs::vfs
 ```
 
-测试使用 doctest，按 suite 注册为 ctest 用例：`vfs.path`、`vfs.union`、`vfs.native`、`vfs.memory`、`vfs.stream`、`vfs.archive`、`vfs.crypto`、`vfs.tool`、`vfs.concurrency`，以及命令行端到端测试 `vfstool.e2e`。另有四组覆盖面更广的测试：
+Tests use doctest and are registered as ctest cases by suite: `vfs.path`, `vfs.union`, `vfs.native`, `vfs.memory`, `vfs.stream`, `vfs.archive`, `vfs.crypto`, `vfs.tool`, `vfs.concurrency`, plus the command-line end-to-end suite `vfstool.e2e`. Four broader suites:
 
-| suite | 内容 |
+| suite | Contents |
 |---|---|
-| `vfs.matrix` | 同一组文件 / 目录 / 改名 / 流操作在 9 种后端与分层组合上逐一运行（本机、内存、嵌套挂载、归档在本机之下、内存叠在归档之上、优先级相同、三层叠加、只读本机目录等） |
-| `vfs.stress` | 多线程压力：同目录与不同目录的并发增删改读、改名、读写竞争、并发追加 copy-up、列目录与修改并发、挂载 / 卸载 / remount 抖动、同一归档上的大量句柄 |
-| `vfs.model` | 随机操作序列与参考模型逐步比对（错误码、合并视图、写入层内容） |
-| `vfs.extreme` | 极端情况：空文件、海量条目、深路径与超长名字、Unicode 与大小写、外部修改、只读目录、归档逐区域损坏与伪造索引、故障注入、句柄耗尽、超过 4 GB 的稀疏文件 |
+| `vfs.matrix` | The same file / directory / rename / stream operations, run once on each of 9 backend and layer combinations (native, memory, nested mounts, archive under native, memory stacked on an archive, equal priority, three layers, a read-only native directory, and so on) |
+| `vfs.stress` | Multithreaded stress: concurrent create/delete/update/read in the same directory and in different directories, rename, read/write races, concurrent append copy-up, listing concurrent with mutation, mount / unmount / remount jitter, many handles on one archive |
+| `vfs.model` | Random operation sequences checked step by step against a reference model (error codes, merged view, write-layer contents) |
+| `vfs.extreme` | Edge cases: empty files, huge entry counts, deep paths and very long names, Unicode and case, external modification, read-only directories, per-region archive corruption and forged indexes, fault injection, handle exhaustion, sparse files over 4 GB |
 
-默认的 `ctest` 在一分钟内跑完。耗时长的用例默认跳过，用环境变量打开：
+The default `ctest` finishes within a minute. Long cases are skipped unless an environment variable enables them:
 
 ```bash
-VFS_TEST_SLOW=1 ./build/tests/vfs_tests      # 包含慢速用例（10 万条目归档、>4 GB 稀疏文件、长时间模型比对）
-VFS_TEST_SCALE=5 ./build/tests/vfs_tests     # 压力与随机测试的轮数放大 5 倍
-./build/tests/vfs_tests --test-suite=stress  # 只跑某个 suite（doctest 的其他参数同样可用）
+VFS_TEST_SLOW=1 ./build/tests/vfs_tests      # include slow cases (100k-entry archive, sparse files >4 GB, long model comparisons)
+VFS_TEST_SCALE=5 ./build/tests/vfs_tests     # multiply stress and random-test rounds by 5
+./build/tests/vfs_tests --test-suite=stress  # run one suite (other doctest arguments work the same way)
 ```
 
-与平台能力有关的用例在运行时探测，而不是按操作系统写死：临时目录所在文件系统是否区分大小写（Windows/macOS 默认不区分，相关用例改为检查文档规定的不区分行为）、能否替换正被打开的文件（Windows 需要 NTFS 上的 POSIX rename 语义；不支持时用例放宽并输出一条 `MESSAGE`）。并发用例在失败时打印每种操作的错误码分布和前几条失败详情。在 Linux 上可以用 MinGW 交叉编译后通过 Wine 运行全部测试（Wine 不支持 POSIX rename 语义，会看到上述 `MESSAGE`）。
+Cases that depend on platform capabilities probe at runtime instead of hard-coding the OS: whether the filesystem of the temp directory is case-sensitive (Windows/macOS are not, by default, and those cases check the documented case-insensitive behavior), and whether a file that is open can be replaced (Windows needs POSIX rename semantics on NTFS; when that is unavailable the case is relaxed and prints one `MESSAGE`). On failure, concurrency cases print the error-code distribution of each operation and the first few failure details. On Linux the full suite can be cross-compiled with MinGW and run under Wine (Wine does not support POSIX rename semantics, so the `MESSAGE` above appears).
 
-### 性能基准
+### Benchmarks
 
 ```bash
 cmake -S . -B build-bench -DCMAKE_BUILD_TYPE=Release -DVFS_BUILD_BENCH=ON -DVFS_BUILD_TESTS=OFF
 cmake --build build-bench --target vfs_bench -j
-./build-bench/bench/vfs_bench --csv bench.csv --md bench.md   # 全部场景；--help 查看 --scale / --threads / --filter 等选项
+./build-bench/bench/vfs_bench --csv bench.csv --md bench.md   # every scenario; --help lists --scale / --threads / --filter and the rest
 ```
 
-`vfs_bench` 对比 `std::fstream`、`FILE*`、POSIX `pread` / Win32 `ReadFile` 与各种后端和分层组合的读、写、元数据性能，输出吞吐、p50/p99 延迟和相对 stdio 的倍数。本机结果与分析见 [docs/benchmark.md](docs/benchmark.md)。
+`vfs_bench` compares `std::fstream`, `FILE*`, POSIX `pread` / Win32 `ReadFile` with the backends and layer combinations for read, write, and metadata performance, and reports throughput, p50/p99 latency, and the multiple relative to stdio. Local results and analysis are in [docs/benchmark.md](docs/benchmark.md).
 
-## 目录结构
+## Layout
 
 ```
-3rd/            第三方库（固定版本）：doctest、xxHash、LZ4、CLI11
-bench/          性能基准 vfs_bench（默认不构建）
-cmake/          构建选项与编译器设置
-docs/           文档
-examples/       示例（默认不构建）
-src/vfs/        运行时库
-  native/       本机目录、单文件后端与 NativeFileStream
-  memory/       内存后端
-  archive/      .vfs 读写
-  crypto/       ChaCha20、XXH3、XOR
-tests/          单元测试与命令行端到端测试
-tools/vfstool/  命令行工具
+3rd/            third-party libraries (pinned versions): doctest, xxHash, LZ4, CLI11
+bench/          vfs_bench performance benchmark (not built by default)
+cmake/          build options and compiler settings
+docs/           documentation
+examples/       samples (not built by default)
+src/vfs/        runtime library
+  native/       native directory, single-file backend, and NativeFileStream
+  memory/       memory backend
+  archive/      .vfs read and write
+  crypto/       ChaCha20, XXH3, XOR
+tests/          unit tests and command-line end-to-end tests
+tools/vfstool/  command-line tool
 ```
 
-## 文档
+## Documentation
 
-| 文档 | 内容 |
+| Document | Contents |
 |---|---|
-| [docs/architecture.md](docs/architecture.md) | 分层结构、挂载表、后端、流、线程模型 |
-| [docs/mount-rules.md](docs/mount-rules.md) | 优先级、合并视图、写入目标、删除 / rmdir / rename 语义与错误码 |
-| [docs/api.md](docs/api.md) | 主要公开 API、`IFileStream` 语义、自定义后端 |
-| [docs/format.md](docs/format.md) | `.vfs` 二进制格式规范 |
-| [docs/vfstool.md](docs/vfstool.md) | 命令行工具参考 |
-| [docs/benchmark.md](docs/benchmark.md) | 性能基准：构建运行方法、本机结果与开销分析 |
-| [docs/platforms.md](docs/platforms.md) | 平台支持：Android（APK 资源后端）、iOS、WebAssembly 的构建与注意事项 |
-| [docs/integration-axmol.md](docs/integration-axmol.md) | 接入 axmol 引擎 |
-| [docs/style.md](docs/style.md) | 代码风格 |
+| [docs/architecture.md](docs/architecture.md) | Layer structure, mount table, backends, streams, threading model |
+| [docs/mount-rules.md](docs/mount-rules.md) | Priority, merged view, write target, delete / rmdir / rename semantics and error codes |
+| [docs/api.md](docs/api.md) | Main public API, `IFileStream` semantics, custom backends |
+| [docs/format.md](docs/format.md) | `.vfs` binary format specification |
+| [docs/vfstool.md](docs/vfstool.md) | Command-line tool reference |
+| [docs/benchmark.md](docs/benchmark.md) | Benchmarks: how to build and run, local results, and overhead analysis |
+| [docs/platforms.md](docs/platforms.md) | Platforms: building and caveats for Android (APK asset backend), iOS, and WebAssembly |
+| [docs/integration-axmol.md](docs/integration-axmol.md) | Integrating with the axmol engine |
+| [docs/style.md](docs/style.md) | Code style |

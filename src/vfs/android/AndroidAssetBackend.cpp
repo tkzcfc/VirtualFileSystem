@@ -14,7 +14,7 @@ namespace
 
 std::atomic<AAssetManager*> g_manager{nullptr};
 std::mutex g_javaRefMutex;
-jobject g_javaRef = nullptr;   // setAssetManagerFromJava 持有的全局引用
+jobject g_javaRef = nullptr;   // Global reference held by setAssetManagerFromJava
 
 class AndroidAssetFile : public IAssetFile
 {
@@ -30,7 +30,7 @@ public:
 
 	int openFileDescriptor(int64_t& start, int64_t& length) override
 	{
-		// 只有未压缩存放（aapt 的 noCompress 列表、或本身已压缩的格式如 png/ogg）时成功
+		// Succeeds only when the asset is stored uncompressed (aapt's noCompress list, or an already-compressed format such as png/ogg).
 		off64_t s = 0, l = 0;
 		int fd = AAsset_openFileDescriptor64(m_asset, &s, &l);
 		if (fd < 0)
@@ -52,7 +52,7 @@ public:
 	std::unique_ptr<IAssetFile> open(std::string_view path) override
 	{
 		std::string p(path);
-		// RANDOM：提示系统按随机访问预读，适合按偏移读取
+		// RANDOM: hint that the system should prefetch for random access, which suits offset reads.
 		AAsset* a = AAssetManager_open(m_manager, p.c_str(), AASSET_MODE_RANDOM);
 		return a ? std::make_unique<AndroidAssetFile>(a) : nullptr;
 	}

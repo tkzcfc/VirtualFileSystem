@@ -1,4 +1,4 @@
-// 本机目录后端测试：UTF-8 路径、可移植名字检查、只读、symlink 沙箱、realPath、删除打开中的文件
+// Native directory backend tests: UTF-8 paths, portable name checks, read-only, symlink sandbox, realPath, deleting a file that is open
 #include "TestUtils.h"
 #include "vfs/native/NativeBackend.h"
 #include <filesystem>
@@ -117,7 +117,7 @@ TEST_SUITE("native")
 		CHECK(fs.writeFile("/d/a", "a") == Error::OK);
 		CHECK(fs.writeFile("/d/b", "b") == Error::OK);
 		CHECK(fs.removeDir("/d") == Error::NOT_EMPTY);
-		// rename 到已有文件：POSIX 语义，覆盖
+		// rename onto an existing file: POSIX semantics, overwrite
 		CHECK(fs.rename("/d/a", "/d/b") == Error::OK);
 		CHECK(test::readAll(fs, "/d/b") == "a");
 		CHECK(fs.removeDir("/d", true) == Error::OK);
@@ -135,10 +135,10 @@ TEST_SUITE("native")
 		REQUIRE(fs.mountNative("/", dir.path(), {}, o) != 0);
 		INFO("nativeCaseSensitive=" << test::nativeCaseSensitive());
 
-		// 精确名字正常工作
+		// The exact name works
 		CHECK(test::readAll(fs, "/Data/Hero.png") == "hero");
 		CHECK(test::listNames(fs, "/Data") == Names{"Hero.png"});
-		// 最后一级或父目录只差大小写：都不存在
+		// Last component or a parent that differs only in case: neither exists
 		CHECK_FALSE(fs.exists("/Data/hero.png"));
 		CHECK_FALSE(fs.exists("/data/Hero.png"));
 		CHECK(test::readAll(fs, "/data/Hero.png") == "<ERR:NOT_FOUND>");
@@ -148,8 +148,8 @@ TEST_SUITE("native")
 		CHECK(fs.createDir("/data/sub") == Error::NOT_FOUND);
 		CHECK(fs.removeDir("/DATA") == Error::NOT_FOUND);
 
-		// 写入只差大小写的名字：
-		// 区分大小写的文件系统上是另一个文件；不区分的文件系统上会落到已有文件，拒绝为 EXISTS 而不是悄悄覆盖
+		// Writing a name that differs only in case:
+		// on a case-sensitive filesystem it is a different file; on a case-insensitive one it would land on the existing file, so it is rejected as EXISTS instead of silently overwriting
 		Error w = fs.writeFile("/Data/hero.png", "lower");
 		Error d = fs.createDir("/data");
 		if (test::nativeCaseSensitive())
@@ -163,7 +163,7 @@ TEST_SUITE("native")
 			CHECK(w == Error::EXISTS);
 			CHECK(d == Error::EXISTS);
 			CHECK(dir.read("Data/Hero.png") == "hero");
-			// 只改大小写的改名是允许的
+			// A rename that only changes case is allowed
 			CHECK(fs.rename("/Data/Hero.png", "/Data/HERO.png") == Error::OK);
 			CHECK(test::listNames(fs, "/Data") == Names{"HERO.png"});
 			CHECK(test::readAll(fs, "/Data/HERO.png") == "hero");
@@ -179,7 +179,7 @@ TEST_SUITE("native")
 		REQUIRE(fs.mountNative("/", dir.path()) != 0);
 		INFO("nativeCaseSensitive=" << test::nativeCaseSensitive());
 		CHECK(fs.exists("/data/hero.png") == !(test::nativeCaseSensitive() || test::nativeCaseLookupOnly()));
-		// strictCase 只打警告，不改变结果
+		// strictCase only logs a warning and does not change the result
 		NativeOptions o;
 		o.strictCase = true;
 		VirtualFileSystem warn;
@@ -208,7 +208,7 @@ TEST_SUITE("native")
 		CHECK(test::readAll(sandbox, "/escape/secret.txt") == "<ERR:PERMISSION_DENIED>");
 		CHECK(sandbox.writeFile("/escape/new.txt", "x") == Error::PERMISSION_DENIED);
 		CHECK_FALSE(outside.exists("new.txt"));
-		// 链接目标仍在根内：允许
+		// The link target is still inside the root: allowed
 		CHECK(test::readAll(sandbox, "/alias.txt") == "ok");
 	}
 #endif

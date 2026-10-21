@@ -16,7 +16,7 @@ using namespace ArchiveFormat;
 namespace
 {
 
-// a + b 不溢出且 <= limit
+// a + b does not overflow and is <= limit.
 inline bool rangeOk(uint64_t a, uint64_t b, uint64_t limit)
 {
 	return a <= limit && b <= limit - a;
@@ -55,7 +55,7 @@ void ArchiveHeader::serialize(uint8_t* out)
 
 Error ArchiveHeader::parse(const uint8_t* in)
 {
-	// 顺序：magic -> 版本 -> 校验和。先看版本，是为了让以后格式变化（header 长度可能不同）时报“版本不匹配”而不是“损坏”
+	// Order: magic -> version -> checksum. Version is checked first so a later format change (the header length may differ) reports "version mismatch" rather than "corrupted".
 	if (std::memcmp(in + H_MAGIC, MAGIC, sizeof(MAGIC)) != 0)
 		return Error::CORRUPTED;
 	version = ByteIO::readU32LE(in + H_VERSION);
@@ -83,7 +83,7 @@ Error ArchiveHeader::parse(const uint8_t* in)
 		return Error::CORRUPTED;
 	if (!isPowerOfTwo(alignment) || alignment > MAX_ALIGNMENT)
 		return Error::CORRUPTED;
-	// 未知的标志位：本版本只定义了两个
+	// Unknown flag bits: this version defines only two.
 	if (flags & ~(ArchiveFlags::IndexEncrypted | ArchiveFlags::KeyStored))
 		return Error::CORRUPTED;
 	return Error::OK;
@@ -118,7 +118,7 @@ Error ArchiveIndex::stat(std::string_view rel, Stat& out) const
 	{
 		out.type = FileType::FILE;
 		out.size = static_cast<int64_t>(e->size);
-		// 条目 mtime 为 0 时回退到归档文件本身的 mtime
+		// When an entry's mtime is 0, fall back to the archive file's own mtime.
 		out.mtime = e->mtime != 0 ? e->mtime : sourceMtime;
 		return Error::OK;
 	}
@@ -129,7 +129,7 @@ Error ArchiveIndex::stat(std::string_view rel, Stat& out) const
 		out.mtime = sourceMtime;
 		return Error::OK;
 	}
-	// 未命中：如果某一级祖先是文件，按 overlay 规则返回 NOT_DIR
+	// Miss: if some ancestor is a file, return NOT_DIR per the overlay rules.
 	std::string_view p = rel;
 	while (!p.empty())
 	{
@@ -151,10 +151,10 @@ Error ArchiveIndex::build()
 	m_files.reserve(entries.size());
 	m_dirs[std::string()];
 
-	// 确保目录 dir 存在；新建时把它登记到父目录的子项中（每个目录只登记一次）
+	// Ensure directory dir exists; when creating it, register it under its parent (each directory is registered once).
 	auto ensureDir = [this](std::string_view dir)
 	{
-		// 从深到浅找到第一个已存在的祖先，再从浅到深逐级创建
+		// Walk from deep to shallow to the first ancestor that already exists, then create levels from shallow to deep.
 		std::vector<std::string_view> missing;
 		std::string_view p = dir;
 		while (!p.empty() && m_dirs.find(p) == m_dirs.end())
@@ -184,7 +184,7 @@ Error ArchiveIndex::build()
 			DirEntry{std::string(Path::fileName(e.path)), FileType::FILE});
 	}
 
-	// 同一路径既是文件又是目录（例如 "a" 和 "a/b"）：索引不合法
+	// The same path is both a file and a directory (for example "a" and "a/b"): the index is invalid.
 	for (const auto& kv : m_files)
 	{
 		if (m_dirs.find(kv.first) != m_dirs.end())
@@ -211,7 +211,7 @@ Error readFully(IFileStream& stream, int64_t offset, uint8_t* buf, size_t size)
 		int n = stream.read(buf, chunk);
 		if (n < 0)
 			return Error::IO_ERROR;
-		// 提前遇到 EOF：文件被截断
+		// EOF before the requested bytes: the file is truncated.
 		if (n == 0)
 			return Error::CORRUPTED;
 		buf += n;
@@ -245,9 +245,9 @@ std::shared_ptr<const ArchiveIndex> ArchiveReader::open(std::shared_ptr<IArchive
 	if (fileSize < 0)
 		return fail(Error::IO_ERROR);
 
-	// 1. 定位归档起点
+	// 1. Locate the archive start.
 	int64_t base = options.baseOffset;
-	bool viaFooter = false;   // 起点是否由 footer 反推得到
+	bool viaFooter = false;   // Whether the start was derived backwards from the footer.
 	if (base < 0)
 	{
 		uint8_t magic[8];
@@ -258,7 +258,7 @@ std::shared_ptr<const ArchiveIndex> ArchiveReader::open(std::shared_ptr<IArchive
 		}
 		else if (fileSize >= static_cast<int64_t>(FOOTER_SIZE))
 		{
-			// 附加在其他文件（例如 exe）后面：由末尾 footer 的 archiveSize 反推起点
+			// Appended after another file (for example an exe): derive the start from archiveSize in the trailing footer.
 			uint8_t footer[FOOTER_SIZE];
 			e = readFully(*stream, fileSize - FOOTER_SIZE, footer, FOOTER_SIZE);
 			if (e != Error::OK)
@@ -289,7 +289,7 @@ std::shared_ptr<const ArchiveIndex> ArchiveReader::open(std::shared_ptr<IArchive
 	if (e != Error::OK)
 		return fail(e);
 
-	// 所有区段必须依次排列且不越界：header <= data <= index <= footer <= 可用长度
+	// Every region must be in order and in bounds: header <= data <= index <= footer <= available length.
 	if (h.dataOffset < HEADER_SIZE || !rangeOk(h.dataOffset, h.dataSize, h.indexOffset))
 		return fail(Error::CORRUPTED);
 	if (!rangeOk(h.indexOffset, h.indexSize, available) ||
@@ -299,8 +299,8 @@ std::shared_ptr<const ArchiveIndex> ArchiveReader::open(std::shared_ptr<IArchive
 		return fail(Error::CORRUPTED);
 	if (viaFooter)
 	{
-		// 起点由 footer 反推时，footer 必须紧跟在索引之后，archiveSize 要和 header 对得上，
-		// 否则可能把 exe 尾部的垃圾数据当成归档。起点为 0 或显式给出时按 format.md §6 不依赖 footer
+		// When the start was derived from the footer, the footer must sit immediately after the index and archiveSize must match the header,
+		// otherwise trailing garbage after an exe could be treated as an archive. When the start is 0 or given explicitly, format.md section 6 does not depend on the footer.
 		uint8_t footer[FOOTER_SIZE];
 		e = readFully(*stream, base + static_cast<int64_t>(h.indexOffset + h.indexSize), footer, FOOTER_SIZE);
 		if (e != Error::OK)
@@ -310,7 +310,7 @@ std::shared_ptr<const ArchiveIndex> ArchiveReader::open(std::shared_ptr<IArchive
 			return fail(Error::CORRUPTED);
 	}
 
-	// 3. 读索引并做快速损坏检查（XXH3-64 覆盖存储的索引字节，不需要密钥）
+	// 3. Read the index and do a fast corruption check (XXH3-64 covers the stored index bytes and does not need the key).
 	std::vector<uint8_t> indexBuf(static_cast<size_t>(h.indexSize));
 	e = readFully(*stream, base + static_cast<int64_t>(h.indexOffset), indexBuf.data(), indexBuf.size());
 	if (e != Error::OK)
@@ -318,7 +318,7 @@ std::shared_ptr<const ArchiveIndex> ArchiveReader::open(std::shared_ptr<IArchive
 	if (xxh3_64(indexBuf.data(), indexBuf.size()) != h.indexHash)
 		return fail(Error::CORRUPTED);
 
-	// 4. 解密索引
+	// 4. Decrypt the index.
 	if (h.flags & ArchiveFlags::IndexEncrypted)
 	{
 		const uint8_t* key = nullptr;
@@ -335,12 +335,12 @@ std::shared_ptr<const ArchiveIndex> ArchiveReader::open(std::shared_ptr<IArchive
 
 		ChaCha20 cipher(key, h.indexNonce.data(), INDEX_CHACHA_COUNTER);
 		cipher.process(indexBuf.data(), indexBuf.size());
-		// 用明文哈希的低 32 位判断密钥是否正确，避免把错误密钥解出的垃圾当作“损坏”
+		// Use the low 32 bits of the plaintext hash to tell whether the key is correct, so garbage from a wrong key is not reported as "corrupted".
 		if (static_cast<uint32_t>(xxh3_64(indexBuf.data(), indexBuf.size())) != h.keyCheck)
 			return fail(Error::KEY_INVALID);
 	}
 
-	// 5. 解析条目。把每个字段都当作不可信输入
+	// 5. Parse entries. Treat every field as untrusted input.
 	const uint8_t* pool = indexBuf.data() + static_cast<size_t>(h.entryCount) * ENTRY_SIZE;
 	const uint64_t poolSize = h.indexSize - static_cast<uint64_t>(h.entryCount) * ENTRY_SIZE;
 	const uint64_t dataEnd = h.dataOffset + h.dataSize;
@@ -361,7 +361,7 @@ std::shared_ptr<const ArchiveIndex> ArchiveReader::open(std::shared_ptr<IArchive
 		entry.mtime = static_cast<int64_t>(ByteIO::readU64LE(p + E_MTIME));
 		entry.hash = ByteIO::readU64LE(p + E_HASH);
 		std::memcpy(entry.key.data(), p + E_KEY, entry.key.size());
-		// 保留字段必须为 0（format.md §4.1）：给以后的版本留出扩展空间，也拒绝被篡改的索引
+		// Reserved fields must be 0 (format.md section 4.1): room for a later version, and a tampered index is rejected.
 		if (ByteIO::readU32LE(p + E_RESERVED0) != 0 || ByteIO::readU64LE(p + E_RESERVED1) != 0)
 			return fail(Error::CORRUPTED);
 
@@ -378,7 +378,7 @@ std::shared_ptr<const ArchiveIndex> ArchiveReader::open(std::shared_ptr<IArchive
 		entry.path.assign(reinterpret_cast<const char*>(pool + nameOffset), nameLength);
 		if (!Path::isNormalizedRelative(entry.path))
 			return fail(Error::CORRUPTED);
-		// 必须严格升序：保证唯一，也保证可复现
+		// Must be strictly ascending: uniqueness, and a reproducible layout.
 		if (i > 0 && !(index->entries[i - 1].path < entry.path))
 			return fail(Error::CORRUPTED);
 
@@ -390,7 +390,7 @@ std::shared_ptr<const ArchiveIndex> ArchiveReader::open(std::shared_ptr<IArchive
 			continue;
 		}
 
-		// 文件数据必须完全落在数据区内。允许多个条目指向同一段数据（内容去重）
+		// File data must lie entirely inside the data region. Several entries may point at the same span (content dedup).
 		if (entry.offset < h.dataOffset || !rangeOk(entry.offset, entry.storedSize, dataEnd))
 			return fail(Error::CORRUPTED);
 		if (entry.cipher == CipherType::XOR)
@@ -405,8 +405,8 @@ std::shared_ptr<const ArchiveIndex> ArchiveReader::open(std::shared_ptr<IArchive
 		if (entry.compression == CompressionType::LZ4 &&
 			(entry.size > Compression::lz4MaxInputSize() || entry.storedSize > Compression::lz4MaxInputSize()))
 			return fail(Error::CORRUPTED);
-		// LZ4 block 的压缩比不超过约 255:1。声称的原始大小超过这个上限必然是伪造的，
-		// 必须在这里拒绝，否则打开时会按 size 预先分配巨量内存
+		// An LZ4 block's compression ratio is at most about 255:1. A claimed original size above that bound is forged
+		// and must be rejected here, or open would preallocate a huge buffer from size.
 		if (entry.compression == CompressionType::LZ4 && entry.size > entry.storedSize * 255 + 64)
 			return fail(Error::CORRUPTED);
 	}
@@ -431,7 +431,7 @@ Error ArchiveReader::readEntry(const ArchiveIndex& index, const ArchiveEntry& en
 	if (entry.storedSize > SIZE_MAX || entry.size > SIZE_MAX)
 		return Error::UNSUPPORTED;
 
-	// 条目大小已在打开时限制在 LZ4 的上限（约 2 GiB）以内，但仍可能超出可用内存：分配失败返回错误而不是抛出异常
+	// Entry size was already capped at the LZ4 limit (about 2 GiB) at open, but it can still exceed available memory: a failed allocation returns an error instead of throwing.
 	try
 	{
 		return readEntryImpl(index, entry, out, stream);
@@ -452,7 +452,7 @@ Error ArchiveReader::readEntryImpl(const ArchiveIndex& index, const ArchiveEntry
 	Error e = Error::OK;
 	if (!stream && index.source->supportsReadAt())
 	{
-		// 位置读：不需要打开新的流
+		// Positional read: no need to open a new stream.
 		size_t got = 0;
 		while (got < stored.size())
 		{
@@ -460,7 +460,7 @@ Error ArchiveReader::readEntryImpl(const ArchiveIndex& index, const ArchiveEntry
 			if (n < 0)
 				return Error::IO_ERROR;
 			if (n == 0)
-				return Error::CORRUPTED;   // 提前遇到末尾：归档被截断
+				return Error::CORRUPTED;   // Hit the end early: the archive is truncated.
 			got += static_cast<size_t>(n);
 		}
 	}
@@ -477,7 +477,7 @@ Error ArchiveReader::readEntryImpl(const ArchiveIndex& index, const ArchiveEntry
 		if (e != Error::OK)
 			return e;
 	}
-	// 顺序与打包相反：先解密，再解压（打包时先压缩再加密）
+	// Reverse of packing: decrypt first, then decompress (pack compresses, then encrypts).
 	if (entry.cipher == CipherType::XOR)
 		xorCipher(stored.data(), stored.size(), entry.key.data(), entry.keyLength, 0);
 
@@ -512,7 +512,7 @@ Error ArchiveReader::verify(const ArchiveIndex& index,
 		Error result = readEntry(index, entry, data, stream.get());
 		if (result == Error::OK && xxh3_128(data.data(), data.size()).low != entry.hash)
 			result = Error::CORRUPTED;
-		// 哈希不符或数据损坏报告 CORRUPTED；读失败（IO_ERROR 等）保留第一个真实错误，不混为“损坏”
+		// A hash mismatch or damaged data is reported as CORRUPTED; a read failure (IO_ERROR and similar) keeps the first real error and is not folded into "corrupted".
 		if (result != Error::OK && overall == Error::OK)
 			overall = result;
 		if (cb)

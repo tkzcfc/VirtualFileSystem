@@ -1,4 +1,4 @@
-// vfstool cat：把单个文件的内容以二进制输出到 stdout
+// vfstool cat: write one file's contents to stdout as binary
 #include "Commands.h"
 #include "vfs/Path.h"
 #include "vfs/archive/ArchiveBackend.h"
@@ -21,7 +21,7 @@ int runCat(const CatOptions& options, std::ostream& out, std::ostream& err)
 		err << "error: invalid path: " << options.path << "\n";
 		return static_cast<int>(ExitCode::USAGE);
 	}
-	// 通过运行时后端读取，与游戏里的读取路径完全一致（大文件也是流式输出）
+	// Read through the runtime backend, the same path the game uses (large files are streamed too)
 	ArchiveBackend backend(index);
 	Error e = Error::OK;
 	auto stream = backend.open(path, IFileStream::Mode::READ, &e);

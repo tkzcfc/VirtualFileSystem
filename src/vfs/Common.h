@@ -1,5 +1,5 @@
-// 本文件：命名空间宏、导出宏以及全库通用的基础头文件。
-// 所有 vfs 头文件都应首先包含本文件。
+// This file: namespace macros, the export macro, and the common base headers for the library.
+// Every vfs header should include this file first.
 #pragma once
 
 #include "Config.h"
@@ -27,7 +27,7 @@
 #    define NS_VFS
 #endif
 
-// 导出宏：目前 vfs 只构建静态库，保留宏以便以后做成动态库或并入引擎
+// Export macro: vfs is built as a static library today. The macro is kept so it can later become a shared library or be folded into an engine.
 #ifndef VFS_DLL
 #    define VFS_DLL
 #endif

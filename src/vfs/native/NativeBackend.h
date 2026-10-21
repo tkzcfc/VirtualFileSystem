@@ -1,4 +1,4 @@
-// 本文件：本机目录后端。把一个本机目录挂到虚拟路径上。
+// This file: the native directory backend. Mounts a native directory onto a virtual path.
 #pragma once
 
 #include "../IBackend.h"
@@ -6,34 +6,34 @@
 NS_VFS_BEGIN
 
 /**
- * 本机后端选项。
+ * Options for the native backend.
  */
 struct NativeOptions
 {
-	bool readOnly = false;        // 只读：所有写操作返回 READ_ONLY
-	bool followSymlinks = true;   // 为 false 时，解析后逃出根目录的路径一律拒绝
-	bool strictCase = false;      // 为 true 时核对真实文件名的大小写，不一致打警告（结果不变）
-	bool exactCase = false;       // 为 true 时强制按字节匹配名字：在大小写不敏感的文件系统（Windows、macOS 默认）上，
-	                              // 只差大小写的名字视为不存在，行为与 Linux 一致。每次查找对每一级多一次系统调用
-	bool createRoot = false;      // 根目录不存在时自动创建（mkdir -p）
+	bool readOnly = false;        // Read-only: every write returns READ_ONLY
+	bool followSymlinks = true;   // When false, any path that escapes the root after resolution is rejected
+	bool strictCase = false;      // When true, check the real filename's case and warn on a mismatch (the result is unchanged)
+	bool exactCase = false;       // When true, match names byte for byte: on a case-insensitive filesystem (Windows, and macOS by default),
+	                              // a name that differs only in case is treated as missing, matching Linux. Each lookup costs one extra syscall per component
+	bool createRoot = false;      // Create the root directory if it does not exist (mkdir -p)
 };
 
 /**
- * 本机目录后端。
- * - 不做任何缓存，每次都访问文件系统，外部修改立即可见。
- * - 路径段额外拒绝 ':' 和 Windows 保留名，保证各平台行为一致。
- * 线程安全：无共享可变状态，可以任意并发调用。
+ * Native directory backend.
+ * - No caching; every call hits the filesystem, so external changes are visible immediately.
+ * - Path segments additionally reject ':' and Windows reserved names, so behavior matches across platforms.
+ * Thread safety: no shared mutable state; calls may run concurrently without limit.
  */
 class VFS_DLL NativeBackend : public IBackend
 {
 public:
 
 	/**
-	 * 创建本机后端。
-	 * @param rootDir 本机目录（UTF-8，可以是相对路径，会转成绝对路径）
-	 * @param options 选项
-	 * @param err     可选的错误输出：目录不存在返回 NOT_FOUND，不是目录返回 NOT_DIR
-	 * @return 成功返回后端，失败返回 nullptr
+	 * Create a native backend.
+	 * @param rootDir Native directory (UTF-8; a relative path is converted to absolute)
+	 * @param options Options
+	 * @param err     Optional error output: NOT_FOUND if the directory is missing, NOT_DIR if it is not a directory
+	 * @return The backend on success, or nullptr on failure
 	 */
 	static std::shared_ptr<NativeBackend> create(std::string_view rootDir, const NativeOptions& options = {},
 												 Error* err = nullptr);
@@ -63,7 +63,7 @@ public:
 	virtual const char* typeName() const override { return "native"; }
 
 	/**
-	 * 本机根目录（绝对路径，'/' 分隔，UTF-8）。
+	 * Native root directory (absolute path, '/' separated, UTF-8).
 	 */
 	const std::string& root() const { return m_root; }
 
@@ -71,20 +71,20 @@ public:
 
 private:
 
-	// 相对路径转成本机绝对路径，并做路径段检查和 symlink 逃逸检查
+	// Convert a relative path to a native absolute path, and check path segments and symlink escape.
 	Error toNative(std::string_view rel, std::string& out) const;
 
-	// 逐级核对 rel 与磁盘上的真实名字（strictCase / exactCase 使用）。
-	// 返回 NOT_FOUND：某一级父目录只差大小写（按字节匹配时父目录不存在）；
-	// 返回 OK 且 lastMismatch=true：最后一级存在一个只差大小写的条目；其余情况返回 OK
+	// Compare rel, component by component, with the real names on disk (used by strictCase / exactCase).
+	// NOT_FOUND: some parent directory differs only in case (under byte-wise matching that parent does not exist);
+	// OK with lastMismatch=true: the final component exists under a name that differs only in case; otherwise OK
 	Error matchCase(std::string_view rel, bool& lastMismatch) const;
 
-	// strictCase 模式下核对大小写，只打警告不影响结果
+	// In strictCase mode, check case and only warn; the result is unchanged.
 	void checkCase(std::string_view rel) const;
 
 private:
-	std::string m_root;            // 本机根目录
-	std::string m_canonicalRoot;   // followSymlinks=false 时用于逃逸检查的规范根目录
+	std::string m_root;            // Native root directory
+	std::string m_canonicalRoot;   // Canonical root used for escape checks when followSymlinks=false
 	NativeOptions m_options;
 };
 

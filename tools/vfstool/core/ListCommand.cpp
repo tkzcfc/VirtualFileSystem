@@ -1,4 +1,4 @@
-// vfstool list / ls：列出条目
+// vfstool list / ls: list entries.
 #include "Commands.h"
 #include <iomanip>
 
@@ -34,7 +34,7 @@ int runList(const ListOptions& options, std::ostream& out, std::ostream& err)
 		}
 		else if (options.longFormat)
 		{
-			// 标志：D=空目录，E=XOR 加密，C=LZ4 压缩
+			// Flags: D = empty directory, E = XOR encryption, C = LZ4 compression.
 			std::string flags;
 			flags += isDir ? 'D' : '-';
 			flags += entry.cipher != CipherType::NONE ? 'E' : '-';

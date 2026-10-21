@@ -1,4 +1,4 @@
-// vfstool pack：把目录打包成 .vfs
+// vfstool pack: pack a directory into a .vfs archive
 #include "Commands.h"
 #include "vfs/Path.h"
 #include "vfs/archive/ArchiveWriter.h"
@@ -18,13 +18,13 @@ namespace
 
 struct PackItem
 {
-	std::string rel;          // 相对源目录的 '/' 路径
-	std::string nativePath;   // 本机路径
+	std::string rel;          // '/' path relative to the source directory
+	std::string nativePath;   // native path
 	bool isDir = false;
 	FileWriteOptions options;
 };
 
-// 默认排除，作为最前面的规则，用户的 --include 可以覆盖
+// Default excludes, placed as the first rules so a user's --include can override them
 const char* const s_defaultExcludes[] = {".git", ".svn", ".DS_Store", "Thumbs.db", "desktop.ini"};
 
 class Collector
@@ -48,7 +48,7 @@ public:
 		}
 	}
 
-	// 递归收集；目录被显式排除时整棵子树都跳过
+	// Collect recursively; when a directory is explicitly excluded, the whole subtree is skipped
 	Error collect(const stdfs::path& dir, const std::string& rel, std::vector<PackItem>& out)
 	{
 		std::error_code ec;
@@ -80,11 +80,11 @@ public:
 			}
 			else if (child.is_regular_file(ec2))
 			{
-				// 有 --include 时默认不包含，否则默认包含；最后匹配的规则生效
+				// With --include, exclude by default; otherwise include by default; the last matching rule wins
 				if (!Glob::evaluate(m_filters, childRel, !m_hasInclude))
 					continue;
 				std::string nativePath = native::fromFsPath(child.path());
-				// 输出文件在源目录里时不要把自己打进去
+				// If the output file sits inside the source directory, do not pack it into itself
 				if (!m_outputCanonical.empty())
 				{
 					std::error_code ec3;

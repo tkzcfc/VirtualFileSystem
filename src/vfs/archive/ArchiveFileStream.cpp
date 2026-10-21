@@ -22,7 +22,7 @@ ArchiveFileStream::~ArchiveFileStream()
 
 bool ArchiveFileStream::open(std::string_view /*path*/, IFileStream::Mode /*mode*/)
 {
-	// 归档流只能由 ArchiveBackend 构造
+	// Archive streams can only be constructed by ArchiveBackend
 	errno = ENOTSUP;
 	return false;
 }
@@ -62,7 +62,7 @@ int64_t ArchiveFileStream::seek(int64_t offset, int origin) const
 		errno = EINVAL;
 		return -1;
 	}
-	// 允许 seek 到 EOF 之后，之后的 read 返回 0
+	// Seeking past EOF is allowed; a later read returns 0
 	m_pos = base + offset;
 	return m_pos;
 }
@@ -74,12 +74,12 @@ int ArchiveFileStream::read(void* buf, unsigned int size) const
 		errno = EBADF;
 		return -1;
 	}
-	// 已到达或超过 EOF：按 POSIX 语义返回 0
+	// At or past EOF: return 0, matching POSIX
 	const int64_t fileSize = static_cast<int64_t>(m_entry->size);
 	if (m_pos >= fileSize || size == 0)
 		return 0;
 
-	// 读取长度不能超过文件剩余部分，也不能超过单次 IO 上限
+	// The read length cannot exceed the remainder of the file or the per-call IO limit
 	size_t want = static_cast<size_t>(std::min<int64_t>(std::min<unsigned int>(size, VFS_MAX_IO_CHUNK), fileSize - m_pos));
 	uint8_t* out = static_cast<uint8_t*>(buf);
 	const int64_t got64 = readSource(out, want, m_dataStart + m_pos);
@@ -87,7 +87,7 @@ int ArchiveFileStream::read(void* buf, unsigned int size) const
 		return -1;
 	const size_t got = static_cast<size_t>(got64);
 
-	// XOR 加密：密钥位置 = 文件内偏移 % keyLen，可以从任意位置开始解密
+	// XOR encryption: key position = offset within the file % keyLen, so decryption can start at any offset
 	if (m_entry->cipher == CipherType::XOR)
 		xorCipher(out, got, m_entry->key.data(), m_entry->keyLength, static_cast<uint64_t>(m_pos));
 
@@ -97,7 +97,7 @@ int ArchiveFileStream::read(void* buf, unsigned int size) const
 
 int ArchiveFileStream::write(const void* /*buf*/, unsigned int /*size*/) const
 {
-	// 运行时归档只读；关闭之后与其他方法一样是 EBADF
+	// Runtime archives are read-only; after close this is EBADF, same as the other methods
 	errno = m_open ? EROFS : EBADF;
 	return -1;
 }
@@ -138,7 +138,7 @@ int64_t ArchiveFileStream::readSource(uint8_t* out, size_t want, int64_t target)
 	size_t got = 0;
 	if (!m_file)
 	{
-		// 位置读：没有游标，也就不需要 seek
+		// Positional read: there is no cursor, so no seek is needed
 		while (got < want)
 		{
 			int64_t n = m_index->source->readAt(out + got, want - got, static_cast<uint64_t>(target) + got);
@@ -153,7 +153,7 @@ int64_t ArchiveFileStream::readSource(uint8_t* out, size_t want, int64_t target)
 	{
 		if (m_filePos != target)
 		{
-			// 只有位置不连续时才 seek：顺序读时省掉一次系统调用
+			// Seek only when the position is not contiguous: sequential reads skip one system call
 			if (m_file->seek(target, SEEK_SET) != target)
 			{
 				m_filePos = -1;
@@ -176,8 +176,8 @@ int64_t ArchiveFileStream::readSource(uint8_t* out, size_t want, int64_t target)
 		}
 		m_filePos = target + static_cast<int64_t>(got);
 	}
-	// 来源在条目结束之前就到了末尾：归档被截断（或挂载期间被替换），报告 IO 错误而不是悄悄返回短数据。
-	// 已读到的部分先返回，下一次 read 再报告错误
+	// The source hit EOF before the entry ended: the archive was truncated (or replaced while mounted). Report an IO error instead of quietly returning a short read.
+	// Return the bytes already read first; the next read reports the error
 	if (got == 0)
 	{
 		errno = EIO;

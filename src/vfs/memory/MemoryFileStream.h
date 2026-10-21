@@ -1,4 +1,4 @@
-// 本文件：内存文件流。既用于内存后端，也用于归档中压缩文件解压后的数据（只读模式）。
+// This file: the memory file stream. Used both by the memory backend and for decompressed data of compressed files in an archive (read-only mode).
 #pragma once
 
 #include "../IFileStream.h"
@@ -7,19 +7,19 @@
 NS_VFS_BEGIN
 
 /**
- * 内存文件流。
- * - 由后端工厂构造，公开的 open(path, mode) 返回 false 并设置 errno=ENOTSUP。
- * - READ 模式下 write/resize 返回失败（errno=EBADF）。
- * - APPEND 模式每次 write 都写到末尾；seek 越界后 write 会用 0 填充空洞。
- * 线程安全：单个流对象不能跨线程使用；多个流共享同一缓冲区时由缓冲区的锁保证内存安全。
+ * Memory file stream.
+ * - Constructed by the backend factory. The public open(path, mode) returns false and sets errno=ENOTSUP.
+ * - In READ mode, write/resize fail (errno=EBADF).
+ * - APPEND mode writes to the end on every write; a write after a seek past the end fills the hole with 0.
+ * Thread safety: a single stream object must not be used across threads; when several streams share one buffer, the buffer's lock keeps memory access safe.
  */
 class VFS_DLL MemoryFileStream : public IFileStream
 {
 public:
 
 	/**
-	 * @param buffer 数据缓冲区（共享所有权）
-	 * @param mode   打开模式；截断（WRITE）由调用方在构造前完成
+	 * @param buffer Data buffer (shared ownership)
+	 * @param mode   Open mode; truncation (WRITE) is done by the caller before construction
 	 */
 	MemoryFileStream(std::shared_ptr<MemoryBuffer> buffer, IFileStream::Mode mode);
 
@@ -44,9 +44,9 @@ public:
 	virtual bool isOpen() const override;
 
 private:
-	std::shared_ptr<MemoryBuffer> m_buffer;   // 关闭后置空
+	std::shared_ptr<MemoryBuffer> m_buffer;   // Cleared after close
 	IFileStream::Mode m_mode;
-	mutable int64_t m_pos;                    // 当前位置（axmol 接口要求 const 方法）
+	mutable int64_t m_pos;                    // Current position (the axmol interface requires const methods)
 };
 
 NS_VFS_END

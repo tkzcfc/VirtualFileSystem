@@ -1,10 +1,10 @@
-// 死锁与重入测试：每个用例都在看门狗下运行，超时说明出现了死锁（或活锁），直接报告失败并结束进程
-// （死锁的线程无法 join，继续运行只会让整个测试挂住）。覆盖：
-// - 流仍打开时卸载 / 严格卸载 / remount；
-// - 回调（list / walk 回调、日志回调、自定义后端）在 VFS 内部调用期间重入 VFS；
-// - 挂载 / 卸载 / 别名修改与各种 I/O 并发；
-// - 跨后端改名、相向的跨挂载移动；
-// - 嵌套加锁：内存后端的目录锁（改名 / 删除 / 查找交叉）、copy-up 分段锁与后端锁叠加
+// Deadlock and reentrancy tests: every case runs under a watchdog; a timeout means a deadlock (or livelock), so the case fails and the process exits
+// (a deadlocked thread cannot be joined, and continuing would hang the whole test run). Coverage:
+// - unmount / strict unmount / remount while a stream is still open;
+// - callbacks (list / walk callbacks, the log callback, a custom backend) reenter the VFS during an internal VFS call;
+// - mount / unmount / alias changes concurrent with various I/O;
+// - cross-backend rename, and opposing cross-mount moves;
+// - nested locking: memory-backend directory locks (rename / remove / lookup crossing), and copy-up segment locks stacked with backend locks
 #include "TestUtils.h"
 #include "vfs/Log.h"
 #include "vfs/archive/ArchiveBackend.h"
@@ -23,7 +23,7 @@ using namespace vfs;
 namespace
 {
 
-// 在独立线程里运行 fn，最多等 seconds 秒；超时视为死锁：打印用例名后立即结束进程
+// Run fn on its own thread and wait at most seconds; a timeout is treated as a deadlock: print the case name and exit the process immediately.
 void runWithWatchdog(const char* name, const std::function<void()>& fn, int seconds = 120)
 {
 	std::mutex m;
@@ -53,8 +53,8 @@ int rounds(int base)
 }
 
 /**
- * 把调用转发给内部后端的后端，并在 stat / open / list 时调用钩子（钩子里可以重入 VFS），
- * 模拟在回调里访问 VFS 的自定义后端
+ * A backend that forwards calls to an inner backend and invokes a hook on stat / open / list (the hook may reenter the VFS),
+ * simulating a custom backend that touches the VFS from a callback.
  */
 class HookBackend : public IBackend
 {
@@ -92,7 +92,7 @@ public:
 private:
 	void call(std::string_view op, std::string_view rel) const
 	{
-		// 每个线程只重入一层，避免钩子里的 VFS 调用再次触发钩子造成无限递归
+		// Each thread reenters only one level, so a VFS call inside the hook does not fire the hook again and recurse forever.
 		thread_local int depth = 0;
 		if (!hook || depth > 0)
 			return;
@@ -128,18 +128,18 @@ TEST_SUITE("deadlock")
 				CAPTURE(backend->typeName());
 				VirtualFileSystem fs;
 				MountId id = fs.mount("/m", backend);
-				// 单线程：打开的流在惰性卸载后仍能读完；严格卸载在有流时返回 BUSY，流关闭后成功
+				// Single thread: an open stream can still be read to the end after a lazy unmount; strict unmount returns BUSY while a stream is open, and succeeds after it is closed.
 				auto s1 = fs.openFileStream("/m/data.bin", IFileStream::Mode::READ);
 				REQUIRE(s1);
 				CHECK(fs.unmount(id, UnmountFlags::FailIfBusy) == Error::BUSY);
 				CHECK(fs.remount(id, backend) == Error::OK);
-				CHECK(fs.unmount(id, UnmountFlags::FailIfBusy) == Error::BUSY);   // remount 前打开的流仍然计数
+				CHECK(fs.unmount(id, UnmountFlags::FailIfBusy) == Error::BUSY);   // A stream opened before remount still counts.
 				CHECK(fs.unmount(id) == Error::OK);
 				CHECK(test::readStream(*s1) == content);
 				s1.reset();
 				CHECK(!fs.exists("/m/data.bin"));
 
-				// 多线程：读线程反复打开 / 读完 / 关闭，另一个线程反复挂载、严格卸载、惰性卸载、remount
+				// Multiple threads: reader threads repeatedly open / read to the end / close, while another thread repeatedly mounts, strict-unmounts, lazy-unmounts, and remounts.
 				std::atomic<bool> stop{false};
 				std::atomic<int> failures{0};
 				std::atomic<int> reads{0};
@@ -232,11 +232,11 @@ TEST_SUITE("deadlock")
 			{
 				if (entry.type == FileType::FILE && full.rfind("/cb-", 0) == 0)
 				{
-					CHECK(fs.removeFile(full) == Error::OK);   // 删除正在遍历的目录里的文件
+					CHECK(fs.removeFile(full) == Error::OK);   // Delete a file in the directory currently being walked.
 					return true;
 				}
 				if (full == "/x/y")
-					CHECK(fs.rename("/x/y", "/x/z") == Error::OK);   // 改名即将进入的子目录：子目录消失不算错误
+					CHECK(fs.rename("/x/y", "/x/z") == Error::OK);   // Rename a subdirectory that is about to be entered: the subdirectory disappearing is not an error.
 				fs.addAlias("@w", "/x");
 				fs.removeAlias("@w");
 				return true;
@@ -264,7 +264,7 @@ TEST_SUITE("deadlock")
 			std::atomic<int> logs{0};
 			setLogger([&](LogLevel, std::string_view)
 			{
-				// 日志回调里访问 VFS：读、写、列目录
+				// Touch the VFS from the log callback: read, write, and list a directory.
 				++logs;
 				fs.exists("/data/base.txt");
 				fs.writeFile("/data/log.txt", "l");
@@ -273,7 +273,7 @@ TEST_SUITE("deadlock")
 			auto reenter = [&](std::string_view op, std::string_view rel)
 			{
 				++hooks;
-				// 后端在 VFS 调用内部（包括 copy-up 锁内）重入：查询、打开同一路径追加、写其他文件、改挂载表、打日志
+				// The backend reenters during a VFS call (including inside the copy-up lock): query, open the same path for append, write another file, change the mount table, and log.
 				fs.exists("/data/base.txt");
 				if (op == "open" && rel == "data/base.txt")
 				{
@@ -289,7 +289,7 @@ TEST_SUITE("deadlock")
 			upper->hook = reenter;
 
 			CHECK(test::readAll(fs, "/data/base.txt") == "base");
-			// APPEND 一个只读层文件：copy-up 在分段锁内读下层、写上层，后端钩子在锁内重入
+			// APPEND a file from a read-only layer: copy-up reads the lower layer and writes the upper layer under the segment lock, and the backend hook reenters while that lock is held.
 			{
 				auto s = fs.openFileStream("/data/base.txt", IFileStream::Mode::APPEND);
 				REQUIRE(s);
@@ -297,7 +297,7 @@ TEST_SUITE("deadlock")
 			}
 			CHECK(test::readAll(fs, "/data/base.txt") == "base+");
 			CHECK(test::listNames(fs, "/data").size() >= 3);
-			// 多线程同时做同样的事
+			// Several threads do the same thing at once.
 			std::vector<std::thread> threads;
 			for (int t = 0; t < 4; ++t)
 			{
@@ -348,7 +348,7 @@ TEST_SUITE("deadlock")
 					std::this_thread::yield();
 					if (fs.unmount(a) != Error::OK)
 						++failures;
-					Error e = fs.unmount(n, UnmountFlags::FailIfBusy);   // 有读线程的流时 BUSY，改为惰性卸载
+					Error e = fs.unmount(n, UnmountFlags::FailIfBusy);   // BUSY while a reader thread holds a stream; fall back to a lazy unmount.
 					if (e == Error::BUSY)
 						e = fs.unmount(n);
 					if (e != Error::OK)
@@ -375,7 +375,7 @@ TEST_SUITE("deadlock")
 						if (s)
 						{
 							std::string got = test::str(test::readStream(*s));
-							// 没有挂载时 APPEND 会在顶层内存层创建空的 keep.txt
+							// With no mount, APPEND creates an empty keep.txt on the top memory layer.
 							if (got != "archive" && got != "native" && !got.empty())
 								++failures;
 						}
@@ -408,13 +408,13 @@ TEST_SUITE("deadlock")
 				REQUIRE(fs.writeFile("/mem/m" + std::to_string(i), "m" + std::to_string(i)) == Error::OK);
 				REQUIRE(fs.writeFile("/nat/n" + std::to_string(i), "n" + std::to_string(i)) == Error::OK);
 			}
-			// 跨挂载 rename 总是 CROSS_DEVICE，不会去拿另一个后端的锁
+			// A cross-mount rename is always CROSS_DEVICE and does not take the other backend's lock.
 			CHECK(fs.rename("/mem/m0", "/nat/m0") == Error::CROSS_DEVICE);
 			CHECK(fs.rename("/nat/n0", "/mem/n0") == Error::CROSS_DEVICE);
 
 			std::atomic<int> failures{0};
 			std::vector<std::thread> threads;
-			// 两组线程相向移动同一批文件：内存 → 本机、本机 → 内存
+			// Two groups of threads move the same files in opposite directions: memory -> native, and native -> memory.
 			for (int t = 0; t < 4; ++t)
 			{
 				threads.emplace_back([&, t]()
@@ -445,8 +445,8 @@ TEST_SUITE("deadlock")
 			for (auto& th : threads)
 				th.join();
 			CHECK(failures.load() == 0);
-			// 相向的移动是“复制 + 删除”，不是原子的：两边可能都删掉（文档写明 moveFile 跨挂载不保证原子性）。
-			// 这里只要求没有死锁、存在的文件内容完整
+			// Opposing moves are "copy + delete" and are not atomic: both sides may delete the file (the docs state that moveFile across mounts is not atomic).
+			// The requirement here is only that there is no deadlock and that any file that remains has intact contents.
 			for (int i = 0; i < files; ++i)
 			{
 				for (const char* name : {"m", "n"})
@@ -478,7 +478,7 @@ TEST_SUITE("deadlock")
 
 			std::atomic<bool> stop{false};
 			std::vector<std::thread> threads;
-			// 相互交叉的改名：a/b <-> p/q、a/x/y <-> p/s/t/y、祖先与后代之间（a/b/c -> a/c、a/c -> a/b/c）
+			// Crossing renames: a/b <-> p/q, a/x/y <-> p/s/t/y, and between ancestor and descendant (a/b/c -> a/c, a/c -> a/b/c).
 			const std::vector<std::pair<std::string, std::string>> moves = {
 				{"/a/b", "/p/q2"}, {"/p/q2", "/a/b"}, {"/p/q", "/a/b2"}, {"/a/b2", "/p/q"},
 				{"/a/x/y", "/p/s/t/y"}, {"/p/s/t/y", "/a/x/y"}, {"/a/b/c", "/a/c"}, {"/a/c", "/a/b/c"},
@@ -494,7 +494,7 @@ TEST_SUITE("deadlock")
 					}
 				});
 			}
-			// 删除 / 创建 / 深层查找 / 列目录与改名交叉
+			// Delete / create / deep lookup / list crossing with rename.
 			threads.emplace_back([&]()
 			{
 				while (!stop.load())
@@ -517,7 +517,7 @@ TEST_SUITE("deadlock")
 					fs.walk("/", [](const std::string&, const DirEntry&) { return true; });
 				}
 			});
-			// copy-up 分段锁 + 内存后端目录锁：追加只读层文件的同时改名它们所在的父目录
+			// Copy-up segment lock plus memory-backend directory locks: append read-only-layer files while renaming the parent directories that contain them.
 			threads.emplace_back([&]()
 			{
 				for (int i = 0; !stop.load(); ++i)
@@ -537,7 +537,7 @@ TEST_SUITE("deadlock")
 			stop = true;
 			for (size_t t = 4; t < threads.size(); ++t)
 				threads[t].join();
-			// 树没有被破坏：所有目录都还能列出来，每个子树只出现一次
+			// The tree is intact: every directory can still be listed, and each subtree appears only once.
 			std::set<std::string> seen;
 			int duplicates = 0;
 			Error we = fs.walk("/", [&](const std::string& p, const DirEntry&)

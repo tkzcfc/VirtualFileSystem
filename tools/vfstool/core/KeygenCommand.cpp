@@ -1,4 +1,4 @@
-// vfstool keygen：生成 32 字节随机索引密钥（hex）
+// vfstool keygen: generate a 32-byte random index key (hex)
 #include "Commands.h"
 #include "vfs/native/NativeFileStream.h"
 #include "vfs/native/NativeUtils.h"
@@ -11,7 +11,7 @@ namespace tool
 
 int runKeygen(const KeygenOptions& options, std::ostream& out, std::ostream& err)
 {
-	// std::random_device 在主流平台上取自 OS 的随机源（/dev/urandom、BCryptGenRandom 等）
+	// On mainstream platforms std::random_device comes from the OS random source (/dev/urandom, BCryptGenRandom, and so on)
 	std::random_device rd;
 	uint8_t key[32];
 	for (size_t i = 0; i < sizeof(key); i += 4)
@@ -37,7 +37,7 @@ int runKeygen(const KeygenOptions& options, std::ostream& out, std::ostream& err
 	hex.push_back('\n');
 	if (fs.write(hex.data(), static_cast<unsigned int>(hex.size())) != static_cast<int>(hex.size()) || fs.close() != 0)
 	{
-		// 不留下不完整的密钥文件
+		// Do not leave a partial key file
 		fs.close();
 		native::removeFilePath(options.outputFile);
 		err << "error: cannot write " << options.outputFile << "\n";

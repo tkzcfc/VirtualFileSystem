@@ -1,5 +1,5 @@
-// 本文件：VFS 层的错误码。
-// 流层沿用 axmol 的 “-1 + errno” 风格；VFS 层的 API 统一返回 vfs::Error。
+// This file: error codes for the VFS layer.
+// The stream layer keeps axmol's "-1 + errno" style; VFS-layer APIs all return vfs::Error.
 #pragma once
 
 #include "Common.h"
@@ -8,46 +8,46 @@
 NS_VFS_BEGIN
 
 /**
- * VFS 错误码。不使用异常。
- * 每个错误码都能通过 toErrno() 映射成最接近的 POSIX errno。
+ * VFS error codes. Exceptions are not used.
+ * Each code maps through toErrno() to the closest POSIX errno.
  */
 enum class Error
 {
-	OK,                 // 成功
-	NOT_FOUND,          // ENOENT：文件或目录不存在
-	EXISTS,             // EEXIST：已经存在
-	NOT_DIR,            // ENOTDIR：路径中间某一级不是目录，或者对文件做目录操作
-	IS_DIR,             // EISDIR：对目录做文件操作
-	NOT_EMPTY,          // ENOTEMPTY：目录非空
-	READ_ONLY,          // EROFS：只读层、没有可写层，或写入后会被遮挡
-	CROSS_DEVICE,       // EXDEV：跨后端 rename
-	BUSY,               // EBUSY：挂载点不能删除/改名，或严格卸载时仍有打开的流
-	INVALID_PATH,       // EINVAL：路径不合法（`..` 越过根、控制字符、Windows 保留名等）
-	PERMISSION_DENIED,  // EACCES：操作系统拒绝，或 symlink 逃出根目录
-	IO_ERROR,           // EIO：底层 IO 失败
-	UNSUPPORTED,        // ENOTSUP：后端不支持该操作
-	CORRUPTED,          // 归档损坏（magic、校验和、索引内容不合法）
-	VERSION_MISMATCH,   // 归档版本与本程序不一致
-	KEY_REQUIRED,       // 归档索引已加密，但既没有存储密钥也没有传入密钥
-	KEY_INVALID,        // 传入的密钥错误，或者格式不对
+	OK,                 // success
+	NOT_FOUND,          // ENOENT: file or directory does not exist
+	EXISTS,             // EEXIST: already exists
+	NOT_DIR,            // ENOTDIR: an intermediate path component is not a directory, or a directory operation was applied to a file
+	IS_DIR,             // EISDIR: a file operation was applied to a directory
+	NOT_EMPTY,          // ENOTEMPTY: directory is not empty
+	READ_ONLY,          // EROFS: read-only layer, no writable layer, or the write would be hidden
+	CROSS_DEVICE,       // EXDEV: rename across backends
+	BUSY,               // EBUSY: a mount point cannot be removed or renamed, or a strict unmount still has open streams
+	INVALID_PATH,       // EINVAL: illegal path (`..` escapes the root, control characters, Windows reserved names, and so on)
+	PERMISSION_DENIED,  // EACCES: the operating system refused, or a symlink escapes the root
+	IO_ERROR,           // EIO: underlying IO failed
+	UNSUPPORTED,        // ENOTSUP: the backend does not support this operation
+	CORRUPTED,          // archive is corrupt (magic, checksum, or illegal index contents)
+	VERSION_MISMATCH,   // archive version does not match this program
+	KEY_REQUIRED,       // the archive index is encrypted, but neither a stored key nor a supplied key is available
+	KEY_INVALID,        // the supplied key is wrong, or its format is wrong
 };
 
 /**
- * 把错误码转换成 POSIX errno 值（例如 Error::NOT_FOUND -> ENOENT）。
+ * Convert an error code to a POSIX errno value (for example Error::NOT_FOUND -> ENOENT).
  */
 VFS_DLL int toErrno(Error err);
 
 /**
- * 返回错误码的英文名字（例如 "NOT_FOUND"），用于日志和 CLI 输出。
+ * Return the English name of an error code (for example "NOT_FOUND"), for logs and CLI output.
  */
 VFS_DLL const char* errorName(Error err);
 
 /**
- * 返回错误码的英文说明，用于 CLI 输出和日志。
+ * Return the English description of an error code, for CLI output and logs.
  */
 VFS_DLL const char* errorMessage(Error err);
 
-// 小工具：把错误写入可选的输出参数；失败时同时设置 errno，方便与 axmol 风格兼容
+// Helper: write the error into an optional out parameter; on failure also set errno, for compatibility with the axmol style.
 inline void setError(Error* out, Error err)
 {
 	if (out)

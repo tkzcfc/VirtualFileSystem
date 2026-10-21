@@ -1,4 +1,4 @@
-// 本文件：单文件后端。把一个本机文件挂到虚拟路径上，相当于 Linux 的文件 bind mount。
+// This file: the single-file backend. Mounts one native file onto a virtual path, equivalent to a Linux file bind mount.
 #pragma once
 
 #include "../IBackend.h"
@@ -6,19 +6,19 @@
 NS_VFS_BEGIN
 
 /**
- * 单文件后端：只含一个条目（相对路径为空串）。
- * 挂载点路径下的子路径一律返回 NOT_DIR。用途：覆盖单个配置或调试文件。
- * 线程安全：无共享可变状态。
+ * Single-file backend: it contains one entry (the relative path is the empty string).
+ * Any path under the mount point returns NOT_DIR. Use it to overlay a single config or debug file.
+ * Thread safety: no shared mutable state.
  */
 class VFS_DLL SingleFileBackend : public IBackend
 {
 public:
 
 	/**
-	 * 创建单文件后端。
-	 * @param nativeFile 本机文件路径（UTF-8），必须是已存在的普通文件
-	 * @param readOnly   为 true 时禁止写入
-	 * @param err        可选的错误输出
+	 * Create a single-file backend.
+	 * @param nativeFile Native file path (UTF-8); must be an existing regular file
+	 * @param readOnly   When true, writes are forbidden
+	 * @param err        Optional error output
 	 */
 	static std::shared_ptr<SingleFileBackend> create(std::string_view nativeFile, bool readOnly = false,
 													 Error* err = nullptr);

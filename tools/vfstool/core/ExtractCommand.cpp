@@ -1,4 +1,4 @@
-// vfstool extract：提取指定的文件或目录
+// vfstool extract: extract a specified file or directory
 #include "Commands.h"
 #include "vfs/Path.h"
 
@@ -33,7 +33,7 @@ int runExtract(const ExtractOptions& options, std::ostream& out, std::ostream& e
 			err << "error: invalid path: " << raw << "\n";
 			return static_cast<int>(ExitCode::USAGE);
 		}
-		// 文件：直接提取；目录（含根目录 ""）：提取其下所有条目
+		// File: extract it directly; directory (including the root ""): extract every entry under it
 		std::vector<const ArchiveEntry*> targets;
 		if (const ArchiveEntry* entry = index->findFile(path))
 			targets.push_back(entry);

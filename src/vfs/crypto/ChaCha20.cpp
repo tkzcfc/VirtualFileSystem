@@ -59,7 +59,7 @@ void blockFunction(const uint32_t in[16], uint8_t out[64])
 {
 	uint32_t x[16];
 	std::memcpy(x, in, sizeof(x));
-	// 20 轮 = 10 次（列轮 + 对角轮）
+	// 20 rounds = 10 iterations (column round + diagonal round)
 	for (int i = 0; i < 10; ++i)
 	{
 		VFS_CHACHA_QR(x[0], x[4], x[8], x[12])
@@ -88,7 +88,7 @@ ChaCha20::ChaCha20(const uint8_t* key, const uint8_t* nonce, uint32_t counter)
 
 ChaCha20::~ChaCha20()
 {
-	// 清零密钥材料；volatile 指针防止编译器把清零优化掉
+	// Zero the key material; a volatile pointer stops the compiler from optimizing the wipe away
 	volatile uint8_t* p = reinterpret_cast<volatile uint8_t*>(m_state);
 	for (size_t i = 0; i < sizeof(m_state); ++i)
 		p[i] = 0;
@@ -100,7 +100,7 @@ ChaCha20::~ChaCha20()
 void ChaCha20::nextBlock()
 {
 	blockFunction(m_state, m_keystream);
-	// 32 位计数器，按 RFC 8439 回绕（单个索引最大 256 GB，实际不会发生）
+	// 32-bit counter, wraps per RFC 8439 (one index is at most 256 GB, which does not happen in practice)
 	++m_state[12];
 	m_used = 0;
 }

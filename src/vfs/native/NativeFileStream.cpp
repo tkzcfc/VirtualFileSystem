@@ -16,15 +16,15 @@
 #    include <unistd.h>
 #    include <fcntl.h>
 #    include <errno.h>
-// 与 axmol 一致的创建权限：用户和组可读写
+// Creation permissions matching axmol: user and group can read and write
 #    define VFS_O_SHARE_FLAGS (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP)
 #    if defined(O_CLOEXEC)
 #        define VFS_O_CLOEXEC O_CLOEXEC
 #    else
 #        define VFS_O_CLOEXEC 0
 #    endif
-// 统一使用 lseek / ftruncate：库以 _FILE_OFFSET_BITS=64 编译（见 src/vfs/CMakeLists.txt），32 位 glibc 上 off_t 也是 64 位；
-// musl 1.2.4 起已经去掉了 lseek64 / ftruncate64，Apple、BSD 的 off_t 本来就是 64 位
+// Always use lseek / ftruncate: the library is built with _FILE_OFFSET_BITS=64 (see src/vfs/CMakeLists.txt), so off_t is 64-bit even on 32-bit glibc;
+// musl dropped lseek64 / ftruncate64 starting with 1.2.4, and Apple and BSD off_t was already 64-bit
 static_assert(sizeof(off_t) == 8, "need 64-bit off_t: build with _FILE_OFFSET_BITS=64");
 #    define vfs_lseek64 ::lseek
 #    define vfs_ftruncate64 ::ftruncate
@@ -74,8 +74,8 @@ NativeFileStream::~NativeFileStream()
 
 namespace
 {
-// ReadFile / WriteFile / SetEndOfFile 失败时的 errno：磁盘满报告 ENOSPC（与 POSIX write 一致），
-// 权限、共享冲突是 EACCES，句柄无效是 EBADF，其余都是 I/O 错误
+// errno when ReadFile / WriteFile / SetEndOfFile fails: a full disk reports ENOSPC (same as POSIX write),
+// permission and sharing conflicts are EACCES, an invalid handle is EBADF, and everything else is an I/O error
 int ioErrno(DWORD code)
 {
 	switch (code)
@@ -99,7 +99,7 @@ bool NativeFileStream::open(std::string_view path, IFileStream::Mode mode)
 {
 	close();
 
-	// 与 axmol 相同的模式表，只是共享模式多了 FILE_SHARE_DELETE：其他句柄可以删除、改名、替换这个文件（POSIX 行为）
+	// Same mode table as axmol, except the share mode also includes FILE_SHARE_DELETE: other handles may delete, rename, or replace this file (POSIX behavior)
 	static const DWORD shareMode = FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE;
 	DWORD access = GENERIC_READ | GENERIC_WRITE;
 	DWORD creation = OPEN_ALWAYS;
@@ -121,8 +121,8 @@ bool NativeFileStream::open(std::string_view path, IFileStream::Mode mode)
 
 	std::wstring wpath = native::toWidePath(path);
 	HANDLE h = INVALID_HANDLE_VALUE;
-	// 杀毒软件 / 索引服务可能短暂地以不共享的方式打开文件，“删除挂起”的同名文件也会让创建失败，做有限次重试。
-	// 打开目录返回的 ACCESS_DENIED 不是瞬时错误，不重试
+	// Antivirus / the indexer may briefly open the file without sharing, and a same-named file left "delete pending" can also make create fail, so retry a limited number of times.
+	// ACCESS_DENIED from opening a directory is not transient and is not retried
 	DWORD code = native::retryTransient([&]() -> unsigned long
 	{
 		h = ::CreateFileW(wpath.c_str(), access, shareMode, nullptr, creation, FILE_ATTRIBUTE_NORMAL, nullptr);
@@ -170,7 +170,7 @@ int64_t NativeFileStream::seek(int64_t offset, int origin) const
 		errno = EBADF;
 		return -1;
 	}
-	// SEEK_SET/SEEK_CUR/SEEK_END 与 FILE_BEGIN/FILE_CURRENT/FILE_END 的数值相同
+	// SEEK_SET/SEEK_CUR/SEEK_END have the same numeric values as FILE_BEGIN/FILE_CURRENT/FILE_END
 	LARGE_INTEGER seekpos, newpos;
 	seekpos.QuadPart = offset;
 	if (::SetFilePointerEx(m_handle, seekpos, &newpos, static_cast<DWORD>(origin)))
@@ -207,9 +207,9 @@ int NativeFileStream::write(const void* buf, unsigned int size) const
 	DWORD bytesWritten = 0;
 	if (m_append)
 	{
-		// Windows 没有 O_APPEND。“先 seek 到末尾再写”在多个句柄同时追加时会互相覆盖；
-		// OVERLAPPED 偏移全为 0xFFFFFFFF 表示“写到文件末尾”，由系统原子地完成，等价于 FILE_APPEND_DATA。
-		// 同步句柄上写完后文件指针位于写入数据之后
+		// Windows has no O_APPEND. "Seek to the end, then write" overwrites itself when several handles append at once;
+		// an OVERLAPPED offset of all 0xFFFFFFFF means "write at the end of the file", done atomically by the system, equivalent to FILE_APPEND_DATA.
+		// On a synchronous handle the file pointer sits just after the written data
 		OVERLAPPED ov{};
 		ov.Offset = 0xFFFFFFFFu;
 		ov.OffsetHigh = 0xFFFFFFFFu;
@@ -245,7 +245,7 @@ bool NativeFileStream::resize(int64_t newSize) const
 		errno = m_handle == s_invalidHandle ? EBADF : EINVAL;
 		return false;
 	}
-	// SetEndOfFile 以当前位置为新的结尾，所以先保存位置，完成后恢复（与 axmol 的 seek_guard 一致）
+	// SetEndOfFile uses the current position as the new end, so save the position and restore it afterwards (same as axmol's seek_guard)
 	int64_t place = tell();
 	if (seek(newSize, SEEK_SET) < 0)
 		return false;
@@ -263,7 +263,7 @@ bool NativeFileStream::open(std::string_view path, IFileStream::Mode mode)
 {
 	close();
 
-	// 与 axmol 一致的 POSIX 标志表；额外加 O_CLOEXEC，避免句柄泄漏到子进程
+	// POSIX flag table matching axmol; O_CLOEXEC is added so the handle is not leaked to child processes
 	int flags = O_RDONLY;
 	switch (mode)
 	{
@@ -287,7 +287,7 @@ bool NativeFileStream::open(std::string_view path, IFileStream::Mode mode)
 	if (fd == -1)
 		return false;
 
-	// POSIX 允许以只读方式打开目录，这里拒绝，保证所有后端行为一致
+	// POSIX allows opening a directory read-only; reject that here so every backend behaves the same
 	struct stat st;
 	if (::fstat(fd, &st) == 0 && S_ISDIR(st.st_mode))
 	{
@@ -332,7 +332,7 @@ int NativeFileStream::read(void* buf, unsigned int size) const
 	}
 	if (size > VFS_MAX_IO_CHUNK)
 		size = VFS_MAX_IO_CHUNK;
-	// 被信号打断（EINTR）时重试，不把它当成 I/O 错误交给调用方
+	// Retry when interrupted by a signal (EINTR) instead of handing it to the caller as an I/O error
 	ssize_t n;
 	do
 		n = ::read(m_handle, buf, size);
@@ -363,7 +363,7 @@ int64_t NativeFileStream::size() const
 		errno = EBADF;
 		return -1;
 	}
-	// fstat 不改变当前位置，比 axmol 的两次 lseek 少一次系统调用
+	// fstat does not change the current position, one system call fewer than axmol's two lseeks
 	struct stat st;
 	if (::fstat(m_handle, &st) != 0)
 		return -1;
@@ -377,7 +377,7 @@ bool NativeFileStream::resize(int64_t newSize) const
 		errno = m_handle == -1 ? EBADF : EINVAL;
 		return false;
 	}
-	// ftruncate 不移动文件位置；位置超过新大小时 POSIX 允许（之后 read 返回 0）
+	// ftruncate does not move the file position; POSIX allows a position past the new size (a later read returns 0)
 	return vfs_ftruncate64(m_handle, newSize) == 0;
 }
 

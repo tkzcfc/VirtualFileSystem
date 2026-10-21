@@ -1,4 +1,4 @@
-// doctest 入口
+// doctest entry point
 #define DOCTEST_CONFIG_IMPLEMENT
 #include "doctest.h"
 #include "vfs/Platform.h"
@@ -10,8 +10,8 @@
 int main(int argc, char** argv)
 {
 #if VFS_PLATFORM_POSIX && !VFS_PLATFORM_WASM
-	// 部分平台默认的打开文件数上限很低（iOS 模拟器、macOS 终端为 256），
-	// 而矩阵测试会同时打开 300 个流；在硬上限允许的范围内提高软上限
+	// Some platforms default to a low open-file limit (256 on the iOS simulator and in a macOS terminal),
+	// while the matrix tests open 300 streams at once; raise the soft limit as far as the hard limit allows.
 	struct rlimit lim;
 	if (::getrlimit(RLIMIT_NOFILE, &lim) == 0 && lim.rlim_cur < 4096)
 	{

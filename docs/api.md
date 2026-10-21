@@ -1,37 +1,37 @@
-# API 参考
+# API reference
 
-日常使用只需包含一个头文件：
+Day-to-day use needs a single header:
 
 ```cpp
-#include "vfs/VirtualFileSystem.h"   // 链接目标 vfs（别名 vfs::vfs）
-USING_NS_VFS;                         // 或者写 vfs::
+#include "vfs/VirtualFileSystem.h"   // Link target vfs (alias vfs::vfs)
+USING_NS_VFS;                         // Or write vfs::
 ```
 
-它已包含挂载、本机 / 内存 / 归档后端和流接口。其他组件按需包含：`"vfs/native/SingleFileBackend.h"`、`"vfs/archive/ArchiveWriter.h"`、`"vfs/Log.h"`。
+It already includes mounts, the native / memory / archive backends, and the stream interface. Include other pieces as needed: `"vfs/native/SingleFileBackend.h"`, `"vfs/archive/ArchiveWriter.h"`, `"vfs/Log.h"`.
 
-完整的参数说明见各头文件的注释，本文按用途汇总。路径参数一律是 UTF-8 的虚拟路径，规范化与分层规则见 [挂载规则](mount-rules.md)。
+Full parameter notes are in the header comments; this page groups them by use. Path arguments are always UTF-8 virtual paths. Normalization and layering rules are in [Mount rules](mount-rules.md).
 
-## 1. 错误处理
+## 1. Error handling
 
 ```cpp
 enum class Error { OK, NOT_FOUND, EXISTS, NOT_DIR, IS_DIR, NOT_EMPTY, READ_ONLY, CROSS_DEVICE, BUSY,
                    INVALID_PATH, PERMISSION_DENIED, IO_ERROR, UNSUPPORTED, CORRUPTED, VERSION_MISMATCH,
                    KEY_REQUIRED, KEY_INVALID };
 
-int toErrno(Error e);              // 映射到 POSIX errno，见 mount-rules.md §11
+int toErrno(Error e);              // Map to a POSIX errno; see mount-rules.md section 11
 const char* errorName(Error e);    // "NOT_FOUND"
-const char* errorMessage(Error e); // 英文说明（例如 "no such file or directory"）
+const char* errorMessage(Error e); // English description (for example "no such file or directory")
 ```
 
-- 返回 `Error` 的函数失败时同时设置 `errno = toErrno(e)`。
-- 返回指针、流或 `MountId` 的函数失败时返回空值或 `0`，错误通过可选的 `Error* err` 输出。
+- A function that returns `Error` also sets `errno = toErrno(e)` on failure.
+- A function that returns a pointer, a stream, or a `MountId` returns an empty value or `0` on failure, and reports the error through the optional `Error* err`.
 
-## 2. 挂载
+## 2. Mounts
 
 ```cpp
 struct MountOptions
 {
-	int priority = 0;     // 大的在上；相同时后挂载的在上
+	int priority = 0;     // Larger is higher; when equal, the later mount is higher
 	uint32_t flags = 0;   // MountFlags::ReadOnly | Opaque | WriteTarget
 };
 
@@ -42,49 +42,49 @@ MountId mountArchive(mountPoint, nativePath, const ArchiveOptions& = {}, const M
 MountId mountFile(mountPoint, nativeFile, const MountOptions& = {}, Error* err = nullptr);
 
 Error unmount(MountId id, uint32_t flags = 0);         // flags: UnmountFlags::FailIfBusy
-Error remount(MountId id, std::shared_ptr<IBackend>);  // 原子替换后端
-std::vector<MountInfo> mounts() const;                 // {id, mountPoint, priority, flags, backend}，按层序排列
-Error addAlias(prefix, target);                        // 例如 addAlias("res://", "/res")
+Error remount(MountId id, std::shared_ptr<IBackend>);  // Atomically replace the backend
+std::vector<MountInfo> mounts() const;                 // {id, mountPoint, priority, flags, backend}, in layer order
+Error addAlias(prefix, target);                        // For example addAlias("res://", "/res")
 Error removeAlias(prefix);
-uint64_t generation() const;                           // 挂载表变化或写操作后递增
+uint64_t generation() const;                           // Increments after a mount-table change or a write
 ```
 
-- 成功返回非 0 的 `MountId`。挂载点必须是合法路径，否则 `INVALID_PATH`；`backend` 为空返回 `UNSUPPORTED`。
-- `mountNative` 的目录不存在返回 `NOT_FOUND`（设置 `NativeOptions::createRoot` 时自动创建），不是目录返回 `NOT_DIR`。
-- `mountFile` 的文件必须是已存在的普通文件。
-- `mountArchive` 打开失败时返回归档错误（`CORRUPTED`、`VERSION_MISMATCH`、`KEY_REQUIRED`、`KEY_INVALID` 或 IO 错误）。
+- Success returns a non-zero `MountId`. The mount point must be a legal path, otherwise `INVALID_PATH`; a null `backend` returns `UNSUPPORTED`.
+- `mountNative` returns `NOT_FOUND` if the directory does not exist (it is created when `NativeOptions::createRoot` is set), and `NOT_DIR` if it is not a directory.
+- The file passed to `mountFile` must be an existing regular file.
+- If `mountArchive` fails to open, it returns an archive error (`CORRUPTED`, `VERSION_MISMATCH`, `KEY_REQUIRED`, `KEY_INVALID`, or an IO error).
 
-### 后端选项
+### Backend options
 
 ```cpp
 struct NativeOptions
 {
-	bool readOnly = false;        // 所有写操作返回 READ_ONLY
-	bool followSymlinks = true;   // false：解析后逃出根目录的路径一律拒绝（PERMISSION_DENIED）
-	bool strictCase = false;      // true：核对真实文件名的大小写，不一致时输出警告（结果不变）
-	bool exactCase = false;       // true：按字节匹配名字，大小写不敏感的文件系统上只差大小写视为不存在（见 mount-rules.md §1）
-	bool createRoot = false;      // 根目录不存在时自动创建（mkdir -p）
+	bool readOnly = false;        // Every write returns READ_ONLY
+	bool followSymlinks = true;   // false: reject any path that escapes the root after resolution (PERMISSION_DENIED)
+	bool strictCase = false;      // true: check the real filename's case and warn on a mismatch (the result is unchanged)
+	bool exactCase = false;       // true: match names byte for byte; on a case-insensitive filesystem a name that differs only in case is missing (see mount-rules.md section 1)
+	bool createRoot = false;      // Create the root directory if it does not exist (mkdir -p)
 };
 
 struct MemoryOptions
 {
-	bool readOnly = false;        // 只读：只能通过 addFile 预填数据
+	bool readOnly = false;        // Read-only: data can only be prefilled through addFile
 };
 
 struct ArchiveOptions
 {
-	std::vector<uint8_t> indexKey;   // 非空时必须 32 字节，覆盖归档中存储的索引密钥
-	int64_t baseOffset = -1;         // 归档起点；-1 自动（偏移 0 处的 magic，否则看文件末尾的 footer）
+	std::vector<uint8_t> indexKey;   // When non-empty it must be 32 bytes, and it overrides the index key stored in the archive
+	int64_t baseOffset = -1;         // Archive start; -1 is automatic (magic at offset 0, otherwise the footer at the end of the file)
 };
 ```
 
-本机后端的平台说明：
+Platform notes for the native backend:
 
-- **Windows 长路径**：UTF-8 路径转 UTF-16 时，长度达到 `MAX_PATH - 12`（`CreateDirectoryW` 的限制）就转换为绝对路径并加 `\\?\` 前缀（UNC 路径为 `\\?\UNC\server\share\...`），所有本机操作（打开、stat、列目录、mkdir、删除、改名）都走同一个转换，不依赖系统的 `LongPathsEnabled` 设置。仓库里的可执行文件（MSVC）另外嵌入了 `longPathAware` 清单（`cmake/longpath.manifest`，CMake 函数 `vfs_add_long_path_manifest`）。
-- **Windows 共享与替换**：本机流以三种共享方式全开打开；删除、改名覆盖优先用 POSIX 语义，打开中的文件可以被删除或替换（详见 mount-rules.md §7、§9）。追加写（`APPEND`）用“写到文件末尾”的原子写，多个流并发追加不会互相覆盖。
-- **大小写**：默认随文件系统，`exactCase` 可以强制按字节匹配（mount-rules.md §1）。
+- **Windows long paths**: when converting a UTF-8 path to UTF-16, a length of `MAX_PATH - 12` (the `CreateDirectoryW` limit) is converted to an absolute path and given a `\\?\` prefix (a UNC path becomes `\\?\UNC\server\share\...`). Every native operation (open, stat, list, mkdir, delete, rename) uses the same conversion and does not depend on the system's `LongPathsEnabled` setting. Executables in this repository (MSVC) also embed a `longPathAware` manifest (`cmake/longpath.manifest`, CMake function `vfs_add_long_path_manifest`).
+- **Windows sharing and replacement**: a native stream is opened with all three share modes; delete and rename-overwrite prefer POSIX semantics, so a file that is open can be deleted or replaced (see mount-rules.md sections 7 and 9). Append writes (`APPEND`) use an atomic "write at end of file", so concurrent appends from several streams do not overwrite each other.
+- **Case**: the default follows the filesystem; `exactCase` forces a byte-wise match (mount-rules.md section 1).
 
-后端也可以单独创建再交给 `mount()`：
+A backend can also be created on its own and passed to `mount()`:
 
 ```cpp
 #include "vfs/native/SingleFileBackend.h"
@@ -92,7 +92,7 @@ struct ArchiveOptions
 auto native  = NativeBackend::create("assets", NativeOptions{}, &err);
 auto single  = SingleFileBackend::create("settings.ini", /*readOnly*/ false, &err);
 auto memory  = MemoryBackend::create(MemoryOptions{});
-memory->addFile("config/default.json", "{}");          // 自动创建父目录，只读模式下同样可用
+memory->addFile("config/default.json", "{}");          // Creates parent directories; also available in read-only mode
 memory->setReadOnly(true);
 
 auto archive = ArchiveBackend::create("game.vfs", ArchiveOptions{}, &err);
@@ -100,60 +100,60 @@ auto inMem   = ArchiveBackend::create(std::make_shared<MemoryArchiveSource>(std:
 fs.mount("/res", archive, MountOptions{0, MountFlags::ReadOnly});
 ```
 
-`ArchiveBackend::verifyAll()` 校验归档中所有文件的内容哈希（离线检查用，相当于把归档读一遍）。
+`ArchiveBackend::verifyAll()` checks the content hash of every file in the archive (for offline checks; equivalent to reading the archive once).
 
-## 3. 查询
+## 3. Queries
 
 ```cpp
 Error stat(path, Stat& out) const;   // Stat{type, size, mtime, mount, writable}
 bool exists(path) const;
 bool isFile(path) const;
 bool isDir(path) const;
-int64_t fileSize(path) const;        // 不是文件或不存在时返回 -1
+int64_t fileSize(path) const;        // Returns -1 when it is not a file or does not exist
 
-Error list(path, const std::function<bool(const DirEntry&)>& cb) const;  // 回调返回 false 停止
+Error list(path, const std::function<bool(const DirEntry&)>& cb) const;  // The callback returns false to stop
 std::vector<DirEntry> list(path, Error* err = nullptr) const;            // DirEntry{name, type}
 Error walk(path, const std::function<bool(const std::string& fullPath, const DirEntry&)>& cb) const;
-std::string realPath(path) const;    // 可见项对应的本机路径；不在本机后端上时返回空串
+std::string realPath(path) const;    // Native path of the visible entry; empty when it is not on a native backend
 ```
 
-- `Stat::mtime` 为 Unix 秒，`0` 表示未知；归档中 mtime 为 0 的条目返回归档文件自身的修改时间。
-- `Stat::mount` 是可见项所在的挂载 ID，合成的虚拟目录为 `0`。
-- `list` 的结果按名字字节序排列；`walk` 深度优先、目录先于其子项回调，`fullPath` 是虚拟绝对路径。
+- `Stat::mtime` is Unix seconds; `0` means unknown. An archive entry whose mtime is 0 returns the modification time of the archive file itself.
+- `Stat::mount` is the mount id of the visible entry; a synthesized virtual directory is `0`.
+- `list` results are ordered by name bytes; `walk` is depth-first and calls back a directory before its children. `fullPath` is a virtual absolute path.
 
-## 4. 读写
+## 4. Reads and writes
 
 ```cpp
 std::unique_ptr<IFileStream> openFileStream(path, IFileStream::Mode mode, Error* err = nullptr) const;
 
 Error readFile(path, std::vector<uint8_t>& out) const;
 Error readFile(path, std::string& out) const;
-Error writeFile(path, const void* data, size_t size) const;   // WRITE 模式：创建或截断
+Error writeFile(path, const void* data, size_t size) const;   // WRITE mode: create or truncate
 Error writeFile(path, std::string_view data) const;
-Error writeFileAtomic(path, const void* data, size_t size) const;   // 写 path.vfs-N.tmp 后 rename，失败时删除临时文件
+Error writeFileAtomic(path, const void* data, size_t size) const;   // Write path.vfs-N.tmp, then rename; delete the temporary file on failure
 ```
 
-- 读模式取可见项；写模式按 [写入目标规则](mount-rules.md#5-写入目标) 选择层，必要时 copy-up。
-- 目录不能作为文件打开（`IS_DIR`）。
-- 空文件也会返回有效的流（`size() == 0`）。
+- Read mode uses the visible entry; write mode picks a layer by the [write-target rules](mount-rules.md#5-write-target) and copy-up when needed.
+- A directory cannot be opened as a file (`IS_DIR`).
+- An empty file still returns a valid stream (`size() == 0`).
 
-## 5. 修改
+## 5. Modifications
 
 ```cpp
-Error createDir(path) const;                      // 已存在返回 EXISTS
+Error createDir(path) const;                      // EXISTS if it already exists
 Error createDirs(path) const;                     // mkdir -p
 Error removeDir(path, bool recursive = false) const;
 Error removeFile(path) const;
-Error rename(from, to) const;                     // 同一挂载内原子改名
-Error moveFile(from, to) const;                   // 跨挂载时文件退化为复制 + 删除
-Error copyFile(from, to) const;                   // 复制到自身：可写时不做任何事，只读层时等于 copy-up
+Error rename(from, to) const;                     // Atomic rename within one mount
+Error moveFile(from, to) const;                   // Across mounts, a file degrades to copy + delete
+Error copyFile(from, to) const;                   // Copy onto itself: a no-op when writable; equal to copy-up on a read-only layer
 ```
 
-各操作的落点与错误码见 [挂载规则](mount-rules.md) §6–§9。
+Where each operation lands, and its error codes, are in [Mount rules](mount-rules.md) sections 6-9.
 
 ## 6. IFileStream
 
-`vfs::IFileStream` 与 axmol 引擎的 `ax::IFileStream` 签名完全一致；定义 `VFS_WITH_AXMOL` 时它就是 `ax::IFileStream` 的别名。
+`vfs::IFileStream` has the same signature as the axmol engine's `ax::IFileStream`; when `VFS_WITH_AXMOL` is defined it is an alias of `ax::IFileStream`.
 
 ```cpp
 class IFileStream
@@ -168,53 +168,53 @@ public:
 	virtual int write(const void* buf, unsigned int size) const = 0;
 	virtual int64_t tell() const = 0;
 	virtual int64_t size() const = 0;
-	virtual bool resize(int64_t size) const;          // 默认 errno = ENOTSUP 并返回 false
+	virtual bool resize(int64_t size) const;          // Default: errno = ENOTSUP and return false
 	virtual bool isOpen() const = 0;
-	virtual osfhnd_t nativeHandle() const;            // 默认 -1；Windows 为 HANDLE，其他平台为 fd
+	virtual osfhnd_t nativeHandle() const;            // Default -1; HANDLE on Windows, an fd on other platforms
 	virtual operator bool() const { return isOpen(); }
 };
 ```
 
-### 打开模式
+### Open modes
 
-| 模式 | 文件不存在 | 截断 | 可读 | 写入位置 |
+| Mode | File missing | Truncate | Readable | Write position |
 |---|---|---|---|---|
-| `READ` | 失败（`NOT_FOUND`） | 否 | 是 | 不可写 |
-| `WRITE` | 创建 | 是 | 是 | 当前位置 |
-| `APPEND` | 创建 | 否 | 是 | 每次 `write` 都写到末尾 |
-| `OVERLAPPED` | 创建 | 否 | 是 | 当前位置（随机读写） |
+| `READ` | Fail (`NOT_FOUND`) | No | Yes | Not writable |
+| `WRITE` | Create | Yes | Yes | Current position |
+| `APPEND` | Create | No | Yes | Every `write` goes to the end |
+| `OVERLAPPED` | Create | No | Yes | Current position (random read/write) |
 
-### 返回值与 errno
+### Return values and errno
 
-所有内置流（`NativeFileStream`、`MemoryFileStream`、`ArchiveFileStream`）和 VFS 返回的包装流遵循同一套约定，由 `tests/stream` 中的一致性测试覆盖：
+Every built-in stream (`NativeFileStream`, `MemoryFileStream`, `ArchiveFileStream`) and the wrapper stream returned by the VFS follows the same contract, covered by the consistency tests in `tests/stream`:
 
-- `read`/`write` 返回实际字节数，失败返回 `-1` 并设置 `errno`；`read` 到达 EOF 返回 `0`。
-- `seek` 返回新位置；结果位置为负时返回 `-1`（`errno = EINVAL`），位置不变。
-- 允许 `seek` 到 EOF 之后：随后 `read` 返回 `0`；`write` 会用 `0` 填充中间的空洞。
-- `close` 成功返回 `0`。关闭之后所有方法返回 `-1`（或 `false`），`errno = EBADF`；`isOpen()` 返回 `false`。
-- 在 `READ` 模式的流上 `write` 返回 `-1`。
-- 单次 `read` 最多返回 `VFS_MAX_IO_CHUNK`（`0x7FFFF000`）字节，本机流的 `write` 同样按此截断；大块数据应循环读写，直到处理完或返回 `0`/`-1`。
+- `read`/`write` return the number of bytes actually transferred, or `-1` and set `errno` on failure; `read` returns `0` at EOF.
+- `seek` returns the new position; if the resulting position would be negative it returns `-1` (`errno = EINVAL`) and the position is unchanged.
+- Seeking past EOF is allowed: a following `read` returns `0`; `write` fills the hole in between with `0`.
+- `close` returns `0` on success. After close, every method returns `-1` (or `false`) with `errno = EBADF`; `isOpen()` returns `false`.
+- `write` on a `READ` stream returns `-1`.
+- A single `read` returns at most `VFS_MAX_IO_CHUNK` (`0x7FFFF000`) bytes, and a native stream's `write` is truncated the same way; large transfers should loop until finished or until `0`/`-1` is returned.
 
-### 各实现的差异
+### Differences between implementations
 
-| 行为 | Native | Memory | Archive（未压缩） | Archive（LZ4） |
+| Behavior | Native | Memory | Archive (uncompressed) | Archive (LZ4) |
 |---|---|---|---|---|
-| `write` | 支持 | 支持（`READ` 模式 `EBADF`） | `-1`，`EROFS` | `-1`，`EBADF`（内存只读流） |
-| `resize` | 支持 | 支持 | `false`，`ENOTSUP` | `false`，`EBADF` |
-| `nativeHandle` | OS 句柄 | `-1` | `-1` | `-1` |
-| 直接调用 `open()` | 支持 | `false`，`ENOTSUP` | `false`，`ENOTSUP` | `false`，`ENOTSUP` |
+| `write` | Supported | Supported (`EBADF` in `READ` mode) | `-1`, `EROFS` | `-1`, `EBADF` (in-memory read-only stream) |
+| `resize` | Supported | Supported | `false`, `ENOTSUP` | `false`, `EBADF` |
+| `nativeHandle` | OS handle | `-1` | `-1` | `-1` |
+| Calling `open()` directly | Supported | `false`, `ENOTSUP` | `false`, `ENOTSUP` | `false`, `ENOTSUP` |
 
-LZ4 压缩的归档文件在打开时整体解压到内存，之后的读取不再访问磁盘。
+An LZ4-compressed archive file is decompressed entirely into memory when opened; later reads do not touch the disk.
 
-### 所有权与线程
+### Ownership and threads
 
-- 流由 `std::unique_ptr` 独占，析构时自动关闭。
-- 流持有所在后端，挂载被卸载后仍可继续使用（惰性卸载）。
-- 单个流对象不是线程安全的；不同流对象可以在不同线程中并发使用。
+- A stream is owned exclusively by `std::unique_ptr` and is closed automatically on destruction.
+- A stream holds its backend, so it remains usable after the mount is unmounted (lazy unmount).
+- A single stream object is not thread-safe; different stream objects may be used concurrently from different threads.
 
-## 7. 自定义后端
+## 7. Custom backends
 
-实现 `IBackend` 即可挂载任意数据源（网络缓存、数据库、加密容器……）：
+Implement `IBackend` to mount any data source (a network cache, a database, an encrypted container, and so on):
 
 ```cpp
 class IBackend
@@ -224,64 +224,64 @@ public:
 	virtual Error stat(std::string_view rel, Stat& out) const = 0;
 	virtual std::unique_ptr<IFileStream> open(std::string_view rel, IFileStream::Mode mode, Error* err) = 0;
 	virtual Error list(std::string_view relDir, const std::function<bool(const DirEntry&)>& cb) const = 0;
-	virtual Error createDir(std::string_view rel);                   // 默认 READ_ONLY
-	virtual Error removeDir(std::string_view rel);                   // 默认 READ_ONLY
-	virtual Error removeFile(std::string_view rel);                  // 默认 READ_ONLY
-	virtual Error rename(std::string_view from, std::string_view to);// 默认 READ_ONLY
-	virtual std::string realPath(std::string_view rel) const;        // 默认空串
+	virtual Error createDir(std::string_view rel);                   // Default READ_ONLY
+	virtual Error removeDir(std::string_view rel);                   // Default READ_ONLY
+	virtual Error removeFile(std::string_view rel);                  // Default READ_ONLY
+	virtual Error rename(std::string_view from, std::string_view to);// Default READ_ONLY
+	virtual std::string realPath(std::string_view rel) const;        // Default empty string
 	virtual const char* typeName() const = 0;
 };
 ```
 
-约定：
+Conventions:
 
-- `rel` 是已规范化的相对路径（无前导 `/`，无 `.`/`..`），后端根目录为空串 `""`。
-- `stat("")` 必须返回目录。
-- `list` 只列直接子项，不必排序，VFS 会合并排序。
-- `removeDir` 只需删除空目录；递归删除、copy-up、跨层检查都由 VFS 完成。
-- `open` 的写模式需要遵循上面的打开模式表；父目录存在性由 VFS 保证。
-- 所有方法都可能被多个线程同时调用，后端必须自身线程安全。
+- `rel` is an already-normalized relative path (no leading `/`, no `.`/`..`); the backend root is the empty string `""`.
+- `stat("")` must return a directory.
+- `list` lists only direct children and does not have to sort; the VFS merges and sorts.
+- `removeDir` only has to remove an empty directory; recursive removal, copy-up, and cross-layer checks are done by the VFS.
+- Write modes of `open` must follow the open-mode table above; the VFS guarantees that the parent directory exists.
+- Every method may be called from multiple threads at once, so the backend must be thread-safe itself.
 
-## 8. 归档读写
+## 8. Archive read and write
 
-运行时一般只需要 `mountArchive`。需要在程序中生成或检查归档时：
+At runtime, `mountArchive` is usually enough. To build or inspect an archive from a program:
 
 ```cpp
 #include "vfs/archive/ArchiveWriter.h"
 
 ArchiveWriteOptions options;          // alignment=16, encryptIndex=true, dedup=true, compressionLevel=9 ...
 ArchiveWriter writer(options);
-writer.addFile("scripts/main.lua", "assets/scripts/main.lua", FileWriteOptions{false, true});  // 压缩
-writer.addData("config.json", std::vector<uint8_t>(...), FileWriteOptions{true, false});       // XOR 加密
-writer.addDir("empty");                                    // 只有最终为空的目录才会写入
+writer.addFile("scripts/main.lua", "assets/scripts/main.lua", FileWriteOptions{false, true});  // Compress
+writer.addData("config.json", std::vector<uint8_t>(...), FileWriteOptions{true, false});       // XOR encrypt
+writer.addDir("empty");                                    // Only a directory that ends up empty is written
 ArchiveWriteStats stats;
-Error e = writer.write("game.vfs", &stats);                // 先写 game.vfs.tmp 再 rename
+Error e = writer.write("game.vfs", &stats);                // Write game.vfs.tmp, then rename
 if (e != Error::OK)
 	std::puts(writer.lastError().c_str());
 ```
 
-- `ArchiveWriteOptions`：`alignment`（2 的幂，1..65536）、`encryptIndex`、`indexKey`（空则确定性派生并存入文件；否则必须 32 字节）、`storeKey`、`fileKeyLength`（1..32）、`dedup`、`compressionLevel`（1..12）。
-- `FileWriteOptions`：`encrypt`、`compress`（压缩后不变小时自动存原文）、`mtime`（默认 0，保证可复现）。
-- 路径重复或仅大小写不同返回 `EXISTS`，选项非法返回 `UNSUPPORTED`，`lastError()` 给出具体说明。
-- `ArchiveReader::open` 返回不可变的 `ArchiveIndex`；`ArchiveReader::readEntry` 读出单个条目的原始内容；`ArchiveReader::verify` 逐个校验内容哈希。
+- `ArchiveWriteOptions`: `alignment` (a power of two, 1..65536), `encryptIndex`, `indexKey` (empty means derive it deterministically and store it in the file; otherwise it must be 32 bytes), `storeKey`, `fileKeyLength` (1..32), `dedup`, `compressionLevel` (1..12).
+- `FileWriteOptions`: `encrypt`, `compress` (if compression does not shrink the data, the original bytes are stored), `mtime` (default 0, so the archive is reproducible).
+- A duplicate path, or one that differs only in case, returns `EXISTS`; illegal options return `UNSUPPORTED`. `lastError()` gives the specific explanation.
+- `ArchiveReader::open` returns an immutable `ArchiveIndex`; `ArchiveReader::readEntry` reads the original content of one entry; `ArchiveReader::verify` checks content hashes one by one.
 
-二进制格式见 [format.md](format.md)。
+The binary layout is in [format.md](format.md).
 
-## 9. 日志与配置
+## 9. Logging and configuration
 
 ```cpp
 #include "vfs/Log.h"
 
 enum class LogLevel { VERBOSE, INFO, WARN, FAIL };
 using LogFunc = std::function<void(LogLevel, std::string_view)>;
-void setLogger(LogFunc func);        // 传空函数关闭输出；默认不输出
+void setLogger(LogFunc func);        // Pass an empty function to disable output; nothing is printed by default
 ```
 
-编译期配置（`Config.h`，可在编译选项中覆盖）：
+Compile-time configuration (`Config.h`; override it from the compiler flags):
 
-| 宏 | 默认值 | 说明 |
+| Macro | Default | Meaning |
 |---|---|---|
-| `VFS_WITH_AXMOL` | `0` | 使用 axmol 的 `IFileStream` |
-| `VFS_MAX_IO_CHUNK` | `0x7FFFF000` | 单次 read/write 的最大字节数 |
-| `VFS_MAX_INDEX_SIZE` | 512 MB | 可接受的归档索引上限 |
-| `VFS_DLL` | 空 | 导出宏（`Common.h`），构建或使用动态库时按平台定义 |
+| `VFS_WITH_AXMOL` | `0` | Use axmol's `IFileStream` |
+| `VFS_MAX_IO_CHUNK` | `0x7FFFF000` | Maximum bytes of one read/write |
+| `VFS_MAX_INDEX_SIZE` | 512 MB | Upper bound accepted for an archive index |
+| `VFS_DLL` | empty | Export macro (`Common.h`); define it per platform when building or using a shared library |

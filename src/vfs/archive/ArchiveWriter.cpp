@@ -21,14 +21,14 @@ using namespace ArchiveFormat;
 namespace
 {
 
-// 派生用的种子常量。改动它们会改变输出字节，属于格式行为的一部分，不要随意修改
+// Seed constants used for derivation. Changing them changes the output bytes; they are part of the format behavior, so do not change them casually
 constexpr uint64_t SEED_FILE_KEY = 0x5646532D4B455931ull;    // "VFS-KEY1"
 constexpr uint64_t SEED_INDEX_KEY = 0x5646532D49445831ull;   // "VFS-IDX1"
 constexpr uint64_t SEED_INDEX_NONCE = 0x5646532D4E4F4E31ull; // "VFS-NON1"
 
-constexpr size_t IO_BUFFER_SIZE = 1u << 20;   // 1 MB 流式缓冲
+constexpr size_t IO_BUFFER_SIZE = 1u << 20;   // 1 MB streaming buffer
 
-// 内容去重的键：内容哈希 + 长度 + 存储方式。XOR key 由内容哈希派生，所以相同内容的 key 也相同
+// Dedup key: content hash + length + storage method. The XOR key is derived from the content hash, so identical content gets the same key
 struct DedupKey
 {
 	Hash128 hash;
@@ -57,7 +57,7 @@ struct DedupValue
 	uint64_t storedSize;
 };
 
-// 由内容哈希确定性派生 keyLen 字节的 XOR key（不随机，保证可复现）
+// Deterministically derive a keyLen-byte XOR key from the content hash (not random, so the result is reproducible)
 void deriveFileKey(const Hash128& contentHash, uint8_t* key, uint32_t keyLen)
 {
 	uint8_t seedBytes[16];
@@ -78,7 +78,7 @@ uint64_t alignUp(uint64_t v, uint32_t alignment)
 	return (v + alignment - 1) / alignment * alignment;
 }
 
-// 写满 size 字节
+// Write exactly size bytes
 Error writeAll(IFileStream& out, const uint8_t* data, size_t size)
 {
 	while (size > 0)
@@ -107,7 +107,7 @@ Error writeZeros(IFileStream& out, uint64_t count)
 	return Error::OK;
 }
 
-// 读入整个本机文件
+// Read an entire native file
 Error readNativeFile(const std::string& path, std::vector<uint8_t>& out)
 {
 	NativeFileStream fs;
@@ -131,7 +131,7 @@ Error readNativeFile(const std::string& path, std::vector<uint8_t>& out)
 	return Error::OK;
 }
 
-// ASCII 小写折叠，用于检查大小写冲突
+// ASCII lower-case fold, used to detect case conflicts
 std::string foldCase(std::string_view s)
 {
 	std::string r(s);
@@ -192,7 +192,7 @@ Error ArchiveWriter::addDir(std::string_view archivePath)
 	Error e = Path::normalizeRelative(archivePath, p.path);
 	if (e != Error::OK || p.path.size() > MAX_PATH_LENGTH)
 		return fail(Error::INVALID_PATH, "invalid archive path: " + std::string(archivePath));
-	// 根目录不需要条目
+	// The root directory does not need an entry
 	if (p.path.empty())
 		return Error::OK;
 	p.type = EntryType::DIR;
@@ -203,10 +203,10 @@ Error ArchiveWriter::addDir(std::string_view archivePath)
 Error ArchiveWriter::prepare(std::vector<Pending>& sorted)
 {
 	sorted = m_pending;
-	// 稳定排序：按 path 字节序（可复现的关键）
+	// Stable sort: by path byte order (essential for reproducibility)
 	std::stable_sort(sorted.begin(), sorted.end(), [](const Pending& a, const Pending& b) { return a.path < b.path; });
 
-	// 重复路径：同名目录合并，其他情况报错
+	// Duplicate paths: directories with the same name are merged; anything else is an error
 	std::vector<Pending> unique;
 	unique.reserve(sorted.size());
 	for (auto& p : sorted)
@@ -220,7 +220,7 @@ Error ArchiveWriter::prepare(std::vector<Pending>& sorted)
 		unique.push_back(std::move(p));
 	}
 
-	// 大小写冲突：在大小写不敏感的平台上会互相覆盖
+	// Case conflict: on a case-insensitive platform these would overwrite each other
 	std::unordered_map<std::string, std::string> folded;
 	folded.reserve(unique.size());
 	for (const auto& p : unique)
@@ -230,22 +230,22 @@ Error ArchiveWriter::prepare(std::vector<Pending>& sorted)
 			return fail(Error::EXISTS, "case conflict: " + res.first->second + " <-> " + p.path);
 	}
 
-	// 文件/目录冲突，以及去掉非空目录：排好序后，"a" 的子孙一定紧跟在 "a/..." 的位置附近，
-	// 用“下一个以 path + '/' 开头的条目”来判断
+	// File/directory conflicts, and dropping non-empty directories: after sorting, descendants of "a" sit next to the "a/..." entries,
+	// so the test is "the next entry that starts with path + '/'"
 	std::vector<Pending> result;
 	result.reserve(unique.size());
 	for (size_t i = 0; i < unique.size(); ++i)
 	{
 		const Pending& p = unique[i];
 		std::string prefix = p.path + "/";
-		// 在 unique 中二分查找第一个 >= prefix 的条目
+		// Binary-search unique for the first entry >= prefix
 		auto it = std::lower_bound(unique.begin(), unique.end(), prefix,
 								   [](const Pending& a, const std::string& v) { return a.path < v; });
 		bool hasChildren = it != unique.end() && it->path.compare(0, prefix.size(), prefix) == 0;
 		if (p.type == EntryType::FILE && hasChildren)
 			return fail(Error::NOT_DIR, "path is both a file and a directory: " + p.path);
 		if (p.type == EntryType::DIR && hasChildren)
-			continue;   // 非空目录由文件路径推导，不写条目
+			continue;   // A non-empty directory is implied by file paths and is not written as an entry
 		result.push_back(p);
 	}
 	sorted = std::move(result);
@@ -255,7 +255,7 @@ Error ArchiveWriter::prepare(std::vector<Pending>& sorted)
 Error ArchiveWriter::write(std::string_view outPath, ArchiveWriteStats* stats)
 {
 	std::string out(outPath);
-	// 临时文件名带进程 ID 和进程内计数：两个进程（或线程）同时打包到同一路径时不会互相截断、互相删除临时文件
+	// The temporary name includes the process id and an in-process counter: two processes (or threads) packing to the same path will not truncate or delete each other's temporary file
 	static std::atomic<uint64_t> s_counter{0};
 	std::string tmp = out + "." + std::to_string(native::processId()) + "-" +
 					  std::to_string(s_counter.fetch_add(1, std::memory_order_relaxed)) + ".tmp";
@@ -270,7 +270,7 @@ Error ArchiveWriter::write(std::string_view outPath, ArchiveWriteStats* stats)
 		native::removeFilePath(tmp);
 		return e;
 	}
-	// 写完再 rename，中途崩溃不会留下半个归档。Windows 上即使旧归档正被游戏打开（带 FILE_SHARE_DELETE）也能替换
+	// Rename only after the write finishes, so a crash midway does not leave a half-written archive. On Windows the old archive can still be replaced even while a game has it open (with FILE_SHARE_DELETE)
 	e = native::renamePath(tmp, out);
 	if (e != Error::OK)
 	{
@@ -301,7 +301,7 @@ Error ArchiveWriter::write(IFileStream& out, ArchiveWriteStats* stats)
 	ArchiveWriteStats st;
 	std::vector<ArchiveEntry> entries(items.size());
 
-	// 1. 占位 header + 对齐到数据区起点
+	// 1. Placeholder header + align to the start of the data region
 	if (out.seek(0, SEEK_SET) != 0)
 		return fail(Error::IO_ERROR, "output stream does not support seek");
 	const uint64_t dataOffset = alignUp(HEADER_SIZE, alignment);
@@ -315,7 +315,7 @@ Error ArchiveWriter::write(IFileStream& out, ArchiveWriteStats* stats)
 	std::vector<uint8_t> compressed;
 	std::vector<uint8_t> buffer(IO_BUFFER_SIZE);
 
-	// 2. 数据区：按 path 顺序逐个写入
+	// 2. Data region: write each item in path order
 	for (size_t i = 0; i < items.size(); ++i)
 	{
 		const Pending& item = items[i];
@@ -330,7 +330,7 @@ Error ArchiveWriter::write(IFileStream& out, ArchiveWriteStats* stats)
 		++st.fileCount;
 		entry.mtime = item.options.mtime;
 
-		// 2.1 取得内容与哈希。压缩或内存数据：整体放进内存；否则流式计算哈希（第一遍）
+		// 2.1 Obtain the content and its hash. Compressed or in-memory data is held entirely in memory; otherwise hash it as a stream (first pass)
 		const bool inMemory = item.data != nullptr || item.options.compress;
 		Hash128 contentHash;
 		uint64_t size = 0;
@@ -372,7 +372,7 @@ Error ArchiveWriter::write(IFileStream& out, ArchiveWriteStats* stats)
 		entry.hash = contentHash.low;
 		st.totalSize += size;
 
-		// 2.2 存储方式：先压缩，再加密
+		// 2.2 Storage method: compress first, then encrypt
 		const uint8_t* storedData = nullptr;
 		entry.compression = CompressionType::NONE;
 		if (item.options.compress && size > 0 && size <= Compression::lz4MaxInputSize())
@@ -400,7 +400,7 @@ Error ArchiveWriter::write(IFileStream& out, ArchiveWriteStats* stats)
 			++st.encryptedCount;
 		}
 
-		// 2.3 去重：同样内容、同样存储方式的数据只写一份
+		// 2.3 Dedup: data with the same content and the same storage method is written only once
 		DedupKey key{contentHash, size, static_cast<uint8_t>(entry.cipher), static_cast<uint8_t>(entry.compression),
 					 entry.keyLength};
 		if (m_options.dedup && size > 0)
@@ -415,7 +415,7 @@ Error ArchiveWriter::write(IFileStream& out, ArchiveWriteStats* stats)
 			}
 		}
 
-		// 2.4 对齐并写入。空文件不占数据，也不需要对齐
+		// 2.4 Align and write. An empty file occupies no data and needs no alignment
 		if (entry.storedSize > 0)
 		{
 			uint64_t aligned = alignUp(pos, alignment);
@@ -428,11 +428,11 @@ Error ArchiveWriter::write(IFileStream& out, ArchiveWriteStats* stats)
 
 		if (entry.storedSize == 0)
 		{
-			// 空文件：没有数据要写（内存中的空 vector 的 data() 可能是 nullptr）
+			// Empty file: nothing to write (data() of an empty in-memory vector may be nullptr)
 		}
 		else if (storedData)
 		{
-			// 内存中的数据：按块复制、加密、写入（不修改原数据）
+			// In-memory data: copy, encrypt, and write in chunks (the original data is not modified)
 			uint64_t done = 0;
 			while (done < entry.storedSize)
 			{
@@ -448,7 +448,7 @@ Error ArchiveWriter::write(IFileStream& out, ArchiveWriteStats* stats)
 		}
 		else
 		{
-			// 大文件：第二遍流式读取、加密、写入，内存占用固定 1 MB
+			// Large file: second pass reads, encrypts, and writes as a stream, with a fixed 1 MB memory footprint
 			if (file->seek(0, SEEK_SET) != 0)
 				return fail(Error::IO_ERROR, "seek failed: " + item.nativePath);
 			uint64_t done = 0;
@@ -465,7 +465,7 @@ Error ArchiveWriter::write(IFileStream& out, ArchiveWriteStats* stats)
 					return fail(e, "write failed");
 				done += len;
 			}
-			// 两遍之间文件被修改：拒绝生成内容与哈希不一致的归档
+			// The file changed between the two passes: refuse to produce an archive whose content does not match its hash
 			if (done != size)
 				return fail(Error::IO_ERROR, "file modified while packing: " + item.nativePath);
 		}
@@ -476,12 +476,12 @@ Error ArchiveWriter::write(IFileStream& out, ArchiveWriteStats* stats)
 	}
 	const uint64_t dataSize = pos - dataOffset;
 
-	// 3. 构建明文索引：Entry[n] + StringPool
+	// 3. Build the plaintext index: Entry[n] + StringPool
 	const size_t entryCount = entries.size();
 	uint64_t poolSize = 0;
 	for (const auto& entry : entries)
 		poolSize += entry.path.size();
-	// 与读取端的上限一致（VFS_MAX_INDEX_SIZE）：否则会写出一个读不出来的归档
+	// Same limit as the reader (VFS_MAX_INDEX_SIZE): otherwise the writer would emit an archive that cannot be read
 	if (entryCount > UINT32_MAX || static_cast<uint64_t>(entryCount) * ENTRY_SIZE + poolSize > VFS_MAX_INDEX_SIZE)
 		return fail(Error::UNSUPPORTED, "index too large: " + std::to_string(entryCount) + " entries");
 	std::vector<uint8_t> index(entryCount * ENTRY_SIZE + poolSize, 0);
@@ -507,7 +507,7 @@ Error ArchiveWriter::write(IFileStream& out, ArchiveWriteStats* stats)
 		nameOffset += static_cast<uint32_t>(entry.path.size());
 	}
 
-	// 4. 索引加密：密钥与 nonce 都由明文索引确定性派生（可复现），也可以使用外部密钥
+	// 4. Index encryption: both the key and the nonce are derived deterministically from the plaintext index (reproducible), or an external key may be used
 	ArchiveHeader h;
 	h.alignment = alignment;
 	h.entryCount = static_cast<uint32_t>(entryCount);
@@ -528,7 +528,7 @@ Error ArchiveWriter::write(IFileStream& out, ArchiveWriteStats* stats)
 		}
 		else
 		{
-			// 没有外部密钥：派生密钥并存入文件，只起混淆作用
+			// No external key: derive a key and store it in the file; this is obfuscation only
 			for (uint32_t i = 0; i < INDEX_KEY_SIZE; i += 16)
 			{
 				Hash128 k = xxh3_128(index.data(), index.size(), SEED_INDEX_KEY + i);
@@ -555,7 +555,7 @@ Error ArchiveWriter::write(IFileStream& out, ArchiveWriteStats* stats)
 		return fail(e, "failed to write index");
 	pos += index.size();
 
-	// 5. footer：用于定位附加在其他文件后面的归档
+	// 5. footer: used to locate an archive appended after another file
 	uint8_t footer[FOOTER_SIZE];
 	std::memcpy(footer + F_MAGIC, FOOTER_MAGIC, sizeof(FOOTER_MAGIC));     // [0] magic
 	ByteIO::writeU64LE(footer + F_ARCHIVE_SIZE, pos + FOOTER_SIZE);       // [8] archiveSize
@@ -564,7 +564,7 @@ Error ArchiveWriter::write(IFileStream& out, ArchiveWriteStats* stats)
 		return fail(e, "failed to write footer");
 	pos += FOOTER_SIZE;
 
-	// 6. 回填 header
+	// 6. Backfill the header
 	uint8_t headerBuf[HEADER_SIZE];
 	h.serialize(headerBuf);
 	if (out.seek(0, SEEK_SET) != 0)
@@ -572,7 +572,7 @@ Error ArchiveWriter::write(IFileStream& out, ArchiveWriteStats* stats)
 	e = writeAll(out, headerBuf, HEADER_SIZE);
 	if (e != Error::OK)
 		return fail(e, "failed to write header");
-	// 输出流原有内容可能更长（例如复用旧文件），截断到归档长度
+	// The output stream may already be longer (for example when reusing an old file); truncate it to the archive length
 	if (out.size() > static_cast<int64_t>(pos))
 		out.resize(static_cast<int64_t>(pos));
 

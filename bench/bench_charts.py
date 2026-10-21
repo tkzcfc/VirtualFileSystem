@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-# 把 vfs_bench 的结果（--csv 输出，或 --md / 控制台里的 Markdown 表格）转换成 SVG 柱状图。
-# 只用标准库，不依赖 matplotlib。
+# Turn vfs_bench results (--csv output, or Markdown tables from --md / the console) into SVG bar charts.
+# Standard library only; matplotlib is not required.
 #
-# 用法：
+# Usage:
 #   python3 bench/bench_charts.py --platform linux --input linux.csv --out docs/images/bench
 #
-# 输出：
-#   <platform>-<scenario>.svg     每个场景一张：各目标在 1 线程与 N 线程（默认 8）下的吞吐（ops/s）
+# Output:
+#   <platform>-<scenario>.svg     one chart per scenario: throughput (ops/s) of each target at 1 thread and N threads (default 8)
 import argparse
 import csv
 import html
@@ -15,14 +15,14 @@ import re
 import sys
 
 DEFAULT_SCENARIOS = ["read.small", "read.large.rand", "meta.open", "meta.stat", "meta.miss", "write.churn"]
-# 柱状图里展示的目标（顺序即显示顺序）；不存在的自动跳过
+# Targets shown in the bar chart (order is display order); missing ones are skipped.
 DEFAULT_TARGETS = ["base:stdio", "base:posix", "base:win32", "vfs:native", "vfs:memory", "vfs:archive",
                    "vfs:archive-lz4", "vfs:archive+native", "vfs:memory+archive", "vfs:3layer"]
 COLORS = ["#4e79a7", "#f28e2b", "#59a14f", "#e15759"]
 
 
 def parse_number(text):
-    """解析 "1.23M" / "456.7k" / "789" 形式的数值"""
+    """Parse a value of the form "1.23M" / "456.7k" / "789"."""
     text = text.strip()
     m = re.fullmatch(r"([0-9.]+)\s*([kKMG]?)", text)
     if not m:
@@ -32,7 +32,7 @@ def parse_number(text):
 
 
 def load(path):
-    """返回 {(scenario, target, threads): ops_per_sec}"""
+    """Return {(scenario, target, threads): ops_per_sec}."""
     data = {}
     with open(path, encoding="utf-8") as f:
         text = f.read()
@@ -42,7 +42,7 @@ def load(path):
                 continue
             data[(row["scenario"], row["target"], int(row["threads"]))] = float(row["ops_per_sec"])
         return data
-    # Markdown：### <scenario> 之后是 | 目标 | 线程 | ops/s | ... 的表格
+    # Markdown: after ### <scenario> comes a table | target | threads | ops/s | ...
     scenario = None
     for line in text.splitlines():
         h = re.match(r"^#{2,4}\s+([a-z]+\.[a-z.]+)\s*$", line)
@@ -68,7 +68,7 @@ def fmt(v):
 
 
 def bar_chart(title, subtitle, labels, series, series_names, out_path):
-    """水平分组柱状图。series: [[值或 None, ...], ...]，每个系列一个颜色"""
+    """Horizontal grouped bar chart. series: [[value or None, ...], ...], one color per series."""
     bar_h, gap, label_w, chart_w, right_pad = 14, 10, 170, 520, 70
     group_h = bar_h * len(series) + gap
     top = 64
@@ -79,7 +79,7 @@ def bar_chart(title, subtitle, labels, series, series_names, out_path):
            '<rect width="100%" height="100%" fill="white"/>',
            '<text x="10" y="22" font-size="15" font-weight="bold">%s</text>' % html.escape(title),
            '<text x="10" y="40" fill="#555">%s</text>' % html.escape(subtitle)]
-    # 图例
+    # Legend.
     x = label_w
     for i, name in enumerate(series_names):
         out.append('<rect x="%d" y="48" width="10" height="10" fill="%s"/>' % (x, COLORS[i % len(COLORS)]))

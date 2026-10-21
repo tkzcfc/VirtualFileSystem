@@ -1,4 +1,4 @@
-// 本文件：归档中单个未压缩文件的只读流。明文与 XOR 加密共用一个类。
+// This file: a read-only stream for one uncompressed file in an archive. Plaintext and XOR share one class.
 #pragma once
 
 #include "../Common.h"
@@ -8,23 +8,23 @@
 NS_VFS_BEGIN
 
 /**
- * 归档中单个文件的只读流。
- * 来源支持位置读（本机文件、内存）时直接调用 IArchiveSource::readAt，流本身不持有 OS 句柄；
- * 否则持有一个独立的来源流，按偏移读取。两种方式都不加锁。
- * - 来源比索引记录的短（归档被截断或在挂载期间被替换）：read 返回 -1（errno=EIO），不会把截断的数据当成完整文件。
- * - seek 只修改 m_pos，越界规则与 POSIX 一致。
- * - read：先 clamp 到 [0, size)，再从底层句柄的 base+offset+pos 处读取，XOR 文件按位置即时解密。
- * - write 返回 -1（errno=EROFS），resize 返回 false（errno=ENOTSUP），nativeHandle() 返回 -1。
- * 同一个对象不能跨线程使用。
+ * Read-only stream for a single file in an archive.
+ * When the source supports positional reads (native file, memory), IArchiveSource::readAt is called directly and the stream holds no OS handle;
+ * otherwise it holds its own source stream and reads by offset. Neither path takes a lock.
+ * - If the source is shorter than the index says (the archive was truncated or replaced while mounted): read returns -1 (errno=EIO) and truncated data is not treated as a complete file.
+ * - seek only changes m_pos; out-of-range rules match POSIX.
+ * - read: clamp to [0, size), then read from the underlying handle at base+offset+pos; XOR files are decrypted in place by position.
+ * - write returns -1 (errno=EROFS), resize returns false (errno=ENOTSUP), and nativeHandle() returns -1.
+ * The same object must not be used across threads.
  */
 class VFS_DLL ArchiveFileStream : public IFileStream
 {
 public:
 
 	/**
-	 * @param index 归档索引（共享所有权，保活索引和密钥，惰性卸载时用）
-	 * @param entry 条目，指向 index 内部，生命周期由 index 保证
-	 * @param file  独立的来源流；为空时使用 index->source->readAt（来源必须 supportsReadAt()）
+	 * @param index archive index (shared ownership; keeps the index and key alive for lazy unmount)
+	 * @param entry entry pointing inside index; its lifetime is guaranteed by index
+	 * @param file  independent source stream; when null, index->source->readAt is used (the source must supportsReadAt())
 	 */
 	ArchiveFileStream(std::shared_ptr<const ArchiveIndex> index, const ArchiveEntry* entry,
 					  std::unique_ptr<IFileStream> file);
@@ -38,10 +38,10 @@ public:
 	virtual int64_t seek(int64_t offset, int origin) const override;
 
 	/**
-	 * 读取数据。加密文件按位置即时解密。
-	 * @param buf  输出缓冲区
-	 * @param size 期望读取的字节数
-	 * @return 实际读取的字节数，EOF 返回 0，出错返回 -1（errno 已设置）
+	 * Read data. Encrypted files are decrypted in place by position.
+	 * @param buf  output buffer
+	 * @param size number of bytes requested
+	 * @return number of bytes actually read, 0 at EOF, -1 on error (errno is set)
 	 */
 	virtual int read(void* buf, unsigned int size) const override;
 
@@ -56,16 +56,16 @@ public:
 	virtual bool isOpen() const override;
 
 private:
-	// 从来源的绝对偏移 target 读取，返回字节数 / -1
+	// Read from absolute source offset target; returns the byte count or -1
 	int64_t readSource(uint8_t* out, size_t want, int64_t target) const;
 
-	std::shared_ptr<const ArchiveIndex> m_index;   // 保活索引和密钥
-	const ArchiveEntry* m_entry;                   // 当前条目
-	std::unique_ptr<IFileStream> m_file;           // 独立句柄（来源不支持位置读时）
-	bool m_open;                                   // close() 之后为 false
-	int64_t m_dataStart;                           // 存储数据在来源中的绝对偏移
-	mutable int64_t m_pos;                         // 当前位置（axmol 接口要求 const）
-	mutable int64_t m_filePos;                     // 底层句柄的当前位置，用于省掉连续读时的 seek；-1 表示未知
+	std::shared_ptr<const ArchiveIndex> m_index;   // keeps the index and key alive
+	const ArchiveEntry* m_entry;                   // current entry
+	std::unique_ptr<IFileStream> m_file;           // independent handle (when the source does not support positional reads)
+	bool m_open;                                   // false after close()
+	int64_t m_dataStart;                           // absolute offset of the stored data in the source
+	mutable int64_t m_pos;                         // current position (const because the axmol interface requires it)
+	mutable int64_t m_filePos;                     // current position of the underlying handle, so sequential reads can skip seek; -1 means unknown
 };
 
 NS_VFS_END

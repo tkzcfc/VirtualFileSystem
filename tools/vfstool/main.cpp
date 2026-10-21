@@ -1,4 +1,4 @@
-// vfstool 命令行入口：用 CLI11 解析参数后调用 vfstool_core 中的命令实现
+// vfstool command-line entry: parse arguments with CLI11, then call the command implementations in vfstool_core
 #include "core/Commands.h"
 #include "vfs/native/NativeFileStream.h"
 #include "CLI11.hpp"
@@ -20,7 +20,7 @@ namespace
 {
 
 #if VFS_PLATFORM_WINDOWS
-// UTF-16 → UTF-8（只在 Windows 上用 Win32 API 转换，不依赖已废弃的 std::wstring_convert）
+// UTF-16 to UTF-8 (converted with the Win32 API on Windows only; does not depend on the deprecated std::wstring_convert)
 std::string wideToUtf8(const wchar_t* wide)
 {
 	int len = ::WideCharToMultiByte(CP_UTF8, 0, wide, -1, nullptr, 0, nullptr, nullptr);
@@ -28,13 +28,13 @@ std::string wideToUtf8(const wchar_t* wide)
 		return std::string();
 	std::string out(static_cast<size_t>(len), '\0');
 	::WideCharToMultiByte(CP_UTF8, 0, wide, -1, out.data(), len, nullptr, nullptr);
-	out.pop_back();   // 去掉结尾的 '\0'
+	out.pop_back();   // drop the trailing '\0'
 	return out;
 }
 
 /**
- * 控制台输出代码页守卫：切到 UTF-8，退出时恢复。
- * 控制台代码页是父进程（cmd/PowerShell）共享的，不恢复会影响用户之后的命令。
+ * Guard for the console output code page: switch to UTF-8 and restore it on exit.
+ * The console code page is shared with the parent process (cmd/PowerShell); leaving it changed would affect the user's later commands.
  */
 class ConsoleCodePageGuard
 {
@@ -61,10 +61,10 @@ private:
 #endif
 
 /**
- * 取得 UTF-8 编码的命令行参数。
- * Windows 上 main 的 argv 是 ANSI 代码页（例如 GBK），中文路径会变成乱码，
- * 所以改用 GetCommandLineW + CommandLineToArgvW 取 UTF-16 原文再转成 UTF-8；
- * 其他平台的 argv 本身就是 UTF-8（按系统 locale，现代系统均为 UTF-8），原样使用。
+ * Obtain the command-line arguments as UTF-8.
+ * On Windows, main's argv is in the ANSI code page (for example GBK), so a Chinese path would be garbled,
+ * so use GetCommandLineW + CommandLineToArgvW to take the original UTF-16 and convert it to UTF-8;
+ * on other platforms argv is already UTF-8 (per the system locale; modern systems are UTF-8) and is used as-is.
  */
 std::vector<std::string> utf8Arguments(int argc, char** argv)
 {
@@ -80,7 +80,7 @@ std::vector<std::string> utf8Arguments(int argc, char** argv)
 		::LocalFree(wargv);
 		return args;
 	}
-	// 极少数情况下失败：退回 ANSI argv
+	// Fails in rare cases: fall back to the ANSI argv
 #endif
 	args.reserve(static_cast<size_t>(argc));
 	for (int i = 0; i < argc; ++i)
@@ -88,8 +88,8 @@ std::vector<std::string> utf8Arguments(int argc, char** argv)
 	return args;
 }
 
-// 展开 @args.txt：文件中的参数按空白分隔，支持双引号。
-// 参数文件按 UTF-8 解释，允许带 UTF-8 BOM（Windows 记事本默认会加）
+// Expand @args.txt: arguments in the file are split on whitespace, and double quotes are supported.
+// The argument file is interpreted as UTF-8 and may carry a UTF-8 BOM (Windows Notepad adds one by default)
 bool expandResponseFiles(const std::vector<std::string>& in, std::vector<std::string>& out)
 {
 	for (size_t i = 0; i < in.size(); ++i)
@@ -142,7 +142,7 @@ bool expandResponseFiles(const std::vector<std::string>& in, std::vector<std::st
 	return true;
 }
 
-// 根据 CLI11 记录的解析顺序，把成对的正/反规则选项还原成按命令行顺序排列的规则列表
+// From the parse order recorded by CLI11, turn paired positive/negative rule options back into a rule list in command-line order
 std::vector<Rule> orderedRules(CLI::App* app, CLI::Option* positive, CLI::Option* negative)
 {
 	std::vector<Rule> rules;
@@ -170,7 +170,7 @@ void addKeyOptions(CLI::App* cmd, KeySource& key)
 int main(int argc, char** argv)
 {
 #if VFS_PLATFORM_WINDOWS
-	// 控制台按 UTF-8 显示中文输出（退出时恢复原代码页）
+	// Show output on the console as UTF-8 (the original code page is restored on exit)
 	ConsoleCodePageGuard codePageGuard;
 #endif
 
@@ -183,8 +183,8 @@ int main(int argc, char** argv)
 
 	CLI::App app{"vfstool: .vfs archive tool (pack, unpack, inspect, verify)"};
 	app.require_subcommand(1);
-	// CLI11 在 Windows 上默认把 "/x" 当作 Windows 风格选项，会把以 '/' 开头的路径误当成选项。
-	// 各平台统一只用 "-x/--xxx"（必须在添加子命令之前设置，子命令会继承）
+	// On Windows, CLI11 treats "/x" as a Windows-style option by default, so a path that starts with '/' would be mistaken for an option.
+	// Every platform uses only "-x/--xxx" (must be set before adding subcommands; subcommands inherit it)
 	app.allow_windows_style_options(false);
 	app.set_version_flag("--version", "vfstool 2.0.0 (.vfs format version 1)");
 
@@ -282,7 +282,7 @@ int main(int argc, char** argv)
 		return code == 0 ? 0 : static_cast<int>(ExitCode::USAGE);
 	}
 
-	// 命令内部的大块分配（整文件读入、解压）失败或 std::filesystem 抛出异常时，给出错误信息和退出码，而不是直接 terminate
+	// If a large allocation inside a command (reading a whole file, decompression) fails, or std::filesystem throws, report an error and an exit code instead of terminating
 	try
 	{
 		if (packCmd->parsed())
@@ -304,7 +304,7 @@ int main(int argc, char** argv)
 		if (catCmd->parsed())
 		{
 	#if VFS_PLATFORM_WINDOWS
-			// stdout 切到二进制模式，避免 "\n" 被转换成 "\r\n"
+			// Switch stdout to binary mode so "\n" is not converted to "\r\n"
 			_setmode(_fileno(stdout), _O_BINARY);
 	#endif
 			return runCat(cat, std::cout, std::cerr);

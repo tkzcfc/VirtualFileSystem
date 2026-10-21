@@ -1,5 +1,5 @@
-// 多线程读取：8 个线程同时从同一个归档读文件，同时主线程热更新（remount）归档。
-// VirtualFileSystem 的所有接口都是线程安全的；已打开的流在卸载/替换后仍然可以读完。
+// Multithreaded reads: 8 threads read files from the same archive while the main thread hot-updates (remount) it.
+// Every VirtualFileSystem interface is thread-safe; a stream already open can still be read to completion after unmount or replacement.
 #include "vfs/VirtualFileSystem.h"
 #include "vfs/archive/ArchiveSource.h"
 #include "vfs/archive/ArchiveWriter.h"
@@ -14,7 +14,7 @@ USING_NS_VFS;
 namespace
 {
 
-// 在内存中打一个归档：100 个文件，内容是 "<version>:<i>"
+// Build an archive in memory: 100 files whose content is "<version>:<i>"
 std::shared_ptr<IBackend> makeArchive(int version)
 {
 	ArchiveWriter writer;
@@ -22,7 +22,7 @@ std::shared_ptr<IBackend> makeArchive(int version)
 	{
 		std::string s = std::to_string(version) + ":" + std::to_string(i);
 		FileWriteOptions fo;
-		fo.compress = (i % 2) == 0;   // 一半压缩，一半明文
+		fo.compress = (i % 2) == 0;   // half compressed, half stored
 		writer.addData("data/" + std::to_string(i) + ".txt", std::vector<uint8_t>(s.begin(), s.end()), fo);
 	}
 	auto memory = MemoryBackend::create();
@@ -54,7 +54,7 @@ int main()
 			std::string text;
 			for (int i = t; !stop.load(std::memory_order_relaxed); i = (i + 7) % 100)
 			{
-				// 每次读到的内容要么是旧版本，要么是新版本，不会是混合的
+				// Each read is entirely the old version or entirely the new one, never a mix
 				if (fs.readFile("/res/data/" + std::to_string(i) + ".txt", text) != Error::OK ||
 					text.substr(text.find(':') + 1) != std::to_string(i))
 					errors.fetch_add(1);
@@ -63,7 +63,7 @@ int main()
 		});
 	}
 
-	// 主线程：读线程运行期间把归档热更新 5 次
+	// Main thread: hot-update the archive 5 times while the reader threads run
 	for (int v = 2; v <= 6; ++v)
 	{
 		std::this_thread::sleep_for(std::chrono::milliseconds(20));

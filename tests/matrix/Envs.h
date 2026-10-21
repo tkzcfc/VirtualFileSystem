@@ -1,6 +1,6 @@
-// 本文件：后端 × 分层组合的测试环境。每个环境都在 /w 下提供一个可写视图，并预置
-//   /w/base/a.txt = "A"、/w/base/sub/b.txt = "B"
-// 这两个“底层文件”在不同环境中可能位于只读层（归档、只读内存、只读本机目录），由 baseWritable 区分。
+// This file: test environments for backend x layering combinations. Each environment provides a writable view under /w and preloads
+//   /w/base/a.txt = "A", /w/base/sub/b.txt = "B"
+// Those two "base files" may sit on a read-only layer (archive, read-only memory, or a read-only native directory) depending on the environment; baseWritable distinguishes that.
 #pragma once
 
 #include "TestUtils.h"
@@ -20,7 +20,7 @@ inline MountOptions prio(int p, uint32_t flags = 0)
 	return o;
 }
 
-// 预置底层文件的只读内存后端
+// Read-only memory backend preloaded with the base files
 inline std::shared_ptr<MemoryBackend> baseMemory(std::string_view prefix = "")
 {
 	auto b = MemoryBackend::create();
@@ -29,7 +29,7 @@ inline std::shared_ptr<MemoryBackend> baseMemory(std::string_view prefix = "")
 	return b;
 }
 
-// 预置底层文件的归档
+// Archive preloaded with the base files
 inline std::shared_ptr<ArchiveBackend> baseArchive(const test::TempDir& dir, std::string_view prefix = "")
 {
 	FileWriteOptions enc;
@@ -53,22 +53,22 @@ struct EnvBase
 {
 	test::TempDir dir;
 	VirtualFileSystem fs;
-	bool baseWritable = true;   // 底层文件能否删除、改名
-	bool nativeTop = false;     // 写入层是本机目录（名字可移植性规则、大小写敏感性随 OS）
-	bool memoryTop = false;     // 写入层是内存后端
-	bool nativeBase = false;    // 底层（base/ 下的初始文件）在本机目录里
+	bool baseWritable = true;   // whether the base files can be deleted or renamed
+	bool nativeTop = false;     // the write layer is a native directory (name portability rules and case sensitivity follow the OS)
+	bool memoryTop = false;     // the write layer is a memory backend
+	bool nativeBase = false;    // the base (the initial files under base/) lives in a native directory
 
-	// 写入层是否区分大小写：本机写入层取决于临时目录所在的文件系统（运行时探测，
-	// Linux 通常区分；Windows NTFS、macOS APFS 默认不区分），其他后端总是区分
+	// Whether the write layer is case-sensitive: a native write layer depends on the filesystem of the temp directory (probed at runtime;
+	// Linux usually is; Windows NTFS and macOS APFS are not by default). Other backends always are
 	bool caseSensitive() const { return !nativeTop || test::nativeCaseSensitive(); }
 
-	// 底层文件是否按字节匹配名字（未开启 NativeOptions::exactCase 时，本机底层随文件系统）
+	// Whether base-file names match byte for byte (without NativeOptions::exactCase, a native base follows the filesystem)
 	bool baseCaseSensitive() const { return !nativeBase || test::nativeCaseSensitive() || test::nativeCaseLookupOnly(); }
-	// 写入层是“查找区分大小写、创建不区分”的本机目录（iOS 模拟器）：两个大小写测试的模型都不适用
+	// The write layer is a native directory that is case-sensitive for lookup and case-insensitive for create (iOS simulator): neither case-test model applies
 	bool caseLookupOnly() const { return nativeTop && test::nativeCaseLookupOnly(); }
 };
 
-// 单个本机目录
+// A single native directory
 struct NativeEnv : EnvBase
 {
 	NativeEnv()
@@ -81,7 +81,7 @@ struct NativeEnv : EnvBase
 	}
 };
 
-// 单个内存后端
+// A single memory backend
 struct MemoryEnv : EnvBase
 {
 	MemoryEnv()
@@ -91,7 +91,7 @@ struct MemoryEnv : EnvBase
 	}
 };
 
-// 嵌套挂载：只读内存挂在根，本机目录挂在 /w
+// Nested mounts: read-only memory at the root, a native directory at /w
 struct NestedNativeEnv : EnvBase
 {
 	NestedNativeEnv()
@@ -108,7 +108,7 @@ struct NestedNativeEnv : EnvBase
 	}
 };
 
-// 归档在下，本机目录在上（典型的“补丁覆盖”）
+// Archive underneath, native directory on top (the typical "patch overlay")
 struct ArchiveUnderNativeEnv : EnvBase
 {
 	ArchiveUnderNativeEnv()
@@ -121,7 +121,7 @@ struct ArchiveUnderNativeEnv : EnvBase
 	}
 };
 
-// 归档在下，内存在上
+// Archive underneath, memory on top
 struct MemoryOverArchiveEnv : EnvBase
 {
 	MemoryOverArchiveEnv()
@@ -133,7 +133,7 @@ struct MemoryOverArchiveEnv : EnvBase
 	}
 };
 
-// 同一挂载点、相同优先级：后挂载的本机目录在上
+// Same mount point and the same priority: the native directory mounted later is on top
 struct TieEnv : EnvBase
 {
 	TieEnv()
@@ -146,7 +146,7 @@ struct TieEnv : EnvBase
 	}
 };
 
-// 三层：归档（a.txt）< 只读内存（sub/b.txt）< 可写内存
+// Three layers: archive (a.txt) < read-only memory (sub/b.txt) < writable memory
 struct ThreeLayerEnv : EnvBase
 {
 	ThreeLayerEnv()
@@ -165,7 +165,7 @@ struct ThreeLayerEnv : EnvBase
 	}
 };
 
-// 只读本机目录在下（ReadOnly 标志），内存在上
+// Read-only native directory underneath (ReadOnly flag), memory on top
 struct MemoryOverReadOnlyNativeEnv : EnvBase
 {
 	MemoryOverReadOnlyNativeEnv()
@@ -180,7 +180,7 @@ struct MemoryOverReadOnlyNativeEnv : EnvBase
 	}
 };
 
-// 归档挂在根（包含 w/base/...），本机目录挂在更深的 /w：层栈跨越不同深度的挂载点
+// Archive mounted at the root (containing w/base/...), native directory mounted deeper at /w: the layer stack spans mount points of different depths
 struct ArchiveRootNativeSubEnv : EnvBase
 {
 	ArchiveRootNativeSubEnv()

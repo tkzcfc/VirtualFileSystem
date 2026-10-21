@@ -1,7 +1,7 @@
-// 本文件：读写锁。
-// Windows 上直接用 SRWLOCK：不需要初始化和销毁，只占一个指针。MinGW 的 std::shared_mutex 基于 winpthreads 的
-// pthread_rwlock，在大量节点各自持有一把锁、并发创建销毁时会崩溃（压力测试在 Wine 下复现），所以不用它。
-// 其他平台就是 std::shared_mutex。两者都满足 SharedMutex 具名要求，可以配合 std::shared_lock / std::unique_lock 使用。
+// This file: a reader-writer lock.
+// On Windows this is SRWLOCK directly: no init or destroy, and it occupies one pointer. MinGW's std::shared_mutex is built on winpthreads'
+// pthread_rwlock, which crashes when many nodes each hold a lock and are created and destroyed concurrently (reproduced by the stress test under Wine), so it is not used.
+// Other platforms use std::shared_mutex. Both satisfy the SharedMutex named requirements and work with std::shared_lock / std::unique_lock.
 #pragma once
 
 #include "Common.h"
@@ -26,7 +26,7 @@ public:
 	void unlock_shared();
 
 private:
-	void* m_lock = nullptr;   // SRWLOCK（SRWLOCK_INIT 就是全 0）
+	void* m_lock = nullptr;   // SRWLOCK (SRWLOCK_INIT is all zeros)
 };
 
 #else

@@ -1,4 +1,4 @@
-// vfstool info：显示 header 字段与条目统计
+// vfstool info: print header fields and entry statistics.
 #include "Commands.h"
 #include <set>
 
@@ -17,7 +17,7 @@ int runInfo(const InfoOptions& options, std::ostream& out, std::ostream& err)
 	const ArchiveHeader& h = index->header;
 	size_t files = 0, dirs = 0, encrypted = 0, compressed = 0, shared = 0;
 	uint64_t totalSize = 0;
-	std::set<uint64_t> offsets;   // 统计去重：存储数据起点相同的非空文件只算一次
+	std::set<uint64_t> offsets;   // Dedup accounting: non-empty files that share a stored-data start count once.
 	for (const auto& entry : index->entries)
 	{
 		if (entry.type == EntryType::DIR)

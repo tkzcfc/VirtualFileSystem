@@ -1,6 +1,6 @@
-// 参考模型模糊测试：单线程随机操作序列同时作用于 VFS 和一个极简的内存模型，
-// 每一步比较返回的错误码，定期比较整个合并视图（以及写入层的真实内容）。
-// 模型独立实现了 docs/mount-rules.md 中的规则：两层（只读底层 B + 可写上层 W），挂载点 /f。
+// Reference-model fuzz test: a single-threaded random operation sequence is applied to both the VFS and a minimal in-memory model,
+// comparing the returned error code at every step and periodically comparing the whole merged view (and the real contents of the write layer).
+// The model independently implements the rules in docs/mount-rules.md: two layers (read-only lower B + writable upper W), mount point /f.
 #include "matrix/Envs.h"
 #include <functional>
 #include <map>
@@ -12,7 +12,7 @@ using Mode = IFileStream::Mode;
 namespace
 {
 
-// ---------------------------------------------------------------- 模型
+// ---------------------------------------------------------------- model
 
 struct Node
 {
@@ -20,7 +20,7 @@ struct Node
 	std::string content;
 };
 
-using Layer = std::map<std::string, Node>;   // 相对路径（"a/b"）→ 节点；根为 ""
+using Layer = std::map<std::string, Node>;   // relative path ("a/b") -> node; root is ""
 
 std::string parentOf(const std::string& rel)
 {
@@ -36,8 +36,8 @@ bool isUnder(const std::string& path, const std::string& dir)
 class Model
 {
 public:
-	Layer w;   // 可写上层
-	Layer b;   // 只读底层（单层配置时只有根）
+	Layer w;   // writable upper layer
+	Layer b;   // read-only lower layer (root only in the single-layer configuration)
 
 	Model()
 	{
@@ -45,7 +45,7 @@ public:
 		b[""].dir = true;
 	}
 
-	// 解析：返回错误码；成功时 layer = 0（W）或 1（B）
+	// Resolve: returns an error code; on success layer = 0 (W) or 1 (B)
 	Error resolve(const std::string& rel, int& layer) const
 	{
 		if (rel.empty())
@@ -75,7 +75,7 @@ public:
 
 	const Node& node(const std::string& rel, int layer) const { return layer == 0 ? w.at(rel) : b.at(rel); }
 
-	// 在 W 中补齐父目录链
+	// Fill in the parent-directory chain in W
 	void ensureParents(const std::string& rel)
 	{
 		std::string p = parentOf(rel);
@@ -196,7 +196,7 @@ public:
 		const bool inW = w.count(rel) && w.at(rel).dir;
 		const bool inB = b.count(rel) && b.at(rel).dir;
 		if (inB)
-			return Error::READ_ONLY;   // 只读层提供了该目录（无论 W 是否也有）
+			return Error::READ_ONLY;   // A read-only layer provides this directory (whether or not W also has it)
 		if (!inW)
 			return Error::NOT_FOUND;
 		bool empty = true;
@@ -219,7 +219,7 @@ public:
 		if (from == to)
 			return Error::OK;
 		if (from.empty() || to.empty())
-			return Error::BUSY;   // 挂载点（VFS 层判断）
+			return Error::BUSY;   // Mount point (decided at the VFS layer)
 		if (fl == 1)
 			return Error::READ_ONLY;
 		const bool fromDir = w.at(from).dir;
@@ -246,13 +246,13 @@ public:
 			if (pe != Error::OK)
 				return pe;
 		}
-		// 目标目录在只读层 B 里有内容：合并视图中目标不是空目录
+		// The destination directory has contents in read-only layer B: in the merged view the destination is not an empty directory
 		if (toFound && fromDir)
 			for (const auto& kv : b)
 				if (isUnder(kv.first, to))
 					return Error::NOT_EMPTY;
 		ensureParents(to);
-		// 后端（POSIX）rename：只看 W 中的目标
+		// Backend (POSIX) rename: look only at the destination in W
 		if (w.count(to))
 		{
 			const Node& t = w.at(to);
@@ -282,7 +282,7 @@ public:
 		return Error::OK;
 	}
 
-	// 合并视图："path" → "D" 或 "F:内容"
+	// Merged view: "path" -> "D" or "F:content"
 	std::map<std::string, std::string> view() const
 	{
 		std::map<std::string, std::string> out;
@@ -305,7 +305,7 @@ public:
 	}
 };
 
-// ---------------------------------------------------------------- 被测配置
+// ---------------------------------------------------------------- configuration under test
 
 std::map<std::string, std::string> vfsView(const VirtualFileSystem& fs)
 {
@@ -319,7 +319,7 @@ std::map<std::string, std::string> vfsView(const VirtualFileSystem& fs)
 	return out;
 }
 
-// 直接读后端（绕过 VFS），用于核对写入层里“看不见”的父目录链
+// Read the backend directly (bypassing the VFS), to check parent-directory chains in the write layer that are not visible
 std::map<std::string, std::string> backendView(IBackend& backend)
 {
 	std::map<std::string, std::string> out;
@@ -354,7 +354,7 @@ std::map<std::string, std::string> layerView(const Layer& l)
 	return out;
 }
 
-// 随机生成底层内容（保证父目录链完整）
+// Randomly generate lower-layer contents (keeping the parent-directory chain complete)
 Layer randomBase(std::mt19937& rng)
 {
 	Layer b;
@@ -468,7 +468,7 @@ std::string randomPath(std::mt19937& rng)
 	return rel;
 }
 
-// 统计每种结果出现的次数，确保随机序列确实覆盖了成功与各种失败分支
+// Count how often each result appears, so the random sequence really covers success and the failure branches
 std::map<std::string, int> g_outcomes;
 
 void runFuzz(Kind kind, uint32_t seed, int ops)
@@ -590,7 +590,7 @@ struct StringMaker<std::map<std::string, std::string>>
 };
 } // namespace doctest
 
-// 每个用例结束后检查覆盖：至少出现了这些（操作:结果）组合
+// After each case, check coverage: at least these (operation:result) combinations appeared
 void checkCoverage(std::initializer_list<const char*> required)
 {
 	for (const char* r : required)

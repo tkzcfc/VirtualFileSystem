@@ -11,9 +11,9 @@
 
 NS_VFS_BEGIN
 
-static_assert(sizeof(SRWLOCK) == sizeof(void*), "SRWLOCK 应当只有一个指针大小");
+static_assert(sizeof(SRWLOCK) == sizeof(void*), "SRWLOCK is expected to be pointer-sized");
 
-// m_lock 的存储直接当作 SRWLOCK 使用
+// m_lock's storage is used directly as an SRWLOCK
 #    define VFS_SRW reinterpret_cast<PSRWLOCK>(&m_lock)
 
 void SharedMutex::lock()

@@ -1,6 +1,6 @@
-// 本文件：vfs_bench 性能基准。对比 std::fstream、C FILE*、POSIX pread / Win32 ReadFile 与各种 VFS 后端和分层组合，
-// 覆盖小 / 中 / 大文件读取、随机读、元数据（open / stat / 不存在 / 列目录）与写入（并行写、创建删除抖动）。
-// 不依赖任何第三方库；用法见 docs/benchmark.md 或 vfs_bench --help。
+// This file: the vfs_bench performance benchmark. It compares std::fstream, C FILE*, POSIX pread / Win32 ReadFile with the various VFS backends and layered combinations,
+// covering small / medium / large reads, random reads, metadata (open / stat / missing / list directory), and writes (parallel writes, create-delete churn).
+// It depends on no third-party libraries; usage is in docs/benchmark.md or vfs_bench --help.
 #include "vfs/VirtualFileSystem.h"
 #include "vfs/archive/ArchiveWriter.h"
 
@@ -48,20 +48,20 @@ using Clock = std::chrono::steady_clock;
 constexpr size_t KiB = 1024;
 constexpr size_t MiB = 1024 * 1024;
 
-// ================================================================ 命令行选项
+// ================================================================ Command-line options
 
 struct Options
 {
-	double scale = 1.0;                     // 数据规模倍数（文件数量与大文件大小）
-	std::vector<int> threads;               // 线程数列表
-	int iterations = 3;                     // 每个场景重复次数，取耗时中位数的那一次
-	std::vector<std::string> filters;       // 场景过滤（子串匹配 "场景/目标"，任意一个命中即运行）
-	std::string csvPath;                    // 可选 CSV 输出
-	std::string mdPath;                     // 可选 Markdown 输出
-	std::string workDir;                    // 工作目录（默认系统临时目录下）
-	bool keep = false;                      // 结束后保留工作目录
-	bool cold = false;                      // 每次迭代前尽量清除页缓存（仅 Linux 有效）
-	bool list = false;                      // 只列出场景
+	double scale = 1.0;                     // scale factor for the data set (file count and large-file size)
+	std::vector<int> threads;               // thread counts
+	int iterations = 3;                     // repetitions per scenario; the one with the median time is kept
+	std::vector<std::string> filters;       // scenario filters (substring match on "scenario/target"; any hit runs it)
+	std::string csvPath;                    // optional CSV output
+	std::string mdPath;                     // optional Markdown output
+	std::string workDir;                    // working directory (under the system temp directory by default)
+	bool keep = false;                      // keep the working directory when finished
+	bool cold = false;                      // try to drop the page cache before each iteration (Linux only)
+	bool list = false;                      // list scenarios only
 };
 
 void printHelp()
@@ -205,22 +205,22 @@ bool parseArgs(int argc, char** argv, Options& opt)
 	return true;
 }
 
-// ================================================================ 数据集
+// ================================================================ Data set
 
 struct Dataset
 {
-	std::string root;                  // 本机数据目录
-	std::vector<std::string> small;    // 相对路径（small/ 下，单个大目录）
-	std::vector<std::string> medium;   // medium/ 下
-	std::string large;                 // 大文件相对路径
+	std::string root;                  // native data directory
+	std::vector<std::string> small;    // relative paths (under small/, one large directory)
+	std::vector<std::string> medium;   // under medium/
+	std::string large;                 // relative path of the large file
 	size_t smallSize = 4 * KiB;
 	size_t mediumSize = 256 * KiB;
 	size_t largeSize = 64 * MiB;
-	std::string archivePlain, archiveXor, archiveLz4;   // 三个归档的本机路径
-	std::vector<std::string> allNativeFiles;            // 用于 --cold 清缓存
+	std::string archivePlain, archiveXor, archiveLz4;   // native paths of the three archives
+	std::vector<std::string> allNativeFiles;            // used by --cold to drop caches
 };
 
-// 生成可压缩的伪文本（LZ4 大约能压到 1/2 ~ 1/3），内容由种子确定
+// Generate compressible pseudo-text (LZ4 compresses it to roughly 1/2 to 1/3); the contents are determined by the seed
 std::vector<uint8_t> makeContent(size_t size, uint64_t seed)
 {
 	static const char* const WORDS[] = {"vfs ", "archive ", "mount ", "layer ", "stream ", "read ", "write ", "native ",
@@ -233,7 +233,7 @@ std::vector<uint8_t> makeContent(size_t size, uint64_t seed)
 		x ^= x << 13;
 		x ^= x >> 7;
 		x ^= x << 17;
-		// 大约 1/8 的概率插入一个随机字节，避免压缩比过高
+		// About a 1/8 chance of inserting a random byte, so the compression ratio does not get too high
 		if ((x & 7) == 0)
 			out.push_back(static_cast<uint8_t>(x >> 24));
 		const char* w = WORDS[(x >> 8) & 15];
@@ -299,7 +299,7 @@ bool buildDataset(const Options& opt, Dataset& ds)
 		ds.medium.push_back("medium/" + fileName("m", i));
 	ds.large = "large.bin";
 
-	// 小文件内容全部取自同一个块的不同片段，生成快；归档去重关闭与否不影响（片段各不相同）
+	// Small-file contents are all slices of one block, so generation is fast; archive dedup on or off does not matter (the slices differ)
 	const std::vector<uint8_t> pool = makeContent(ds.smallSize * 64 + 4096, 1);
 	for (size_t i = 0; i < smallCount; ++i)
 	{
@@ -338,7 +338,7 @@ bool buildDataset(const Options& opt, Dataset& ds)
 	return true;
 }
 
-// 尽量把数据文件从页缓存中逐出（不需要 root）。目录项 / inode 缓存无法这样清除
+// Try to evict the data files from the page cache (does not need root). Directory-entry / inode caches cannot be cleared this way
 void dropCaches(const Dataset& ds)
 {
 #if (VFS_PLATFORM_LINUX || VFS_PLATFORM_ANDROID)
@@ -356,23 +356,23 @@ void dropCaches(const Dataset& ds)
 #endif
 }
 
-// ================================================================ 被测目标
+// ================================================================ Targets under test
 
 /**
- * 随机读句柄：打开一次，多次按偏移读取。
+ * Random-read handle: opened once, then read by offset many times.
  */
 class Handle
 {
 public:
 	virtual ~Handle() = default;
 
-	// 从 offset 读 size 字节，返回读到的字节数，失败返回 -1
+	// Read size bytes from offset; returns the number of bytes read, or -1 on failure
 	virtual int64_t readAt(int64_t offset, void* buf, size_t size) = 0;
 };
 
 /**
- * 被测目标：基线（直接调用 OS / C / C++ 文件 API）或某种 VFS 组合。
- * 所有方法都可以被多个线程并发调用。路径都是相对数据集根目录的相对路径。
+ * A target under test: a baseline (calling the OS / C / C++ file API directly) or some VFS combination.
+ * Every method may be called concurrently from several threads. Paths are relative to the data-set root.
  */
 class Target
 {
@@ -383,16 +383,16 @@ public:
 
 	virtual bool baseline() const { return false; }
 
-	// 是否参与元数据场景（stat / miss / list）。三个读基线只让 stdio 参与，避免重复
+	// Whether it takes part in metadata scenarios (stat / miss / list). Of the three read baselines only stdio participates, to avoid duplication
 	virtual bool supportsMeta() const { return true; }
 
-	// 打开 + 读完整个文件 + 关闭；返回字节数，失败返回 -1
+	// Open + read the whole file + close; returns the byte count, or -1 on failure
 	virtual int64_t readWhole(const std::string& rel, std::vector<uint8_t>& buf) = 0;
 
-	// 分块顺序读完整个文件，每块调用一次 onChunk（用于记录每块的延迟）
+	// Read the whole file sequentially in chunks, calling onChunk once per chunk (used to record per-chunk latency)
 	virtual int64_t readChunks(const std::string& rel, std::vector<uint8_t>& buf, const std::function<void()>& onChunk) = 0;
 
-	// 打开后立即关闭
+	// Open and close immediately
 	virtual bool openClose(const std::string& rel) = 0;
 
 	virtual std::unique_ptr<Handle> openHandle(const std::string& rel) = 0;
@@ -401,10 +401,10 @@ public:
 
 	virtual bool exists(const std::string& rel) = 0;
 
-	// 列目录，返回条目数，失败返回 -1
+	// List a directory; returns the entry count, or -1 on failure
 	virtual int64_t list(const std::string& rel) = 0;
 
-	// 写入相关：只有写目标实现
+	// Write-related: implemented only by write targets
 	virtual bool resetWriteArea(int /*threads*/) { return false; }
 
 	virtual bool writeWhole(const std::string& /*rel*/, const uint8_t* /*data*/, size_t /*size*/) { return false; }
@@ -412,7 +412,7 @@ public:
 	virtual bool remove(const std::string& /*rel*/) { return false; }
 };
 
-// ---------------------------------------------------------------- 基线：C FILE*
+// ---------------------------------------------------------------- Baseline: C FILE*
 
 #if VFS_PLATFORM_WINDOWS
 int seek64(FILE* f, int64_t off) { return ::_fseeki64(f, off, SEEK_SET); }
@@ -438,7 +438,7 @@ private:
 	FILE* m_file;
 };
 
-// 基线目标的公共部分：根目录、写入区、std::filesystem 实现的元数据操作
+// Shared part of the baseline targets: root directory, write area, and metadata operations implemented with std::filesystem
 class NativeBaseline : public Target
 {
 public:
@@ -551,7 +551,7 @@ public:
 	}
 };
 
-// ---------------------------------------------------------------- 基线：std::fstream
+// ---------------------------------------------------------------- Baseline: std::fstream
 
 class FstreamHandle : public Handle
 {
@@ -628,7 +628,7 @@ public:
 	}
 };
 
-// ---------------------------------------------------------------- 基线：POSIX pread / Win32 ReadFile
+// ---------------------------------------------------------------- Baseline: POSIX pread / Win32 ReadFile
 
 #if VFS_PLATFORM_WINDOWS
 
@@ -790,7 +790,7 @@ public:
 	}
 };
 
-// ---------------------------------------------------------------- VFS 目标
+// ---------------------------------------------------------------- VFS targets
 
 class VfsHandle : public Handle
 {
@@ -925,7 +925,7 @@ bool checkMount(MountId id, const std::string& what)
 	return id != 0;
 }
 
-// 读 / 元数据场景的全部目标
+// Every target for read / metadata scenarios
 std::vector<std::unique_ptr<Target>> makeReadTargets(const Options& opt, const Dataset& ds)
 {
 	std::vector<std::unique_ptr<Target>> out;
@@ -933,7 +933,7 @@ std::vector<std::unique_ptr<Target>> makeReadTargets(const Options& opt, const D
 	out.push_back(std::make_unique<FstreamTarget>(ds.root));
 	out.push_back(std::make_unique<OsTarget>(ds.root));
 
-	const std::string overlayDir = opt.workDir + "/overlay";   // 空的本机覆盖目录
+	const std::string overlayDir = opt.workDir + "/overlay";   // empty native overlay directory
 	std::error_code ec;
 	stdfs::create_directories(overlayDir, ec);
 	bool ok = true;
@@ -957,7 +957,7 @@ std::vector<std::unique_ptr<Target>> makeReadTargets(const Options& opt, const D
 		out.push_back(std::move(t));
 	}
 	{
-		// 归档在下、空的本机覆盖目录在上：开发期“本机文件覆盖归档”的典型用法
+		// Archive underneath, empty native overlay directory on top: the typical "native files override the archive" setup during development
 		auto t = std::make_unique<VfsTarget>("vfs:archive+native", "/d");
 		ok &= checkMount(t->fs().mountArchive("/d", ds.archivePlain, {}, MountOptions{0, 0}), "archive+native/archive");
 		ok &= checkMount(t->fs().mountNative("/d", overlayDir, MountOptions{1, 0}), "archive+native/native");
@@ -970,7 +970,7 @@ std::vector<std::unique_ptr<Target>> makeReadTargets(const Options& opt, const D
 		out.push_back(std::move(t));
 	}
 	{
-		// 三层：归档 + 本机覆盖 + 内存（可写）
+		// Three layers: archive + native overlay + memory (writable)
 		auto t = std::make_unique<VfsTarget>("vfs:3layer", "/d");
 		ok &= checkMount(t->fs().mountArchive("/d", ds.archivePlain, {}, MountOptions{0, 0}), "3layer/archive");
 		ok &= checkMount(t->fs().mountNative("/d", overlayDir, MountOptions{1, 0}), "3layer/native");
@@ -978,7 +978,7 @@ std::vector<std::unique_ptr<Target>> makeReadTargets(const Options& opt, const D
 		out.push_back(std::move(t));
 	}
 	{
-		// 深层嵌套：数据（本机）挂在第 8 层，每一级祖先上都有一个空的内存挂载，另有 32 个无关挂载撑大挂载表
+		// Deep nesting: the data (native) is mounted at level 8, every ancestor has an empty memory mount, and 32 unrelated mounts enlarge the mount table
 		std::string prefix;
 		auto t = std::make_unique<VfsTarget>("vfs:nested8", "/n1/n2/n3/n4/n5/n6/n7/n8");
 		for (int i = 1; i <= 8; ++i)
@@ -996,7 +996,7 @@ std::vector<std::unique_ptr<Target>> makeReadTargets(const Options& opt, const D
 	return out;
 }
 
-// 写场景的目标
+// Targets for write scenarios
 std::vector<std::unique_ptr<Target>> makeWriteTargets(const Options& opt, const Dataset& ds)
 {
 	std::vector<std::unique_ptr<Target>> out;
@@ -1029,11 +1029,11 @@ std::vector<std::unique_ptr<Target>> makeWriteTargets(const Options& opt, const 
 	return out;
 }
 
-// ================================================================ 运行与统计
+// ================================================================ Run and statistics
 
 struct ThreadStats
 {
-	std::vector<uint32_t> latNs;   // 每次操作的延迟（纳秒，超过 4 秒截断）
+	std::vector<uint32_t> latNs;   // latency of each operation (nanoseconds, clamped past 4 seconds)
 	uint64_t ops = 0;
 	uint64_t bytes = 0;
 	bool failed = false;
@@ -1050,7 +1050,7 @@ struct Result
 	double seconds = 0;
 	double p50us = 0;
 	double p99us = 0;
-	double ratio = 0;   // 相对 base:stdio 的吞吐比
+	double ratio = 0;   // throughput relative to base:stdio
 	bool failed = false;
 };
 
@@ -1062,7 +1062,7 @@ inline uint32_t elapsedNs(Clock::time_point t0)
 
 using Work = std::function<void(int tid, int threads, ThreadStats& st)>;
 
-// 多线程运行一次：所有线程同时起跑，计时覆盖从起跑到最后一个线程结束
+// Run once with multiple threads: every thread starts together, and the timer covers from the start until the last thread finishes
 Result runOnce(int threads, const Work& work)
 {
 	std::vector<ThreadStats> stats(static_cast<size_t>(threads));
@@ -1113,11 +1113,11 @@ Result runOnce(int threads, const Work& work)
 struct Scenario
 {
 	std::string name;
-	bool write = false;    // 使用写目标
-	bool meta = false;     // 元数据场景（只有支持的目标参与）
-	bool bytes = true;     // 是否报告 MB/s
+	bool write = false;    // use write targets
+	bool meta = false;     // metadata scenario (only targets that support it take part)
+	bool bytes = true;     // whether to report MB/s
 	std::string desc;
-	// 每次迭代前的准备（例如清空写入区），返回 false 表示失败
+	// Preparation before each iteration (for example clearing the write area); false means failure
 	std::function<bool(Target&, int threads)> prepare;
 	std::function<Work(Target&)> make;
 };
@@ -1138,7 +1138,7 @@ std::vector<Scenario> makeScenarios(const Options& opt, const Dataset& ds)
 	const size_t writeFiles = std::max<size_t>(20, static_cast<size_t>(200 * opt.scale));
 	const size_t churnOps = std::max<size_t>(100, static_cast<size_t>(1000 * opt.scale));
 
-	// 读完整个文件：每个线程读完整个文件集合，起点错开
+	// Read whole files: each thread reads the whole file set, with staggered starting points
 	auto readSet = [](const std::vector<std::string>* files, size_t bufSize)
 	{
 		return [files, bufSize](Target& tg) -> Work
@@ -1342,7 +1342,7 @@ bool matchFilter(const Options& opt, const std::string& scenario, const std::str
 	return false;
 }
 
-// ================================================================ 输出
+// ================================================================ Output
 
 std::string fmt(double v, int prec)
 {
@@ -1413,7 +1413,7 @@ std::string compilerInfo()
 }
 
 #if VFS_PLATFORM_WINDOWS
-// 读注册表字符串值（HKLM），失败返回空串
+// Read a registry string value (HKLM); returns an empty string on failure
 std::string regString(const wchar_t* subKey, const wchar_t* value)
 {
 	wchar_t buf[256];
@@ -1428,7 +1428,7 @@ std::string regString(const wchar_t* subKey, const wchar_t* value)
 }
 #endif
 
-[[maybe_unused]] std::string trim(std::string s)   // 部分平台（如 WebAssembly）的 cpuInfo 用不到
+[[maybe_unused]] std::string trim(std::string s)   // unused by cpuInfo on some platforms (for example WebAssembly)
 {
 	while (!s.empty() && (s.back() == ' ' || s.back() == '\t' || s.back() == '\n'))
 		s.pop_back();
@@ -1439,7 +1439,7 @@ std::string regString(const wchar_t* subKey, const wchar_t* value)
 std::string osInfo()
 {
 #if VFS_PLATFORM_WINDOWS
-	// 产品名（注册表里 Windows 11 仍写作 "Windows 10"，以内部版本号为准）+ 版本号
+	// Product name (the registry still says "Windows 10" for Windows 11; the build number is what counts) + version
 	const wchar_t* key = L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion";
 	std::string name = regString(key, L"ProductName");
 	std::string build = regString(key, L"CurrentBuildNumber");
@@ -1465,7 +1465,7 @@ std::string cpuInfo()
 	std::string line;
 	while (std::getline(f, line))
 	{
-		// x86 是 "model name"；部分 ARM 内核只有 "Hardware" / "CPU part"
+		// x86 is "model name"; some ARM kernels only have "Hardware" / "CPU part"
 		if (line.rfind("model name", 0) == 0 || line.rfind("Hardware", 0) == 0)
 		{
 			auto p = line.find(':');
@@ -1497,7 +1497,7 @@ std::string nowString()
 } // namespace
 
 #ifdef VFS_BENCH_IOS_HOST
-// iOS 上由 ios/IosMain.mm 提供 main，在 UIKit 启动完成后调用这里
+// On iOS, ios/IosMain.mm provides main and calls this after UIKit has finished launching
 int vfs_bench_main(int argc, char** argv)
 #else
 int main(int argc, char** argv)
@@ -1590,7 +1590,7 @@ int main(int argc, char** argv)
 					return runOnce(threads, work);
 				};
 				if (!opt.cold)
-					runPrepared();   // 预热
+				runPrepared();   // warmup
 				std::vector<Result> runs;
 				for (int i = 0; i < opt.iterations; ++i)
 					runs.push_back(runPrepared());
@@ -1601,7 +1601,7 @@ int main(int argc, char** argv)
 				r.scenario = s.name;
 				r.target = tg->name();
 				r.baseline = tg->baseline();
-				// 相对 base:stdio 的吞吐比（同一场景、同一线程数）
+				// Throughput relative to base:stdio (same scenario, same thread count)
 				for (auto& b : results)
 				{
 					if (b.scenario == r.scenario && b.threads == r.threads && b.target == "base:stdio" && !b.failed && !r.failed)

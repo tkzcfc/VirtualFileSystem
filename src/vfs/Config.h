@@ -1,17 +1,17 @@
-// 本文件：编译期开关。可以在编译命令行或 CMake 中覆盖这些宏。
+// This file: compile-time switches. Override these macros on the compiler command line or from CMake.
 #pragma once
 
-// 为 1 时，vfs::IFileStream 直接使用 axmol 的 ax::IFileStream（接入 axmol 时使用）
+// When 1, vfs::IFileStream is axmol's ax::IFileStream (used when integrating with axmol).
 #ifndef VFS_WITH_AXMOL
 #    define VFS_WITH_AXMOL 0
 #endif
 
-// 单次 read/write 的最大字节数。接口用 int 返回读写长度，所以必须小于 INT_MAX
+// Maximum bytes in one read/write. The interface returns the length as int, so this must be less than INT_MAX.
 #ifndef VFS_MAX_IO_CHUNK
 #    define VFS_MAX_IO_CHUNK 0x7FFFF000u
 #endif
 
-// 读取归档索引时允许的最大索引长度（防止恶意文件导致超大内存分配）
+// Maximum index length accepted when reading an archive index (stops a malicious file from forcing a huge allocation).
 #ifndef VFS_MAX_INDEX_SIZE
 #    define VFS_MAX_INDEX_SIZE (512ull * 1024ull * 1024ull)
 #endif

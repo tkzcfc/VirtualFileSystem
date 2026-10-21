@@ -33,7 +33,7 @@ int toErrno(Error err)
 		return ENOTSUP;
 	case Error::KEY_REQUIRED:
 	case Error::KEY_INVALID:
-		// 没有更贴切的 errno，按“没有权限”处理
+		// No closer errno; treat it as "permission denied".
 		return EACCES;
 	case Error::IO_ERROR:
 	case Error::CORRUPTED:

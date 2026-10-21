@@ -1,6 +1,6 @@
-// 本文件：打包规则使用的 glob 匹配。
-// 语法：`*` 不跨越 '/'，`**` 可以跨越（`**/` 匹配零个或多个目录），`?` 匹配单个非 '/' 字符，
-// `[abc]`、`[a-z]`、`[!abc]` 字符类，`\` 转义。不含 '/' 的模式匹配任意层级的名字（与 gitignore 一致）。
+// This file: glob matching used by pack rules.
+// Syntax: `*` does not cross '/', `**` may cross (`**/` matches zero or more directories), `?` matches a single non-'/' character,
+// `[abc]`, `[a-z]`, and `[!abc]` are character classes, and `\` escapes. A pattern that contains no '/' matches a name at any depth (same as gitignore).
 #pragma once
 
 #include "vfs/Common.h"
@@ -11,7 +11,7 @@ namespace tool
 {
 
 /**
- * 一条规则：模式 + 正/反（include/exclude、encrypt/no-encrypt、compress/no-compress）。
+ * One rule: a pattern plus a positive/negative sense (include/exclude, encrypt/no-encrypt, compress/no-compress).
  */
 struct Rule
 {
@@ -24,18 +24,18 @@ class Glob
 public:
 
 	/**
-	 * 匹配。
-	 * @param pattern glob 模式
-	 * @param path    相对源目录的 '/' 路径，例如 "a/b/c.png"
+	 * Match.
+	 * @param pattern glob pattern
+	 * @param path    '/' path relative to the source directory, for example "a/b/c.png"
 	 */
 	static bool match(std::string_view pattern, std::string_view path);
 
 	/**
-	 * 按顺序应用规则，最后一条匹配的规则生效（类似 gitignore）。
-	 * @param rules        规则列表
-	 * @param path         相对路径
-	 * @param defaultValue 没有任何规则匹配时的结果
-	 * @param matched      可选：输出是否有规则匹配
+	 * Apply rules in order; the last matching rule wins (similar to gitignore).
+	 * @param rules        Rule list
+	 * @param path         Relative path
+	 * @param defaultValue Result when no rule matches
+	 * @param matched      Optional: set to whether any rule matched
 	 */
 	static bool evaluate(const std::vector<Rule>& rules, std::string_view path, bool defaultValue,
 						 bool* matched = nullptr);

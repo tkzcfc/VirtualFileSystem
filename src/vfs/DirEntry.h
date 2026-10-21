@@ -1,4 +1,4 @@
-// 本文件：列目录时返回的目录项。
+// This file: directory entry returned when listing a directory.
 #pragma once
 
 #include "Stat.h"
@@ -6,7 +6,7 @@
 NS_VFS_BEGIN
 
 /**
- * 目录项。name 只是名字（不含路径），同名时由优先级最高的层决定类型。
+ * Directory entry. name is the name only (no path); when names collide, the highest-priority layer decides the type.
  */
 struct DirEntry
 {

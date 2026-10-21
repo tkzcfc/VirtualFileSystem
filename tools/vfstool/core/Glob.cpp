@@ -8,7 +8,7 @@ namespace tool
 namespace
 {
 
-// 匹配一个字符类 "[...]"。p 指向 '[' 之后；成功时 consumed 返回类的总长度（含 ']'）
+// Match a character class "[...]". p points just after '['; on success consumed is the total length of the class (including ']')
 bool matchClass(std::string_view p, char c, size_t& consumed, bool& valid)
 {
 	size_t i = 0;
@@ -44,12 +44,12 @@ bool matchClass(std::string_view p, char c, size_t& consumed, bool& valid)
 	}
 	if (i >= p.size())
 	{
-		// 没有闭合的 ']'：把 '[' 当作普通字符
+		// No closing ']': treat '[' as an ordinary character
 		valid = false;
 		return false;
 	}
 	valid = true;
-	consumed = i + 2;   // '[' + 内容 + ']'
+	consumed = i + 2;   // '[' + body + ']'
 	return hit != negate;
 }
 
@@ -62,7 +62,7 @@ bool matchImpl(std::string_view p, std::string_view s)
 			std::string_view rest = p.substr(2);
 			if (!rest.empty() && rest[0] == '/')
 			{
-				// "**/"：匹配零个或多个完整目录
+				// "**/": match zero or more complete directories
 				rest = rest.substr(1);
 				if (matchImpl(rest, s))
 					return true;
@@ -73,7 +73,7 @@ bool matchImpl(std::string_view p, std::string_view s)
 				}
 				return false;
 			}
-			// 其他位置的 "**"：匹配任意字符，包括 '/'
+			// "**" anywhere else: match any characters, including '/'
 			for (size_t i = 0; i <= s.size(); ++i)
 			{
 				if (matchImpl(rest, s.substr(i)))
@@ -85,7 +85,7 @@ bool matchImpl(std::string_view p, std::string_view s)
 		char c = p[0];
 		if (c == '*')
 		{
-			// "*"：匹配任意个非 '/' 字符
+			// "*": match any number of non-'/' characters
 			std::string_view rest = p.substr(1);
 			for (size_t i = 0; i <= s.size(); ++i)
 			{
@@ -137,20 +137,20 @@ bool matchImpl(std::string_view p, std::string_view s)
 
 bool Glob::match(std::string_view pattern, std::string_view path)
 {
-	// 前导 '/' 表示锚定在源目录根部，与不带 '/' 的完整路径匹配等价
+	// A leading '/' anchors the pattern at the source-directory root, equivalent to matching a full path without the '/'
 	bool anchored = false;
 	if (!pattern.empty() && pattern[0] == '/')
 	{
 		pattern.remove_prefix(1);
 		anchored = true;
 	}
-	// 结尾的 '/' 只是“目录”提示，去掉
+	// A trailing '/' is only a "directory" hint; drop it
 	while (pattern.size() > 1 && pattern.back() == '/')
 		pattern.remove_suffix(1);
 
 	if (matchImpl(pattern, path))
 		return true;
-	// 不含 '/' 的模式：匹配任意层级的名字（例如 "*.png" 匹配 "a/b/c.png"，".git" 匹配 "x/.git"）
+	// A pattern with no '/': match the name at any depth (for example "*.png" matches "a/b/c.png", ".git" matches "x/.git")
 	if (!anchored && pattern.find('/') == std::string_view::npos)
 	{
 		size_t pos = path.rfind('/');

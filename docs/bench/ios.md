@@ -1,11 +1,11 @@
-# vfs_bench 完整结果 — iOS
+# vfs_bench full results - iOS
 
-- 设备：iPhone 14 Pro（Apple A16，6 核）；内存 6 GiB
-- 系统：iOS 26.5
-- 编译器：Apple clang 17.0.0，Release
-- 磁盘：内置闪存，APFS（工作目录为应用沙盒 tmp）
-- 运行方式：`vfs_bench` 打包成 .app，用 `xcrun devicectl device process launch --console` 启动，结果取自控制台输出
-- 日期：2026-10-21（UTC+8），默认参数（--scale 1，--iterations 3，线程 1,2,4,8,N），热缓存，Release
+- Device: iPhone 14 Pro (Apple A16, 6 cores); memory 6 GiB
+- OS: iOS 26.5
+- Compiler: Apple clang 17.0.0, Release
+- Disk: built-in flash, APFS (working directory is the app sandbox tmp)
+- How it was run: `vfs_bench` packaged as a .app, launched with `xcrun devicectl device process launch --console`, results taken from console output
+- Date: 2026-10-21 (UTC+8), default parameters (--scale 1, --iterations 3, threads 1,2,4,8,N), warm cache, Release
 
 
 ### read.small

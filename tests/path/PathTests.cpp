@@ -1,4 +1,4 @@
-// 路径规范化测试
+// Path normalization tests
 #include "TestUtils.h"
 #include "vfs/Path.h"
 
@@ -25,9 +25,9 @@ TEST_SUITE("path")
 		CHECK(norm("///") == "/");
 		CHECK(norm("/a") == "/a");
 		CHECK(norm("/a/") == "/a");
-		CHECK(norm("a/b") == "/a/b");      // 没有前导 '/' 按相对根处理
-		CHECK(norm("//a//b//") == "/a/b"); // 合并重复的 '/'
-		CHECK(norm("/a/./b/.") == "/a/b"); // 去掉 '.'
+		CHECK(norm("a/b") == "/a/b");      // no leading '/': treat as relative to the root
+		CHECK(norm("//a//b//") == "/a/b"); // collapse repeated '/'
+		CHECK(norm("/a/./b/.") == "/a/b"); // drop '.'
 	}
 
 	TEST_CASE("normalize: backslash is equivalent to slash")
@@ -44,7 +44,7 @@ TEST_SUITE("path")
 		CHECK(norm("../a") == "<INVALID_PATH>");
 		CHECK(norm("/a/b/../../c/./d/..") == "/c");
 		CHECK(norm("/a/..") == "/");
-		// "..." 是普通名字
+		// "..." is an ordinary name
 		CHECK(norm("/.../x") == "/.../x");
 	}
 

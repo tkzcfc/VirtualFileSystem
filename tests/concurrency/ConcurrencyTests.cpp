@@ -1,4 +1,4 @@
-// 并发压力测试：多线程读归档、挂载/卸载与打开中的流并发、内存后端并发读写
+// Concurrency stress tests: multithreaded archive reads, mount/unmount racing with open streams, concurrent memory-backend reads and writes
 #include "TestUtils.h"
 #include "vfs/archive/ArchiveBackend.h"
 #include "vfs/memory/MemoryBackend.h"
@@ -82,10 +82,10 @@ TEST_SUITE("concurrency")
 		std::atomic<int> failures{0};
 		std::atomic<int> streamsRead{0};
 
-		// 一个线程不停地挂载、卸载
+		// One thread mounts and unmounts continuously
 		std::thread mounter([&]()
 		{
-			// 至少 300 轮；如果读线程还没来得及读到（调度原因，Wine/慢机器上常见），继续挂载直到读到一些流
+			// At least 300 rounds; if the reader has not managed to read yet (scheduling, common under Wine or on a slow machine), keep mounting until some streams are read
 			for (int i = 0; i < 300 || (streamsRead.load() < 20 && i < 200000); ++i)
 			{
 				MountId id = fs.mount("/dlc", backend, MountOptions{i % 5, 0});
@@ -107,8 +107,8 @@ TEST_SUITE("concurrency")
 						++failures;
 					auto s = fs.openFileStream("/dlc/data.bin", IFileStream::Mode::READ);
 					if (!s)
-						continue;   // 恰好处于卸载状态
-					// 打开之后即使被卸载也必须完整读完
+						continue;   // currently unmounted
+					// Once opened, the stream must be readable to the end even if unmounted
 					if (test::readStream(*s) != content)
 						++failures;
 					++streamsRead;
@@ -153,7 +153,7 @@ TEST_SUITE("concurrency")
 					if (i % 10 == 9 && fs.removeFile(p) != Error::OK)
 						++failures;
 
-					// 所有线程都往同一个文件追加一行
+					// Every thread appends one line to the same file
 					auto s = fs.openFileStream("/shared/log.txt", IFileStream::Mode::APPEND);
 					if (!s || s->write("0123456789\n", 11) != 11)
 						++failures;
@@ -206,11 +206,11 @@ TEST_SUITE("concurrency")
 		REQUIRE(test::buildArchive(dir.sub("b.vfs"), {{"data.bin", v2, {}}}) == Error::OK);
 		VirtualFileSystem fs;
 		REQUIRE(fs.mountArchive("/", dir.sub("a.vfs")) != 0);
-		// 先让一个线程读一次，然后把归档替换掉（改名覆盖）；之后新线程第一次读时会为自己的分片重新打开句柄，
-		// 必须发现文件已经不是同一个，继续使用挂载时的句柄
+		// Let one thread read once, then replace the archive (rename over it). The next thread's first read reopens a handle for its own shard
+		// and must notice the file is no longer the same one, then keep using the handle from mount time
 		CHECK(test::readStream(*fs.openFileStream("/data.bin", IFileStream::Mode::READ)) == v1);
 		if (!test::nativeReplaceOpenFile())
-			return;   // 文件系统不能替换正被打开的文件（Wine、FAT 等），这种情况不会发生
+			return;   // the filesystem cannot replace a file that is still open (Wine, FAT, and so on), so this case does not arise
 		REQUIRE(native::renamePath(dir.sub("b.vfs"), dir.sub("a.vfs")) == Error::OK);
 		std::atomic<int> failures{0};
 		std::vector<std::thread> threads;

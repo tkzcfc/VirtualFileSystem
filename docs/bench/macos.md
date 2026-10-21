@@ -1,10 +1,10 @@
-# vfs_bench 完整结果 — macOS
+# vfs_bench Full Results - macOS
 
-- CPU：Apple M4，10 核；内存 32 GiB
-- 系统：macOS 26.5.1
-- 编译器：Apple clang 17.0.0，Release
-- 磁盘：内置 SSD，APFS
-- 日期：2026-10-21（UTC+8），默认参数（--scale 1，--iterations 3，线程 1,2,4,8,N），热缓存，Release
+- CPU: Apple M4, 10 cores; memory 32 GiB
+- OS: macOS 26.5.1
+- Compiler: Apple clang 17.0.0, Release
+- Disk: built-in SSD, APFS
+- Date: 2026-10-21 (UTC+8), default parameters (--scale 1, --iterations 3, threads 1,2,4,8,N), warm cache, Release
 
 
 ### read.small

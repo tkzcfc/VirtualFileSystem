@@ -1,4 +1,4 @@
-// 本文件：内存后端。内存中的可读写目录树。
+// This file: the memory backend. A read-write directory tree held in memory.
 #pragma once
 
 #include "../IBackend.h"
@@ -10,16 +10,16 @@ NS_VFS_BEGIN
 
 struct MemoryOptions
 {
-	bool readOnly = false;   // 只读：只能通过 addFile 预填数据
+	bool readOnly = false;   // Read-only: data can only be prefilled through addFile
 };
 
 /**
- * 内存后端。
- * - 节点是目录或带 shared_ptr<MemoryBuffer> 的文件；支持 mkdir/rmdir/rename/resize。
- * - 删除打开中的文件采用 unlink 语义：名字立即移除，数据由流继续持有。
- * 线程安全：每个目录一把读写锁（只保护它的 children），查找时从根开始逐级“先锁子目录、再放父目录”下行，
- * 不同目录下的创建、删除互不阻塞；rename 额外持有一把全局改名锁（同一时刻只有一个 rename 改变树的形状）。
- * 文件数据由各自缓冲区的锁保护。
+ * Memory backend.
+ * - A node is a directory or a file holding shared_ptr<MemoryBuffer>; mkdir/rmdir/rename/resize are supported.
+ * - Deleting an open file uses unlink semantics: the name is removed immediately, and the stream keeps the data.
+ * Thread safety: each directory has its own reader-writer lock (it protects only that directory's children). Lookup walks down from the root, locking the child directory before releasing the parent,
+ * so create and delete under different directories do not block each other. rename also holds a global rename lock (only one rename changes the shape of the tree at a time).
+ * File data is protected by each buffer's own lock.
  */
 class VFS_DLL MemoryBackend : public IBackend
 {
@@ -32,10 +32,10 @@ public:
 	virtual ~MemoryBackend();
 
 	/**
-	 * 预填文件：自动创建父目录（mkdir -p），已存在的文件被覆盖。只读模式下也可以调用。
-	 * @param rel  相对路径（会被规范化）
-	 * @param data 文件内容
-	 * @return OK；路径不合法返回 INVALID_PATH；路径与已有目录冲突返回 IS_DIR/NOT_DIR
+	 * Prefill a file: parent directories are created automatically (mkdir -p), and an existing file is overwritten. This may also be called in read-only mode.
+	 * @param rel  Relative path (it is normalized)
+	 * @param data File contents
+	 * @return OK; INVALID_PATH if the path is illegal; IS_DIR/NOT_DIR if the path conflicts with an existing directory
 	 */
 	Error addFile(std::string_view rel, std::vector<uint8_t> data);
 
@@ -68,16 +68,16 @@ private:
 	class DirLock;
 
 	/**
-	 * 逐级加锁下行到目录 dirRel，返回时 out 持有该目录的锁（exclusive 为 true 时是独占锁，否则共享锁）。
-	 * 中间各级只短暂持有共享锁（先锁子目录再放父目录）。
-	 * @param from 非空时从这个已被调用方锁住的目录开始（dirRel 相对于它，且不能为空），不会释放 from 的锁
-	 * @return OK；某一级不存在返回 NOT_FOUND；某一级（包括目标本身）是文件返回 NOT_DIR
+	 * Walk down to directory dirRel, locking each level. On return, out holds that directory's lock (an exclusive lock when exclusive is true, otherwise a shared lock).
+	 * Intermediate levels hold a shared lock only briefly (the child is locked before the parent is released).
+	 * @param from When non-null, start from this directory already locked by the caller (dirRel is relative to it and must not be empty); from's lock is not released
+	 * @return OK; NOT_FOUND if some level does not exist; NOT_DIR if some level (including the target itself) is a file
 	 */
 	Error lockDir(std::string_view dirRel, bool exclusive, DirLock& out, MemoryNode* from = nullptr) const;
 
 private:
-	std::mutex m_renameMutex;              // 串行化 rename：改名期间树的形状不会被其他 rename 改变
-	std::shared_ptr<MemoryNode> m_root;    // 根目录节点
+	std::mutex m_renameMutex;              // Serializes rename: while a rename is in progress, other renames cannot change the shape of the tree
+	std::shared_ptr<MemoryNode> m_root;    // Root directory node
 	std::atomic<bool> m_readOnly;
 };
 

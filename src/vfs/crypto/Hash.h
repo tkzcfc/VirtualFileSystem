@@ -1,4 +1,4 @@
-// 本文件：XXH3 哈希的薄封装。xxHash 的头文件只在 Hash.cpp 中出现，不暴露给库外。
+// This file: a thin wrapper around XXH3. The xxHash header appears only in Hash.cpp and is not exposed outside the library.
 #pragma once
 
 #include "../Common.h"
@@ -6,7 +6,7 @@
 NS_VFS_BEGIN
 
 /**
- * 128 位哈希值。
+ * 128-bit hash value.
  */
 struct Hash128
 {
@@ -24,18 +24,18 @@ struct Hash128
 };
 
 /**
- * XXH3-64。
+ * XXH3-64.
  */
 VFS_DLL uint64_t xxh3_64(const void* data, size_t len, uint64_t seed = 0);
 
 /**
- * XXH3-128。
+ * XXH3-128.
  */
 VFS_DLL Hash128 xxh3_128(const void* data, size_t len, uint64_t seed = 0);
 
 /**
- * 增量 XXH3-128，用于流式计算大文件的哈希。
- * 线程安全：单个对象不能跨线程使用。
+ * Incremental XXH3-128, for streaming the hash of a large file.
+ * Thread safety: a single object must not be used across threads.
  */
 class VFS_DLL Xxh3Stream
 {
@@ -56,7 +56,7 @@ public:
 	Hash128 digest() const;
 
 private:
-	void* m_state;   // XXH3_state_t*，不在头文件中暴露 xxHash 的类型
+	void* m_state;   // XXH3_state_t*; the xxHash type is not exposed in the header
 };
 
 NS_VFS_END

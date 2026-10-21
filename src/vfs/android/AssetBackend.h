@@ -1,6 +1,6 @@
-// 本文件：只读“资源包”后端（AssetBackend）及其数据来源接口 IAssetProvider。
-// Android 上由 AndroidAssetBackend 提供基于 AAssetManager 的实现（APK 内的 assets/）；
-// 接口与平台无关，桌面上可以用模拟的 IAssetProvider 测试全部逻辑。
+// This file: the read-only "asset pack" backend (AssetBackend) and its data-source interface IAssetProvider.
+// On Android, AndroidAssetBackend supplies an AAssetManager implementation (assets/ inside the APK);
+// the interface is platform-neutral, so a simulated IAssetProvider can exercise all of the logic on the desktop.
 #pragma once
 
 #include "../IBackend.h"
@@ -11,89 +11,89 @@
 NS_VFS_BEGIN
 
 /**
- * 一个打开的资源（语义与 AAsset 一致）。单个对象只在一个线程中使用，不需要线程安全。
+ * An open asset (same semantics as AAsset). A single object is used from one thread only and does not need to be thread-safe.
  */
 class VFS_DLL IAssetFile
 {
 public:
 	virtual ~IAssetFile() = default;
 
-	/// 从当前位置读取，返回读到的字节数，0 表示 EOF，< 0 表示出错
+	/// Read from the current position. Returns the number of bytes read, 0 for EOF, or < 0 on error.
 	virtual int read(void* buf, size_t size) = 0;
 
-	/// 移动当前位置（whence 为 SEEK_SET/SEEK_CUR/SEEK_END），返回新位置，失败返回 -1
+	/// Move the current position (whence is SEEK_SET/SEEK_CUR/SEEK_END). Returns the new position, or -1 on failure.
 	virtual int64_t seek(int64_t offset, int whence) = 0;
 
-	/// 资源总长度
+	/// Total length of the asset.
 	virtual int64_t length() const = 0;
 
 	/**
-	 * 资源未压缩存放时，返回一个可以按偏移读取的文件描述符（所有权交给调用方，需 close），
-	 * 并输出资源在其中的起点与长度；压缩存放或不支持时返回 -1。
-	 * 只在 POSIX 平台上使用（Windows 上的实现应返回 -1）。
+	 * When the asset is stored uncompressed, return a file descriptor that can be read by offset (ownership passes to the caller, who must close it),
+	 * and output the asset's start and length within that file; return -1 when it is stored compressed or the operation is unsupported.
+	 * Used only on POSIX platforms (a Windows implementation should return -1).
 	 */
 	virtual int openFileDescriptor(int64_t& start, int64_t& length) = 0;
 };
 
 /**
- * 资源来源。所有方法都可能被多个线程并发调用，实现必须线程安全（AAssetManager 本身是线程安全的）。
- * 路径是相对资源根目录的规范路径，不带前导 '/'，空串表示根目录。
+ * Asset source. Every method may be called concurrently from multiple threads, so the implementation must be thread-safe (AAssetManager itself is thread-safe).
+ * Paths are canonical relative to the asset root, with no leading '/', and the empty string is the root directory.
  */
 class VFS_DLL IAssetProvider
 {
 public:
 	virtual ~IAssetProvider() = default;
 
-	/// 打开文件；不存在（或是目录）返回 nullptr
+	/// Open a file; return nullptr if it does not exist (or is a directory).
 	virtual std::unique_ptr<IAssetFile> open(std::string_view path) = 0;
 
 	/**
-	 * 列出目录中的**文件**名（与 AAssetDir 一致：不包含子目录）。
-	 * @return 目录中有文件时返回 true；目录不存在、为空或只含子目录时返回 false
+	 * List the **file** names in a directory (same as AAssetDir: subdirectories are not included).
+	 * @return true when the directory contains files; false when it does not exist, is empty, or contains only subdirectories
 	 */
 	virtual bool listFiles(std::string_view dir, std::vector<std::string>& names) = 0;
 };
 
 /**
- * 资源后端选项。
+ * Options for the asset backend.
  */
 struct AssetOptions
 {
 	/**
-	 * 资源内的子目录作为后端根目录，例如 "res" 表示只挂载 assets/res/。空串表示整个资源目录。
+	 * A subdirectory inside the assets that becomes the backend root, for example "res" mounts only assets/res/. The empty string means the whole asset tree.
 	 */
 	std::string root;
 
 	/**
-	 * 可选的清单文件（相对 root 的资源路径，例如 "assets.lst"）：每行一个文件路径（相对 root，'/' 分隔，
-	 * 可以带 "assets/" 之外的任意层级）。存在时目录结构完全来自清单，stat/list 是精确的，
-	 * 包括只含子目录的目录；不存在或为空时退化为探测模式（见 AssetBackend 说明）。
+	 * Optional manifest file (an asset path relative to root, for example "assets.lst"): one file path per line (relative to root, '/' separated,
+	 * at any depth outside "assets/"). When present, the directory structure comes entirely from the manifest and stat/list are exact,
+	 * including directories that contain only subdirectories; when missing or empty, fall back to probe mode (see the AssetBackend notes).
 	 */
 	std::string manifest;
 };
 
 /**
- * 只读资源后端。
+ * Read-only asset backend.
  *
- * 两种目录模式：
- * - 清单模式（AssetOptions::manifest 指向的清单存在）：挂载时读入清单建立目录树，stat/list 精确；
- * - 探测模式：文件通过 open 判断；目录通过“列出其中的文件是否非空”判断。AAssetManager 不能列出子目录，
- *   所以只含子目录的目录 stat 为 NOT_FOUND、list 也看不到子目录——需要完整目录结构时请使用清单。
+ * Two directory modes:
+ * - Manifest mode (the manifest named by AssetOptions::manifest exists): the manifest is read at mount time to build the directory tree, and stat/list are exact;
+ * - Probe mode: files are detected by open; directories are detected by "listing files in them is non-empty". AAssetManager cannot list subdirectories,
+ *   so a directory that contains only subdirectories stats as NOT_FOUND and list does not show those subdirectories. Use a manifest when the full tree is required.
  *
- * 读取：每个流持有自己的 IAssetFile，互不影响，可以多线程并发打开和读取同一资源。
- * POSIX 平台上，未压缩存放的资源改用 openFileDescriptor 得到的描述符按偏移读取（pread），
- * 不经过 AAsset 的游标；压缩存放的资源用 IAssetFile::read/seek。
- * 线程安全：后端本身只有不可变的清单索引，可以无限并发。
+ * Reads: each stream holds its own IAssetFile, so they do not interfere, and the same asset can be opened and read concurrently from multiple threads.
+ * On POSIX, an uncompressed asset is read by offset (pread) through the descriptor from openFileDescriptor,
+ * without using the AAsset cursor; compressed assets use IAssetFile::read/seek.
+ * Thread safety: the backend itself holds only an immutable manifest index and can be used concurrently without limit.
  */
 class VFS_DLL AssetBackend : public IBackend, public std::enable_shared_from_this<AssetBackend>
 {
 public:
 
 	/**
-	 * @param provider 资源来源（不能为空）
-	 * @param options  选项
-	 * @param err      可选的错误输出：provider 为空返回 UNSUPPORTED；root 不合法返回 INVALID_PATH；清单含非法路径返回 CORRUPTED
-	 * @return 失败返回 nullptr
+	 * @param provider Asset source (must not be null)
+	 * @param options  Options
+	 * @param err      Optional error output: UNSUPPORTED if provider is null; INVALID_PATH if root is illegal; CORRUPTED if the manifest contains an illegal path
+	 * @return nullptr on failure
 	 */
 	static std::shared_ptr<AssetBackend> create(std::shared_ptr<IAssetProvider> provider, const AssetOptions& options = {},
 												Error* err = nullptr);
@@ -112,35 +112,35 @@ public:
 
 	virtual const char* typeName() const override { return "asset"; }
 
-	/// 是否使用清单模式
+	/// Whether manifest mode is in use.
 	bool hasManifest() const { return m_hasManifest; }
 
 	/**
-	 * 把资源中的一个 .vfs 归档包装成归档来源，用于 ArchiveBackend::create（例如 APK 内的 assets/game.vfs）。
-	 * POSIX 平台上资源未压缩存放时（Gradle：androidResources { noCompress += "vfs" }），来源持有一个描述符做位置读，
-	 * 打开归档内的文件不需要再打开资源；否则每个流打开一次资源（压缩存放的资源随机读很慢，不推荐）。
-	 * @return 资源不存在或是目录时返回 nullptr，err 为 NOT_FOUND / IS_DIR 等；后端不是由 shared_ptr 持有时返回 UNSUPPORTED
+	 * Wrap a .vfs archive stored as an asset into an archive source, for ArchiveBackend::create (for example assets/game.vfs inside an APK).
+	 * On POSIX, when the asset is stored uncompressed (Gradle: androidResources { noCompress += "vfs" }), the source holds one descriptor for positional reads,
+	 * and opening a file inside the archive does not open the asset again; otherwise each stream opens the asset once (random reads of a compressed asset are slow and not recommended).
+	 * @return nullptr when the asset is missing or is a directory, with err set to NOT_FOUND / IS_DIR and similar; UNSUPPORTED when the backend is not held by a shared_ptr
 	 */
 	std::shared_ptr<IArchiveSource> archiveSource(std::string_view rel, Error* err = nullptr);
 
 private:
-	// 后端相对路径 → 资源路径（加上 root 前缀）
+	// Backend-relative path -> asset path (with the root prefix).
 	std::string assetPath(std::string_view rel) const;
 
-	// 路径不存在时区分 NOT_FOUND 与 NOT_DIR（某一级父路径是文件）
+	// When a path is missing, distinguish NOT_FOUND from NOT_DIR (some parent component is a file).
 	Error classifyMissing(std::string_view rel) const;
 
-	// 探测模式：目录是否存在（根目录总是存在）
+	// Probe mode: whether a directory exists (the root always exists).
 	bool probeDir(std::string_view rel) const;
 
-	// 读入并解析清单
+	// Read and parse the manifest.
 	Error loadManifest(std::string_view manifestPath);
 
 	std::shared_ptr<IAssetProvider> m_provider;
-	std::string m_root;   // 空串，或以 '/' 结尾的资源子目录
+	std::string m_root;   // Empty, or an asset subdirectory ending in '/'
 	bool m_hasManifest = false;
-	std::unordered_set<std::string> m_files;                                  // 清单模式：所有文件
-	std::unordered_map<std::string, std::vector<DirEntry>> m_dirs;            // 清单模式：目录 → 子项
+	std::unordered_set<std::string> m_files;                                  // Manifest mode: every file
+	std::unordered_map<std::string, std::vector<DirEntry>> m_dirs;            // Manifest mode: directory -> children
 };
 
 NS_VFS_END

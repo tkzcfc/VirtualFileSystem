@@ -32,7 +32,7 @@ TempDir::TempDir()
 	m_path = fromPath(p);
 }
 
-// 递归删除，走 native:: 的操作，Windows 上超过 MAX_PATH 的深层目录也能删掉
+// Recursive delete through native:: operations, so deep directories past MAX_PATH can still be removed on Windows.
 static void removeTree(const std::string& path)
 {
 	std::vector<std::pair<std::string, bool>> children;
@@ -42,7 +42,7 @@ static void removeTree(const std::string& path)
 	});
 	for (const auto& [child, isDir] : children)
 	{
-		// listDir 会跟随符号链接，链接本身只删除链接，绝不递归进去
+		// listDir follows symbolic links; the link itself is only unlinked and is never recursed into.
 		std::error_code ec;
 		if (stdfs::is_symlink(vfs::native::toFsPath(child), ec))
 			stdfs::remove(vfs::native::toFsPath(child), ec);
@@ -58,7 +58,7 @@ TempDir::~TempDir()
 {
 	std::error_code ec;
 	stdfs::remove_all(u8(m_path), ec);
-	// 兜底：Windows 上标准库（如 MinGW 的 directory_iterator）处理不了超过 MAX_PATH 的深层目录
+	// Fallback: on Windows the standard library (for example MinGW's directory_iterator) cannot handle deep directories past MAX_PATH.
 	vfs::Stat st;
 	if (vfs::native::statPath(m_path, st) == vfs::Error::OK)
 		removeTree(m_path);
@@ -185,8 +185,8 @@ vfs::Error buildArchive(const std::string& outPath, const std::vector<ArchiveFil
 bool nativeCaseSensitive()
 {
 	static const bool s_value = [] {
-		// 只有两个只差大小写的名字能同时创建成两个文件才算区分大小写：
-		// iOS 模拟器的文件系统查找区分大小写，但创建时仍与已有的名字冲突（EEXIST）
+		// Case-sensitive only if two names that differ only in case can both be created as files:
+		// the iOS Simulator filesystem is case-sensitive on lookup, but creating a name still conflicts with an existing one (EEXIST).
 		TempDir dir;
 		dir.write("CaseProbe.txt", "x");
 		if (dir.exists("caseprobe.txt"))

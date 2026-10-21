@@ -1,4 +1,4 @@
-// ChaCha20（RFC 8439 测试向量）、XOR、LZ4、XXH3、ByteIO 测试
+// ChaCha20 (RFC 8439 test vectors), XOR, LZ4, XXH3, and ByteIO tests
 #include "TestUtils.h"
 #include "data/Rfc8439Vectors.h"
 #include "vfs/archive/ByteIO.h"
@@ -24,7 +24,7 @@ TEST_SUITE("crypto")
 			ChaCha20::block(v.key.data(), v.counter, v.nonce.data(), out);
 			CHECK(std::vector<uint8_t>(out, out + 64) == v.keystream);
 
-			// 用流接口加密 64 个 0 字节，结果就是密钥流
+			// Encrypt 64 zero bytes through the stream API; the result is the keystream
 			std::vector<uint8_t> zeros(64, 0);
 			ChaCha20 cipher(v.key.data(), v.nonce.data(), v.counter);
 			cipher.process(zeros.data(), zeros.size());
@@ -45,7 +45,7 @@ TEST_SUITE("crypto")
 			enc.process(data.data(), data.size());
 			CHECK(data == v.ciphertext);
 
-			// 解密 = 再加密一次；分成不规则的小块处理，验证跨块状态正确
+			// Decryption is another encryption pass; irregular small chunks check that state carries across blocks
 			ChaCha20 dec(v.key.data(), v.nonce.data(), v.counter);
 			size_t pos = 0;
 			size_t step = 1;
@@ -105,14 +105,14 @@ TEST_SUITE("crypto")
 		CHECK(Compression::lz4Decompress(packed.data(), packed.size(), out.data(), out.size()));
 		CHECK(out == src);
 
-		// 长度不对或数据损坏都必须失败，不能越界
+		// A wrong length or corrupt data must fail, and must not read past the buffer
 		CHECK_FALSE(Compression::lz4Decompress(packed.data(), packed.size(), out.data(), out.size() - 1));
 		std::vector<uint8_t> broken = packed;
 		broken[broken.size() / 2] ^= 0xFF;
 		broken.resize(broken.size() - 3);
 		CHECK_FALSE(Compression::lz4Decompress(broken.data(), broken.size(), out.data(), out.size()));
 
-		// 压缩结果确定（可复现构建的前提）
+		// Compression output is deterministic (required for reproducible builds)
 		std::vector<uint8_t> packed2;
 		REQUIRE(Compression::lz4Compress(src.data(), src.size(), packed2));
 		CHECK(packed == packed2);
@@ -133,7 +133,7 @@ TEST_SUITE("crypto")
 		CHECK(stream.digest() == whole);
 		CHECK(xxh3_64(data.data(), data.size()) != 0);
 		CHECK(xxh3_64(data.data(), data.size(), 1) != xxh3_64(data.data(), data.size(), 2));
-		// XXH3-64 的已知值：空输入、seed 0
+		// Known XXH3-64 value: empty input, seed 0
 		CHECK(xxh3_64("", 0) == 0x2D06800538D394C2ull);
 	}
 

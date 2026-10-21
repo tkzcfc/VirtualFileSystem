@@ -54,7 +54,7 @@ uint32_t SingleFileBackend::capabilities() const
 
 Error SingleFileBackend::stat(std::string_view rel, Stat& out) const
 {
-	// 挂载点本身是文件，所以它下面的任何路径都是“中间一级不是目录”
+	// The mount point itself is a file, so any path under it means "an intermediate component is not a directory".
 	if (!rel.empty())
 		return Error::NOT_DIR;
 	Error err = native::statPath(m_nativeFile, out);
@@ -97,7 +97,7 @@ Error SingleFileBackend::createDir(std::string_view rel)
 
 Error SingleFileBackend::removeFile(std::string_view rel)
 {
-	// 挂载点不能删除
+	// The mount point cannot be deleted.
 	return rel.empty() ? Error::BUSY : Error::NOT_DIR;
 }
 

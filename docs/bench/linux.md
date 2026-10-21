@@ -1,10 +1,10 @@
-# vfs_bench 完整结果 — Linux
+# vfs_bench full results - Linux
 
-- CPU：Intel Xeon（KVM 虚拟机），8 vCPU；内存 15 GiB
-- 系统：Debian 13 (trixie)，Linux 6.12.94
-- 编译器：GCC 14.2.0，Release
-- 磁盘：virtio 块设备，ext4（工作目录 /tmp）
-- 日期：2026-10-21（UTC+8），默认参数（--scale 1，--iterations 3，线程 1,2,4,8,N），热缓存，Release
+- CPU: Intel Xeon (KVM virtual machine), 8 vCPU; memory 15 GiB
+- OS: Debian 13 (trixie), Linux 6.12.94
+- Compiler: GCC 14.2.0, Release
+- Disk: virtio block device, ext4 (working directory /tmp)
+- Date: 2026-10-21 (UTC+8), default parameters (--scale 1, --iterations 3, threads 1,2,4,8,N), hot cache, Release
 
 
 ### read.small

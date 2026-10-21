@@ -1,4 +1,4 @@
-// 本文件：.vfs 归档后端（只读）。
+// This file: the .vfs archive backend (read-only).
 #pragma once
 
 #include "../IBackend.h"
@@ -7,28 +7,28 @@
 NS_VFS_BEGIN
 
 /**
- * 归档后端。
- * - 挂载时一次性读入并解析索引，之后 stat/list 都在内存中完成，O(1) 或 O(子项数)。
- * - 未压缩文件：每次 open 新建一个独立句柄，按偏移读取；XOR 文件按位置即时解密。
- * - LZ4 压缩文件：open 时整体读出、解密、解压到内存，返回内存流。
- * - 只读：写模式打开返回 READ_ONLY。需要写入时在上层叠加可写的 Native/Memory 层。
- * 线程安全：索引不可变，可以无限并发。
+ * Archive backend.
+ * - On mount the index is read and parsed once; later stat/list run entirely in memory, O(1) or O(child count).
+ * - Uncompressed files: each open creates an independent handle and reads by offset; XOR files are decrypted in place by position.
+ * - LZ4 compressed files: open reads, decrypts, and decompresses the whole file into memory and returns a memory stream.
+ * - Read-only: opening for write returns READ_ONLY. To write, stack a writable Native/Memory layer above.
+ * Thread safety: the index is immutable and may be used with unlimited concurrency.
  */
 class VFS_DLL ArchiveBackend : public IBackend
 {
 public:
 
 	/**
-	 * 打开本机归档文件（命名为 create 而非 open，避免与 IBackend::open 重载混淆）。
-	 * @param nativePath 归档路径（UTF-8）
-	 * @param options    读取选项（索引密钥、起始偏移）
-	 * @param err        可选的错误输出，见 ArchiveReader::open
+	 * Open a native archive file (named create rather than open, to avoid clashing with the IBackend::open overload).
+	 * @param nativePath archive path (UTF-8)
+	 * @param options    read options (index key, start offset)
+	 * @param err        optional error output; see ArchiveReader::open
 	 */
 	static std::shared_ptr<ArchiveBackend> create(std::string_view nativePath, const ArchiveOptions& options = {},
 												  Error* err = nullptr);
 
 	/**
-	 * 从任意来源打开归档（例如内存）。
+	 * Open an archive from any source (for example memory).
 	 */
 	static std::shared_ptr<ArchiveBackend> create(std::shared_ptr<IArchiveSource> source,
 												  const ArchiveOptions& options = {}, Error* err = nullptr);
@@ -48,12 +48,12 @@ public:
 	virtual const char* typeName() const override { return "archive"; }
 
 	/**
-	 * 解析后的索引（不可变）。
+	 * The parsed index (immutable).
 	 */
 	const std::shared_ptr<const ArchiveIndex>& index() const { return m_index; }
 
 	/**
-	 * 校验所有文件的内容哈希（离线检查用，开销等于把整个归档读一遍）。
+	 * Check the content hash of every file (offline check; the cost is one full read of the archive).
 	 */
 	Error verifyAll() const;
 

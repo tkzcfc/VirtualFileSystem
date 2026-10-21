@@ -1,4 +1,4 @@
-// 本文件：小端序列化工具。全部用移位实现，任何字节序的机器上结果都一致。
+// This file: little-endian serialization helpers. Everything is implemented with shifts, so the result is the same on machines of any endianness.
 #pragma once
 
 #include "../Common.h"

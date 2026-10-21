@@ -78,7 +78,7 @@ std::unique_ptr<IFileStream> MemoryArchiveSource::openStream(Error* err) const
 
 int64_t MemoryArchiveSource::readAt(void* buf, size_t size, uint64_t offset) const
 {
-	// 与 MemoryFileStream 一样取共享锁，即使有人违规修改缓冲区也不会读到越界内存
+	// Take a shared lock, as MemoryFileStream does, so even an illegal mutation of the buffer cannot read out of bounds
 	std::shared_lock<SharedMutex> lock(m_buffer->mutex);
 	const auto& data = m_buffer->data;
 	if (offset >= data.size())

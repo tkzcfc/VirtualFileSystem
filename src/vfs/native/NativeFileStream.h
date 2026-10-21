@@ -1,5 +1,5 @@
-// 本文件：本机文件流，参照 axmol `FileStream` 的 lowio 实现。
-// POSIX 上使用 open/lseek64/read/write；Windows 上使用 CreateFileW 系列（UTF-8 转 UTF-16）。
+// This file: native file streams, following axmol `FileStream`'s lowio implementation.
+// POSIX uses open/lseek64/read/write; Windows uses the CreateFileW family (UTF-8 converted to UTF-16).
 #pragma once
 
 #include "../Common.h"
@@ -8,12 +8,12 @@
 NS_VFS_BEGIN
 
 /**
- * 本机文件流。
- * - 与 axmol FileStream 相同的打开语义：READ=O_RDONLY；WRITE=O_CREAT|O_RDWR|O_TRUNC；
- *   APPEND=O_APPEND|O_CREAT|O_RDWR；OVERLAPPED=O_CREAT|O_RDWR。
- * - Windows 上额外带 FILE_SHARE_DELETE，打开期间允许删除/替换文件。
- * - 打开目录会失败（errno=EISDIR）。
- * 线程安全：单个对象不能跨线程同时使用；不同对象互不影响。只能移动，不能拷贝。
+ * Native file stream.
+ * - Same open semantics as axmol FileStream: READ=O_RDONLY; WRITE=O_CREAT|O_RDWR|O_TRUNC;
+ *   APPEND=O_APPEND|O_CREAT|O_RDWR; OVERLAPPED=O_CREAT|O_RDWR.
+ * - On Windows, FILE_SHARE_DELETE is also set so the file may be deleted or replaced while open.
+ * - Opening a directory fails (errno=EISDIR).
+ * Thread safety: one object must not be used from multiple threads at once; distinct objects do not interfere. Movable only, not copyable.
  */
 class VFS_DLL NativeFileStream : public IFileStream
 {
@@ -32,10 +32,10 @@ public:
 	virtual ~NativeFileStream();
 
 	/**
-	 * 打开本机文件。
-	 * @param path UTF-8 本机路径
-	 * @param mode 打开模式
-	 * @return 成功返回 true；失败返回 false 并设置 errno
+	 * Open a native file.
+	 * @param path native path in UTF-8
+	 * @param mode open mode
+	 * @return true on success; false on failure, with errno set
 	 */
 	virtual bool open(std::string_view path, IFileStream::Mode mode) override;
 
@@ -58,8 +58,8 @@ public:
 	virtual osfhnd_t nativeHandle() const override;
 
 private:
-	osfhnd_t m_handle;   // 本机句柄；未打开时为 (osfhnd_t)-1
-	bool m_append;       // APPEND 模式：Windows 上每次写前 seek 到末尾
+	osfhnd_t m_handle;   // native handle; (osfhnd_t)-1 when not open
+	bool m_append;       // APPEND mode: on Windows, seek to the end before every write
 };
 
 NS_VFS_END

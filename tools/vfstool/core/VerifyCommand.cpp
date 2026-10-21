@@ -1,4 +1,4 @@
-// vfstool verify：检查 header、索引和每个文件的内容哈希
+// vfstool verify: check the header, the index, and each file content hash
 #include "Commands.h"
 
 NS_VFS_BEGIN
@@ -8,7 +8,7 @@ namespace tool
 
 int runVerify(const VerifyOptions& options, std::ostream& out, std::ostream& err)
 {
-	// 打开时已完成 header 校验和、区段边界、索引 XXH3、密钥和条目合法性检查
+	// Opening already checked the header checksum, section bounds, index XXH3, key, and entry validity
 	std::shared_ptr<const ArchiveIndex> index;
 	int code = openArchive(options.archive, index, err);
 	if (code != 0)

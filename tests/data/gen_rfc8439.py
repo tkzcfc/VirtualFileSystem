@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-# 从 RFC 8439 原文生成 ChaCha20 测试向量头文件 Rfc8439Vectors.h。
-# 用法：curl -sSLo rfc8439.txt https://www.rfc-editor.org/rfc/rfc8439.txt && python3 gen_rfc8439.py rfc8439.txt > Rfc8439Vectors.h
+# Generate the ChaCha20 test-vector header Rfc8439Vectors.h from the RFC 8439 text.
+# Usage: curl -sSLo rfc8439.txt https://www.rfc-editor.org/rfc/rfc8439.txt && python3 gen_rfc8439.py rfc8439.txt > Rfc8439Vectors.h
 import re
 import sys
 
@@ -8,13 +8,13 @@ lines = open(sys.argv[1], encoding="ascii").read().splitlines()
 
 
 def hexdump(start):
-    """读取从 start 行开始的十六进制转储，返回字节列表"""
+    """Read the hex dump starting at line start and return a list of bytes"""
     out = []
     i = start
     while i < len(lines):
         m = re.match(r"^\s+(\d{3})  (.*)$", lines[i])
         if not m:
-            # 跳过分页（空行、页脚、页眉）
+            # Skip pagination (blank lines, page footers, page headers)
             if lines[i].strip() == "" or "Nir & Langley" in lines[i] or lines[i].startswith("RFC 8439"):
                 i += 1
                 if out and i < len(lines) and re.match(r"^\s+\d{3}  ", lines[i]) is None and lines[i].strip() != "" \
@@ -43,16 +43,16 @@ def carr(data):
 blocks = []
 encs = []
 
-# 2.3.2：ChaCha20 block function
+# 2.3.2: ChaCha20 block function
 key = list(range(32))
 nonce = [0, 0, 0, 0x09, 0, 0, 0, 0x4a, 0, 0, 0, 0]
 blocks.append((key, nonce, 1, hexdump(find("Serialized Block:") + 1)))
 
-# 2.4.2：sunscreen
+# 2.4.2: sunscreen
 nonce = [0, 0, 0, 0, 0, 0, 0, 0x4a, 0, 0, 0, 0]
 encs.append((key, nonce, 1, hexdump(find("Plaintext Sunscreen:") + 1), hexdump(find("Ciphertext Sunscreen:") + 1)))
 
-# 附录 A.1 / A.2
+# Appendix A.1 / A.2
 a1 = find("A.1.  The ChaCha20 Block Functions")
 a2 = find("A.2.  ChaCha20 Encryption")
 a3 = find("A.3.  Poly1305 Message Authentication Code")
@@ -81,8 +81,8 @@ while True:
         encs.append((key, nonce, counter, hexdump(p + 1), hexdump(c + 1)))
         i = c + 1
 
-print("// 本文件由 gen_rfc8439.py 从 RFC 8439 原文自动生成，请勿手工修改。")
-print("// 包含 §2.3.2、§2.4.2 以及附录 A.1（block function）和 A.2（加密）的全部 ChaCha20 测试向量。")
+print("// This file is generated automatically by gen_rfc8439.py from the RFC 8439 text. Do not edit by hand.")
+print("// Contains all ChaCha20 test vectors from §2.3.2, §2.4.2, and Appendix A.1 (block function) and A.2 (encryption).")
 print("#pragma once\n\n#include <cstdint>\n#include <vector>\n")
 print("struct ChaChaBlockVector\n{\n\tstd::vector<uint8_t> key;\n\tstd::vector<uint8_t> nonce;\n\tuint32_t counter;\n\tstd::vector<uint8_t> keystream;\n};\n")
 print("struct ChaChaEncryptVector\n{\n\tstd::vector<uint8_t> key;\n\tstd::vector<uint8_t> nonce;\n\tuint32_t counter;\n\tstd::vector<uint8_t> plaintext;\n\tstd::vector<uint8_t> ciphertext;\n};\n")

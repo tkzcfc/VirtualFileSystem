@@ -1,4 +1,4 @@
-// 分层合并视图测试：优先级、合并列表、Opaque、写入目标、copy-up、删除、rename、mkdir/rmdir
+// Layered merge-view tests: priority, merged listing, Opaque, write target, copy-up, delete, rename, mkdir/rmdir
 #include "TestUtils.h"
 #include "vfs/memory/MemoryBackend.h"
 #include <algorithm>
@@ -12,7 +12,7 @@ using Names = std::vector<std::string>;
 namespace
 {
 
-// 预填内容的只读内存后端
+// Read-only memory backend prefilled with content
 std::shared_ptr<MemoryBackend> roMemory(std::initializer_list<std::pair<const char*, const char*>> files)
 {
 	auto b = MemoryBackend::create();
@@ -34,7 +34,7 @@ std::shared_ptr<MemoryBackend> rwMemory(std::initializer_list<std::pair<const ch
 	return b;
 }
 
-// 直接查看某个后端里的文件内容（绕过 VFS）
+// Look at a file's contents inside a backend directly (bypassing the VFS)
 std::string backendContent(const std::shared_ptr<MemoryBackend>& b, std::string_view rel)
 {
 	auto s = b->open(rel, IFileStream::Mode::READ, nullptr);
@@ -87,7 +87,7 @@ TEST_SUITE("union")
 		VirtualFileSystem fs;
 		fs.mount("/a", roMemory({{"b/x.txt", "deep-by-root"}}), prio(10));
 		fs.mount("/a/b", roMemory({{"x.txt", "nested"}, {"y.txt", "only-nested"}}));
-		// /a 优先级更高，/a/b/x.txt 由它提供
+		// /a has higher priority, so it provides /a/b/x.txt
 		CHECK(readAll(fs, "/a/b/x.txt") == "deep-by-root");
 		CHECK(readAll(fs, "/a/b/y.txt") == "only-nested");
 		CHECK(listNames(fs, "/a/b") == Names{"x.txt", "y.txt"});
@@ -101,7 +101,7 @@ TEST_SUITE("union")
 		CHECK(listNames(fs, "/d") == Names{"Z.txt", "a.txt", "b.txt", "c.txt", "sub/"});
 		CHECK(readAll(fs, "/d/a.txt") == "2");
 
-		// 回调返回 false 时停止遍历
+		// Returning false from the callback stops the walk
 		int count = 0;
 		CHECK(fs.list("/d", [&count](const DirEntry&) { return ++count < 2; }) == Error::OK);
 		CHECK(count == 2);
@@ -127,7 +127,7 @@ TEST_SUITE("union")
 		CHECK(fs.stat("/x/y.txt", st) == Error::NOT_DIR);
 		CHECK(listNames(fs, "/") == Names{"f/", "x"});
 
-		// 高层目录、低层文件：按目录处理
+		// Upper layer is a directory, lower layer is a file: treat it as a directory
 		CHECK(fs.isDir("/f"));
 		CHECK(readAll(fs, "/f/inner.txt") == "high-dir");
 	}
@@ -142,7 +142,7 @@ TEST_SUITE("union")
 		CHECK(listNames(fs, "/data") == Names{"a.txt"});
 		CHECK(readAll(fs, "/other.txt") == "low");
 
-		// 比 Opaque 层优先级更高的层仍然可见
+		// A layer with higher priority than the Opaque layer is still visible
 		fs.mount("/", roMemory({{"data/c.txt", "high"}}), prio(10));
 		CHECK(listNames(fs, "/data") == Names{"a.txt", "c.txt"});
 	}
@@ -236,10 +236,10 @@ TEST_SUITE("union")
 		auto rw = rwMemory();
 		fs.mount("/", rw, prio(0));
 		fs.mount("/", roMemory({{"f.txt", "ro"}}), prio(10));
-		// 写到低优先级可写层会被只读层挡住，读不到 → READ_ONLY
+		// A write onto a lower-priority writable layer would be hidden by the read-only layer and could not be read -> READ_ONLY
 		CHECK(fs.writeFile("/f.txt", "x") == Error::READ_ONLY);
 		CHECK(backendContent(rw, "f.txt") == "<none>");
-		// 不冲突的新文件可以写
+		// A new file that does not conflict can be written
 		CHECK(fs.writeFile("/g.txt", "x") == Error::OK);
 	}
 
@@ -267,12 +267,12 @@ TEST_SUITE("union")
 		CHECK(st.type == FileType::DIR);
 		CHECK(listNames(fs, "/a/b") == Names{"c.txt", "new.txt"});
 
-		// 父目录在合并视图中也不存在 → NOT_FOUND（open(O_CREAT) 不建父目录）
+		// The parent directory does not exist in the merged view either -> NOT_FOUND (open(O_CREAT) does not create parents)
 		CHECK(fs.writeFile("/missing/x.txt", "x") == Error::NOT_FOUND);
 		Error err = Error::OK;
 		CHECK(fs.openFileStream("/missing/x.txt", IFileStream::Mode::WRITE, &err) == nullptr);
 		CHECK(err == Error::NOT_FOUND);
-		// 父路径是文件 → NOT_DIR
+		// The parent path is a file -> NOT_DIR
 		CHECK(fs.writeFile("/a/b/c.txt/x", "x") == Error::NOT_DIR);
 	}
 
@@ -310,7 +310,7 @@ TEST_SUITE("union")
 		CHECK(readAll(fs, "/cfg/c.ini") == "new");
 		CHECK(backendContent(ro, "cfg/c.ini") == "base");
 
-		// copy-up 不留下临时文件
+		// copy-up does not leave a temporary file behind
 		CHECK(listNames(fs, "/cfg") == Names{"a.ini", "b.ini", "c.ini"});
 	}
 
@@ -359,11 +359,11 @@ TEST_SUITE("union")
 		CHECK(fs.rename("/nope", "/a/n") == Error::NOT_FOUND);
 		CHECK(fs.rename("/a", "/c") == Error::BUSY);
 
-		// moveFile：跨后端 copy + remove
+		// moveFile: cross-backend copy + remove
 		CHECK(fs.moveFile("/a/x2.txt", "/b/x.txt") == Error::OK);
 		CHECK(readAll(fs, "/b/x.txt") == "x");
 		CHECK_FALSE(fs.exists("/a/x2.txt"));
-		CHECK(fs.moveFile("/a/d2", "/b/d2") == Error::CROSS_DEVICE);   // 目录不支持跨后端移动
+		CHECK(fs.moveFile("/a/d2", "/b/d2") == Error::CROSS_DEVICE);   // Directories cannot be moved across backends
 
 		// copyFile
 		CHECK(fs.copyFile("/ro.txt", "/b/copy.txt") == Error::OK);
@@ -382,14 +382,14 @@ TEST_SUITE("union")
 		CHECK(fs.createDir("/x/y") == Error::NOT_FOUND);
 		CHECK(fs.createDir("/ro/sub/f.txt/z") == Error::NOT_DIR);
 
-		// 中间目录只在只读层：自动 copy-up
+		// An intermediate directory exists only on a read-only layer: copy-up happens automatically
 		CHECK(fs.createDir("/ro/sub/new") == Error::OK);
 		Stat st;
 		CHECK(rw->stat("ro/sub/new", st) == Error::OK);
 
 		CHECK(fs.createDirs("/x/y/z") == Error::OK);
 		CHECK(fs.isDir("/x/y/z"));
-		CHECK(fs.createDirs("/x/y/z") == Error::OK);   // 已存在不算错
+		CHECK(fs.createDirs("/x/y/z") == Error::OK);   // Already existing is not an error
 		CHECK(fs.createDirs("/ro/sub") == Error::OK);
 		CHECK(fs.createDirs("/ro/sub/f.txt/q") == Error::NOT_DIR);
 		CHECK(fs.createDir("/") == Error::EXISTS);
@@ -406,7 +406,7 @@ TEST_SUITE("union")
 		CHECK(fs.removeDir("/a", true) == Error::READ_ONLY);
 		CHECK(backendContent(local, "a/mine.txt") == "m");
 
-		// 本地文件可以逐个删除，/a/b/c.txt 始终存在
+		// Local files can be deleted one by one; /a/b/c.txt always remains
 		CHECK(fs.removeFile("/a/mine.txt") == Error::OK);
 		CHECK(readAll(fs, "/a/b/c.txt") == "pack");
 		CHECK(fs.removeDir("/a/b") == Error::READ_ONLY);
@@ -458,7 +458,7 @@ TEST_SUITE("union")
 		CHECK(fs.unmount(id) == Error::OK);
 		CHECK_FALSE(fs.exists("/dlc/big.bin"));
 		CHECK(fs.mounts().empty());
-		// 后端由流保活，继续读完
+		// The stream keeps the backend alive, so the rest can still be read
 		CHECK(test::str(test::readStream(*s)) == "456789");
 		s.reset();
 
@@ -477,7 +477,7 @@ TEST_SUITE("union")
 		CHECK(fs.removeFile("/f.txt") == Error::OK);
 		CHECK_FALSE(fs.exists("/f.txt"));
 		CHECK(test::str(test::readStream(*s)) == "data");
-		// 同名新文件与旧流无关
+		// A new file with the same name is unrelated to the old stream
 		REQUIRE(fs.writeFile("/f.txt", "new") == Error::OK);
 		s->seek(0, SEEK_SET);
 		CHECK(test::str(test::readStream(*s)) == "data");
@@ -546,7 +546,7 @@ TEST_SUITE("union")
 		CHECK(fs.openFileStream("/../f", IFileStream::Mode::READ, &err) == nullptr);
 		CHECK(err == Error::INVALID_PATH);
 		CHECK_FALSE(fs.exists("/../f"));
-		// 规范化后合法
+		// Legal after normalization
 		CHECK(readAll(fs, "\\x\\..\\f") == "x");
 	}
 
@@ -603,7 +603,7 @@ TEST_SUITE("union")
 
 	TEST_CASE("return codes: backend root rename is INVALID_PATH, default rename UNSUPPORTED, merged non-empty target NOT_EMPTY")
 	{
-		// 直接调用后端：根目录（空相对路径）不能作为改名的源或目标，是参数错误而不是 BUSY
+		// Calling the backend directly: the root (an empty relative path) cannot be a rename source or target; that is a bad argument, not BUSY
 		auto mem = MemoryBackend::create();
 		mem->addFile("a.txt", "a");
 		CHECK(mem->rename("", "x") == Error::INVALID_PATH);
@@ -614,12 +614,12 @@ TEST_SUITE("union")
 		REQUIRE(native);
 		CHECK(native->rename("", "x") == Error::INVALID_PATH);
 		CHECK(native->rename("f.txt", "") == Error::INVALID_PATH);
-		// 不支持改名的后端（默认实现）：UNSUPPORTED，与能力位一致
+		// A backend that does not support rename (the default implementation): UNSUPPORTED, consistent with the capability bit
 		VirtualFileSystem single;
 		single.mountFile("/cfg", dir.sub("f.txt"));
 		CHECK(single.mounts()[0].backend->rename("", "y") == Error::UNSUPPORTED);
 
-		// 经过 VFS：目标目录在写入层是空的，但只读层里同名目录有内容 → 合并视图非空，NOT_EMPTY，什么都不动
+		// Through the VFS: the target directory is empty on the write layer, but the same-named directory on a read-only layer has contents -> the merged view is not empty, NOT_EMPTY, and nothing is changed
 		VirtualFileSystem fs;
 		auto lower = MemoryBackend::create();
 		lower->addFile("dest/hidden.txt", "h");
@@ -632,10 +632,10 @@ TEST_SUITE("union")
 		CHECK(fs.rename("/src", "/dest") == Error::NOT_EMPTY);
 		CHECK(fs.isDir("/src/x"));
 		CHECK(test::listNames(fs, "/dest") == std::vector<std::string>{"hidden.txt"});
-		// 合并视图为空的目标目录照常被替换
+		// A target directory that is empty in the merged view is replaced as usual
 		CHECK(fs.rename("/src", "/dest2") == Error::OK);
 		CHECK(fs.isDir("/dest2/x"));
-		// 跨挂载移动时源已不存在：NOT_FOUND（而不是 CROSS_DEVICE）
+		// When moving across mounts, a source that no longer exists is NOT_FOUND (rather than CROSS_DEVICE)
 		fs.mountMemory("/other");
 		CHECK(fs.moveFile("/missing.txt", "/other/m.txt") == Error::NOT_FOUND);
 	}

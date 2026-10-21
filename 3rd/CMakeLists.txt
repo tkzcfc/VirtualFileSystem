@@ -1,10 +1,10 @@
-# 第三方依赖目标。版本见 3rd/README.md
+# Third-party dependency targets. Versions are listed in 3rd/README.md.
 
-# xxHash：header-only（XXH_INLINE_ALL），只在 src/vfs/crypto/Hash.cpp 中包含
+# xxHash: header-only (XXH_INLINE_ALL), included only from src/vfs/crypto/Hash.cpp.
 add_library(vfs_3rd_xxhash INTERFACE)
 target_include_directories(vfs_3rd_xxhash INTERFACE ${CMAKE_CURRENT_LIST_DIR}/xxhash)
 
-# LZ4：编译成内部静态库
+# LZ4: built as an internal static library.
 add_library(vfs_3rd_lz4 STATIC
     ${CMAKE_CURRENT_LIST_DIR}/lz4/lz4.c
     ${CMAKE_CURRENT_LIST_DIR}/lz4/lz4hc.c
@@ -12,13 +12,13 @@ add_library(vfs_3rd_lz4 STATIC
 target_include_directories(vfs_3rd_lz4 PUBLIC ${CMAKE_CURRENT_LIST_DIR}/lz4)
 set_target_properties(vfs_3rd_lz4 PROPERTIES POSITION_INDEPENDENT_CODE ON FOLDER "3rd")
 
-# doctest：只给测试用
+# doctest: tests only.
 add_library(vfs_3rd_doctest INTERFACE)
 target_include_directories(vfs_3rd_doctest INTERFACE ${CMAKE_CURRENT_LIST_DIR}/doctest)
 
-# CLI11：只给 vfstool 用
+# CLI11: vfstool only.
 add_library(vfs_3rd_cli11 INTERFACE)
 target_include_directories(vfs_3rd_cli11 SYSTEM INTERFACE ${CMAKE_CURRENT_LIST_DIR}/CLI11)
-# 不使用 <codecvt>：std::wstring_convert 在 C++17 起已废弃，libc++ 会报 -Wdeprecated-declarations。
-# vfstool 自己在 Windows 上用 Win32 API 取得 UTF-8 参数，不调用 CLI11 的 narrow/widen
+# Do not use <codecvt>: std::wstring_convert is deprecated since C++17, and libc++ warns with -Wdeprecated-declarations.
+# vfstool gets UTF-8 arguments on Windows via the Win32 API itself and does not call CLI11 narrow/widen.
 target_compile_definitions(vfs_3rd_cli11 INTERFACE CLI11_HAS_CODECVT=0)

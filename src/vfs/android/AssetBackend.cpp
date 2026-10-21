@@ -17,7 +17,7 @@ namespace
 {
 
 /**
- * 资源文件流。每个流独占一个 IAssetFile（或一个描述符），不同流之间没有共享状态。
+ * Asset file stream. Each stream owns one IAssetFile (or one descriptor); streams share no state.
  */
 class AssetFileStream : public IFileStream
 {
@@ -26,7 +26,7 @@ public:
 	{
 		m_size = m_asset->length();
 #if VFS_PLATFORM_POSIX
-		// 未压缩资源：改用描述符按偏移读取，不再需要 AAsset 的游标（也释放它占用的映射）
+		// Uncompressed asset: switch to descriptor reads by offset, so the AAsset cursor is no longer needed (and the mapping it holds is released)
 		int64_t start = 0, len = 0;
 		int fd = m_asset->openFileDescriptor(start, len);
 		if (fd >= 0)
@@ -43,7 +43,7 @@ public:
 
 	bool open(std::string_view /*path*/, IFileStream::Mode /*mode*/) override
 	{
-		// 资源流只能由 AssetBackend 构造
+		// Asset streams can only be constructed by AssetBackend
 		errno = ENOTSUP;
 		return false;
 	}
@@ -90,7 +90,7 @@ public:
 			errno = EINVAL;
 			return -1;
 		}
-		// 只记录逻辑位置，真正读取时再定位；允许 seek 到 EOF 之后，之后 read 返回 0
+		// Record only the logical position and seek on the actual read; seeking past EOF is allowed, and a later read returns 0
 		m_pos = base + offset;
 		return m_pos;
 	}
@@ -118,7 +118,7 @@ public:
 			return static_cast<int>(n);
 		}
 #endif
-		// 压缩资源：AAsset 有自己的游标，与逻辑位置不一致时先 seek
+		// Compressed asset: AAsset has its own cursor; seek first when it disagrees with the logical position
 		if (m_assetPos != m_pos)
 		{
 			if (m_asset->seek(m_pos, SEEK_SET) != m_pos)
@@ -176,20 +176,20 @@ public:
 	bool isOpen() const override { return m_open; }
 
 private:
-	// IFileStream 的读接口是 const，游标与底层对象需要 mutable
+	// IFileStream read methods are const, so the cursor and the underlying object must be mutable
 	mutable std::unique_ptr<IAssetFile> m_asset;
 #if VFS_PLATFORM_POSIX
-	int m_fd = -1;         // 未压缩资源的描述符（-1 表示使用 m_asset）
-	int64_t m_fdStart = 0; // 资源在描述符中的起点
+	int m_fd = -1;         // Descriptor of an uncompressed asset (-1 means use m_asset)
+	int64_t m_fdStart = 0; // Start of the asset within the descriptor
 #endif
 	int64_t m_size = 0;
 	mutable int64_t m_pos = 0;
-	mutable int64_t m_assetPos = 0;   // AAsset 游标位置；-1 表示未知
+	mutable int64_t m_assetPos = 0;   // AAsset cursor position; -1 means unknown
 	bool m_open = true;
 };
 
 /**
- * 资源中的归档。描述符可用时位置读（pread 本身线程安全），否则每次 openStream 通过后端打开一个新的资源流
+ * Archive stored as an asset. When a descriptor is available, reads are positional (pread is thread-safe by itself); otherwise each openStream opens a new asset stream through the backend
  */
 class AssetArchiveSource : public IArchiveSource
 {
@@ -207,7 +207,7 @@ public:
 #endif
 	}
 
-	// 构造后、发布给其他线程之前调用一次
+	// Called once after construction, before the object is published to other threads
 	void attachDescriptor([[maybe_unused]] IAssetFile& file)
 	{
 #if VFS_PLATFORM_POSIX
@@ -245,7 +245,7 @@ public:
 	std::string describe() const override { return m_describe; }
 
 private:
-	std::shared_ptr<AssetBackend> m_backend;   // 保活后端（及其资源来源）
+	std::shared_ptr<AssetBackend> m_backend;   // Keeps the backend (and its asset source) alive
 	std::string m_rel;
 	std::string m_describe;
 #if VFS_PLATFORM_POSIX
@@ -267,7 +267,7 @@ std::shared_ptr<IArchiveSource> AssetBackend::archiveSource(std::string_view rel
 		return nullptr;
 	}
 	Error e = Error::OK;
-	if (!open(key, IFileStream::Mode::READ, &e))   // 统一检查：不存在、是目录、清单外
+	if (!open(key, IFileStream::Mode::READ, &e))   // Shared checks: missing, a directory, or outside the manifest
 	{
 		if (err)
 			*err = e;
@@ -340,7 +340,7 @@ uint32_t AssetBackend::capabilities() const
 std::string AssetBackend::assetPath(std::string_view rel) const
 {
 	if (rel.empty() && !m_root.empty())
-		return m_root.substr(0, m_root.size() - 1);   // 根目录本身不带结尾的 '/'
+		return m_root.substr(0, m_root.size() - 1);   // The root directory itself has no trailing '/'
 	std::string p = m_root;
 	p.append(rel);
 	return p;
@@ -353,7 +353,7 @@ Error AssetBackend::loadManifest(std::string_view manifestPath)
 		return Error::INVALID_PATH;
 	auto file = m_provider->open(assetPath(mp));
 	if (!file)
-		return Error::OK;   // 清单不存在：探测模式
+		return Error::OK;   // No manifest: probe mode
 	std::string text;
 	char buf[16384];
 	int n;
@@ -362,7 +362,7 @@ Error AssetBackend::loadManifest(std::string_view manifestPath)
 	if (n < 0)
 		return Error::IO_ERROR;
 
-	// 先收集所有文件，再自底向上生成目录（std::map 保证同一目录的子项按名字有序）
+	// Collect every file first, then synthesize directories bottom-up (std::map keeps children of one directory ordered by name)
 	std::map<std::string, std::map<std::string, FileType>> dirs;
 	dirs[std::string()];
 	size_t pos = 0;
@@ -376,14 +376,14 @@ Error AssetBackend::loadManifest(std::string_view manifestPath)
 		while (!line.empty() && (line.back() == '\r' || line.back() == ' ' || line.back() == '\t'))
 			line.remove_suffix(1);
 		if (line.empty() || line.front() == '#')
-			continue;   // 空行与注释
+			continue;   // Blank lines and comments
 		std::string rel;
 		if (Path::normalizeRelative(line, rel) != Error::OK || rel.empty())
 			return Error::CORRUPTED;
 		if (dirs.count(rel))
-			return Error::CORRUPTED;   // 同一路径既是目录又是文件
+			return Error::CORRUPTED;   // The same path is both a directory and a file
 		m_files.insert(rel);
-		// 逐级登记父目录
+		// Register parent directories level by level
 		std::string_view child = rel;
 		FileType type = FileType::FILE;
 		while (true)
@@ -392,14 +392,14 @@ Error AssetBackend::loadManifest(std::string_view manifestPath)
 			std::string_view name = child.substr(parent.empty() ? 0 : parent.size() + 1);
 			std::string parentKey(parent);
 			if (m_files.count(parentKey))
-				return Error::CORRUPTED;   // 父路径同时是文件
+				return Error::CORRUPTED;   // A parent path is also a file
 			auto& children = dirs[parentKey];
 			auto it = children.find(std::string(name));
 			if (it != children.end())
 			{
 				if (it->second != type)
 					return Error::CORRUPTED;
-				break;   // 父目录链已经登记过
+				break;   // This parent chain is already registered
 			}
 			children.emplace(std::string(name), type);
 			if (parent.empty())
@@ -430,7 +430,7 @@ bool AssetBackend::probeDir(std::string_view rel) const
 
 Error AssetBackend::classifyMissing(std::string_view rel) const
 {
-	// 从上往下找第一个是文件的祖先；找不到就是 NOT_FOUND
+	// Walk top-down for the first ancestor that is a file; if none, the result is NOT_FOUND
 	size_t pos = 0;
 	while (true)
 	{
@@ -461,7 +461,7 @@ Error AssetBackend::stat(std::string_view rel, Stat& out) const
 	}
 	else if (probeDir(rel))
 	{
-		// 探测模式下目录优先：AAssetManager_open 打开目录总是失败，二者不会冲突
+		// In probe mode directories win: AAssetManager_open always fails on a directory, so the two cannot conflict
 		if (rel.empty() || !m_provider->open(assetPath(rel)))
 		{
 			out.type = FileType::DIR;
@@ -472,10 +472,10 @@ Error AssetBackend::stat(std::string_view rel, Stat& out) const
 	}
 	auto file = m_provider->open(assetPath(rel));
 	if (!file)
-		return m_hasManifest ? Error::IO_ERROR : classifyMissing(rel);   // 清单里有但打不开：APK 与清单不一致
+		return m_hasManifest ? Error::IO_ERROR : classifyMissing(rel);   // Listed in the manifest but cannot be opened: APK and manifest disagree
 	out.type = FileType::FILE;
 	out.size = file->length();
-	out.mtime = 0;   // APK 资源没有修改时间
+	out.mtime = 0;   // APK assets have no modification time
 	return Error::OK;
 }
 
@@ -521,7 +521,7 @@ Error AssetBackend::list(std::string_view relDir, const std::function<bool(const
 	if (!m_provider->listFiles(assetPath(relDir), names))
 	{
 		if (relDir.empty())
-			return Error::OK;   // 根目录总是存在（可能为空，或只含子目录）
+			return Error::OK;   // The root always exists (it may be empty, or contain only subdirectories)
 		if (m_provider->open(assetPath(relDir)))
 			return Error::NOT_DIR;
 		return classifyMissing(relDir);

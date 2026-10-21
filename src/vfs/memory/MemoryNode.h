@@ -1,4 +1,4 @@
-// 本文件：内存后端的数据结构。
+// This file: data structures for the memory backend.
 #pragma once
 
 #include "../Common.h"
@@ -10,33 +10,33 @@
 NS_VFS_BEGIN
 
 /**
- * 内存文件的数据缓冲区。
- * 由文件节点和所有打开它的流共同持有（shared_ptr），所以删除文件后已打开的流仍然可用。
- * 线程安全：data 由 mutex 保护（读共享、写独占），保证内存安全；读写交错时内容由时序决定。
+ * Data buffer of an in-memory file.
+ * Held jointly (shared_ptr) by the file node and every stream that has it open, so streams already open remain usable after the file is removed.
+ * Thread safety: data is protected by mutex (shared for reads, exclusive for writes), which guarantees memory safety; interleaved reads and writes see content determined by timing.
  */
 struct MemoryBuffer
 {
 	mutable SharedMutex mutex;
 	std::vector<uint8_t> data;
-	std::atomic<int64_t> mtime{0};   // Unix 秒，最后一次写入的时间
+	std::atomic<int64_t> mtime{0};   // Unix seconds, time of the last write
 };
 
 /**
- * 内存树节点：目录（children）或文件（buffer）。
- * 锁：每个目录节点有自己的读写锁，保护 children（mtime 是原子量）。type 和 buffer 指针在创建后不再改变。
- * 加锁顺序永远是祖先在前、后代在后（见 MemoryBackend）。
+ * In-memory tree node: a directory (children) or a file (buffer).
+ * Locking: each directory node has its own reader-writer lock protecting children (mtime is atomic). type and the buffer pointer do not change after creation.
+ * Lock order is always ancestors before descendants (see MemoryBackend).
  */
 struct MemoryNode
 {
 	FileType type = FileType::DIR;
-	std::shared_ptr<MemoryBuffer> buffer;                                  // 仅文件
-	std::map<std::string, std::shared_ptr<MemoryNode>, std::less<>> children; // 仅目录，按名字排序
-	std::atomic<int64_t> mtime{0};                                         // 仅目录
-	mutable SharedMutex mutex;                                       // 仅目录：保护 children
+	std::shared_ptr<MemoryBuffer> buffer;                                  // files only
+	std::map<std::string, std::shared_ptr<MemoryNode>, std::less<>> children; // directories only, sorted by name
+	std::atomic<int64_t> mtime{0};                                         // directories only
+	mutable SharedMutex mutex;                                       // directories only: protects children
 };
 
 /**
- * 当前时间（Unix 秒）。
+ * Current time (Unix seconds).
  */
 int64_t currentUnixTime();
 

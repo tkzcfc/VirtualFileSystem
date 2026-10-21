@@ -1,5 +1,5 @@
-// 本文件由 gen_rfc8439.py 从 RFC 8439 原文自动生成，请勿手工修改。
-// 包含 §2.3.2、§2.4.2 以及附录 A.1（block function）和 A.2（加密）的全部 ChaCha20 测试向量。
+// This file is generated automatically by gen_rfc8439.py from the RFC 8439 text. Do not edit by hand.
+// Contains all ChaCha20 test vectors from §2.3.2, §2.4.2, and Appendix A.1 (block function) and A.2 (encryption).
 #pragma once
 
 #include <cstdint>

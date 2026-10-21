@@ -1,5 +1,5 @@
-// 极端环境：空文件、海量条目、超深路径、超长名字、特殊名字、只读目录、挂载期间磁盘被外部修改、
-// 归档逐区域损坏、错误密钥、故障注入、伪造的超大尺寸、句柄耗尽、超过 4 GB 的稀疏文件。
+// Extreme conditions: empty files, huge entry counts, very deep paths, very long names, special names, read-only directories, the disk changing outside the VFS while mounted,
+// per-region archive corruption, a wrong key, fault injection, forged huge sizes, handle exhaustion, and sparse files larger than 4 GB.
 #include "FaultBackend.h"
 #include "matrix/Envs.h"
 #include "vfs/archive/ArchiveFormat.h"
@@ -26,7 +26,7 @@ using Names = std::vector<std::string>;
 namespace
 {
 
-// 修改未加密索引的归档后，重新计算 indexHash / keyCheck / headerChecksum，使其只剩“语义”错误
+// After editing an archive with an unencrypted index, recompute indexHash / keyCheck / headerChecksum so only a "semantic" error remains
 void reseal(std::vector<uint8_t>& a)
 {
 	const uint64_t indexOffset = ByteIO::readU64LE(a.data() + 48);
@@ -74,7 +74,7 @@ bool runningAsRoot()
 
 TEST_SUITE("extreme")
 {
-	// ================================================================ 空文件与海量条目
+	// ================================================================ empty files and huge entry counts
 
 	TEST_CASE("zero-byte files: every backend and encryption / compression combination")
 	{
@@ -168,7 +168,7 @@ TEST_SUITE("extreme")
 		}
 	}
 
-	// ================================================================ 路径与名字
+	// ================================================================ paths and names
 
 	TEST_CASE("very deep paths: 300 levels in memory, 200 in archives, 100 native")
 	{
@@ -196,7 +196,7 @@ TEST_SUITE("extreme")
 			nrel += (i ? "/" : "") + std::string("n") + std::to_string(i % 10);
 		dir.mkdir("native");
 		REQUIRE(fs.mountNative("/n", dir.sub("native")) != 0);
-		// 本机全路径约 300+ 字节，超过 Windows MAX_PATH（260），需要 \\?\ 长路径前缀
+		// The full native path is about 300+ bytes, past Windows MAX_PATH (260), so it needs the \\?\ long-path prefix
 		INFO("native path length " << dir.sub("native/" + nrel + "/leaf").size());
 		REQUIRE(fs.createDirs("/n/" + nrel) == Error::OK);
 		REQUIRE(fs.writeFile("/n/" + nrel + "/leaf", "ndeep") == Error::OK);
@@ -226,7 +226,7 @@ TEST_SUITE("extreme")
 		if (e == Error::OK)
 			e = w2.write(dir.sub("over.vfs"));
 		CHECK(e != Error::OK);
-		// 内存后端没有长度上限
+		// The memory backend has no length limit
 		REQUIRE(fs.mountMemory("/m") != 0);
 		const std::string longPath = "/m/" + std::string(10000, 'L');
 		CHECK(fs.writeFile(longPath, "long") == Error::OK);
@@ -280,7 +280,7 @@ TEST_SUITE("extreme")
 		CHECK(listNames(fs, "/a/nfc").size() == 2);
 		CHECK(listNames(fs, "/m/nfc").size() == 2);
 #if !VFS_PLATFORM_APPLE
-		// macOS 的部分文件系统会做 Unicode 规范化，NFC/NFD 可能合并
+		// Some macOS filesystems normalize Unicode, so NFC/NFD may collapse
 		CHECK(listNames(fs, "/n/nfc").size() == 2);
 #endif
 		for (const char* n : names)
@@ -339,7 +339,7 @@ TEST_SUITE("extreme")
 			CHECK_FALSE(fs.openFileStream(bad, Mode::READ, &err));
 			CHECK(err == Error::INVALID_PATH);
 		}
-		// 名字中允许的“奇怪”字符
+		// "Odd" characters that are allowed in names
 		for (const char* odd : {"/m/a b", "/m/.x", "/m/..x", "/m/x..", "/m/#$%&'()+,;=@[]^`{}~", "/m/-", "/m/!"})
 		{
 			CAPTURE(odd);
@@ -348,7 +348,7 @@ TEST_SUITE("extreme")
 		}
 	}
 
-	// ================================================================ 挂载点边界
+	// ================================================================ mount-point boundaries
 
 	TEST_CASE("mount point below a lower-layer file: the path to the mount point is always a directory")
 	{
@@ -360,7 +360,7 @@ TEST_SUITE("extreme")
 		std::shared_ptr<MemoryBackend> upper;
 		REQUIRE(fs.mountMemory("/a/b", env::prio(0), &upper) != 0);
 		upper->addFile("x.txt", "X");
-		// 无论优先级如何，挂载点 /a/b 都可达，/a 表现为目录
+		// Whatever the priority, mount point /a/b is reachable and /a appears as a directory
 		CHECK(fs.isDir("/a"));
 		CHECK(listNames(fs, "/") == Names{"a/"});
 		CHECK(listNames(fs, "/a") == Names{"b/"});
@@ -377,7 +377,7 @@ TEST_SUITE("extreme")
 		REQUIRE(fs.mount("/y/z", mem) != 0);
 		REQUIRE(fs.writeFile("/x/f", "shared") == Error::OK);
 		CHECK(readAll(fs, "/y/z/f") == "shared");
-		// 不同挂载之间 rename 视为跨设备，即使后端相同
+		// rename between different mounts is cross-device, even when the backends are the same
 		CHECK(fs.rename("/x/f", "/y/z/g") == Error::CROSS_DEVICE);
 		CHECK(fs.moveFile("/x/f", "/y/z/g") == Error::OK);
 		CHECK(readAll(fs, "/x/g") == "shared");
@@ -403,7 +403,7 @@ TEST_SUITE("extreme")
 		CHECK(fs.writeFile("/res/cfg/new.ini", "x") == Error::READ_ONLY);
 	}
 
-	// ================================================================ 本机目录的外部变化
+	// ================================================================ external changes to a native directory
 
 	TEST_CASE("external disk changes while mounted: delete, replace, file becomes directory; the VFS sees them immediately")
 	{
@@ -416,11 +416,11 @@ TEST_SUITE("extreme")
 
 		auto open = fs.openFileStream("/n/f.txt", Mode::READ);
 		REQUIRE(open);
-		// 外部替换（写临时文件再 rename 覆盖）。
-		// 用 native::renamePath 而不是 std::filesystem::rename：Windows 上后者（MoveFileExW 传统语义）
-		// 不能替换有打开句柄的文件（即使句柄带 FILE_SHARE_DELETE），这是外部工具自己的限制，与 VFS 无关；
-		// renamePath 在支持的系统上用 POSIX 语义替换（Windows 10 1709+ NTFS），和“安全保存”类工具的做法一致
-		// 平台不支持替换打开中的文件时（见 test::nativeReplaceOpenFile），外部工具也只能等句柄关闭，测试同样先关闭
+		// External replace (write a temp file, then rename over the target).
+		// Use native::renamePath rather than std::filesystem::rename: on Windows the latter (classic MoveFileExW semantics)
+		// cannot replace a file that has an open handle (even a handle with FILE_SHARE_DELETE). That limit belongs to the external tool, not the VFS;
+		// renamePath replaces with POSIX semantics on systems that support it (Windows 10 1709+ NTFS), the same approach as "safe save" tools
+		// When the platform cannot replace an open file (see test::nativeReplaceOpenFile), an external tool also has to wait until the handle closes, and the test closes first too
 		if (!test::nativeReplaceOpenFile())
 		{
 			MESSAGE("native file system cannot replace an open file; closing the stream before the external replace");
@@ -432,24 +432,24 @@ TEST_SUITE("extreme")
 		CHECK(readAll(fs, "/n/f.txt") == "v2-longer");
 		CHECK(fs.fileSize("/n/f.txt") == 9);
 #if !VFS_PLATFORM_WINDOWS
-		// POSIX：已打开的流仍然指向旧文件（Windows 上取决于是否走了 POSIX 语义，不检查）
+		// POSIX: an already-open stream still refers to the old file (on Windows this depends on whether POSIX semantics were used, and is not checked)
 		if (open)
 			CHECK(test::str(test::readStream(*open)) == "v1");
 #endif
 		open.reset();
 
-		// 外部删除
+		// External delete
 		std::filesystem::remove(test::u8(dir.sub("root/f.txt")));
 		CHECK_FALSE(fs.exists("/n/f.txt"));
 		CHECK(fs.removeFile("/n/f.txt") == Error::NOT_FOUND);
-		// 目录被换成同名文件
+		// A directory is replaced by a file of the same name
 		std::filesystem::remove_all(test::u8(dir.sub("root/d")));
 		dir.write("root/d", "now a file");
 		CHECK(fs.isFile("/n/d"));
 		Stat st;
 		CHECK(fs.stat("/n/d/x", st) == Error::NOT_DIR);
 		CHECK(listNames(fs, "/n") == Names{"d"});
-		// 挂载根目录本身被删除：操作返回错误而不是崩溃
+		// The mount root itself is deleted: operations return an error instead of crashing
 		std::filesystem::remove_all(test::u8(dir.sub("root")));
 		CHECK_FALSE(fs.exists("/n/d"));
 		CHECK(fs.writeFile("/n/new", "x") != Error::OK);
@@ -464,7 +464,7 @@ TEST_SUITE("extreme")
 		return;
 #else
 		if (runningAsRoot())
-			return;   // root 不受权限位约束
+			return;   // root is not constrained by permission bits
 		test::TempDir dir;
 		dir.write("ro/f.txt", "readonly");
 		dir.mkdir("ro/sub");
@@ -481,8 +481,8 @@ TEST_SUITE("extreme")
 		CHECK(fs.rename("/r/f.txt", "/r/g.txt") == Error::PERMISSION_DENIED);
 		CHECK(fs.writeFile("/r/sub/x", "x") == Error::PERMISSION_DENIED);
 		CHECK(readAll(fs, "/r/f.txt") == "readonly");
-		// 叠加一个可写层：本机层本身仍被视为可写（没有 ReadOnly 标志），已有文件原地写入仍被 OS 拒绝，
-		// 新文件落到最高的可写层；给本机层加上 ReadOnly 标志后，已有文件也改为写到上层
+		// Stack a writable layer: the native layer itself is still treated as writable (no ReadOnly flag), so in-place writes of existing files are still refused by the OS,
+		// and new files land on the highest writable layer; after the native layer is marked ReadOnly, existing files are written to the upper layer too
 		REQUIRE(fs.mountMemory("/r", env::prio(1)) != 0);
 		CHECK(fs.writeFile("/r/f.txt", "shadow") == Error::PERMISSION_DENIED);
 		CHECK(fs.writeFile("/r/new.txt", "new") == Error::OK);
@@ -496,7 +496,7 @@ TEST_SUITE("extreme")
 #endif
 	}
 
-	// ================================================================ 归档损坏
+	// ================================================================ archive corruption
 
 	TEST_CASE("archive corruption by region: header / data / index / footer each report the right error")
 	{
@@ -517,7 +517,7 @@ TEST_SUITE("extreme")
 		const uint64_t indexOffset = ByteIO::readU64LE(good.data() + 48);
 		const uint64_t indexSize = ByteIO::readU64LE(good.data() + 56);
 
-		// header：每个字节翻转
+		// header: flip every byte
 		for (size_t i = 0; i < ArchiveFormat::HEADER_SIZE; ++i)
 		{
 			auto a = good;
@@ -529,20 +529,20 @@ TEST_SUITE("extreme")
 			else
 				CHECK(e == Error::CORRUPTED);
 		}
-		// 索引：每个字节翻转都被 indexHash 发现
+		// index: flipping every byte is caught by indexHash
 		for (uint64_t i = indexOffset; i < indexOffset + indexSize; i += 7)
 		{
 			auto a = good;
 			a[static_cast<size_t>(i)] ^= 0x01;
 			CHECK(openArchive(a) == Error::CORRUPTED);
 		}
-		// footer：归档起点为 0 时不依赖 footer，损坏不影响打开
+		// footer: when the archive starts at 0 it does not depend on the footer, so corruption does not affect open
 		{
 			auto a = good;
 			a[a.size() - 3] ^= 0xFF;
 			CHECK(openArchive(a) == Error::OK);
 		}
-		// footer：附加在其他数据之后时，footer 损坏导致无法定位
+		// footer: when the archive is appended after other data, a corrupt footer makes it impossible to locate
 		{
 			std::vector<uint8_t> a(1000, 0xAA);
 			a.insert(a.end(), good.begin(), good.end());
@@ -551,10 +551,10 @@ TEST_SUITE("extreme")
 			b[b.size() - 16] ^= 0x01;   // footer magic
 			CHECK(openArchive(b) == Error::CORRUPTED);
 			auto c = a;
-			ByteIO::writeU64LE(c.data() + c.size() - 8, static_cast<uint64_t>(c.size()) + 1);   // archiveSize 超出文件
+			ByteIO::writeU64LE(c.data() + c.size() - 8, static_cast<uint64_t>(c.size()) + 1);   // archiveSize runs past the file
 			CHECK(openArchive(c) == Error::CORRUPTED);
 		}
-		// 数据区：打开成功；读取时 XOR / 明文得到错误内容（运行时不校验），LZ4 解压失败返回错误；verify 全部发现
+		// data region: open succeeds; reads of XOR / plaintext get the wrong content (runtime does not check), LZ4 decompress fails with an error; verify catches all of them
 		for (uint64_t i = dataOffset; i < dataOffset + dataSize; i += 61)
 		{
 			auto a = good;
@@ -571,10 +571,10 @@ TEST_SUITE("extreme")
 				CHECK((re == Error::OK || re == Error::CORRUPTED || re == Error::IO_ERROR));
 			}
 			Error ve = backend->verifyAll();
-			// 翻转可能落在对齐填充字节上，此时内容不变
+			// A flip may land on an alignment padding byte, in which case the content is unchanged
 			CHECK((ve == Error::CORRUPTED || ve == Error::OK));
 		}
-		// 截断到每个区域的边界附近
+		// Truncate near the boundary of each region
 		for (uint64_t cut : {uint64_t(0), uint64_t(1), uint64_t(127), uint64_t(128), dataOffset + dataSize / 2, indexOffset,
 							 indexOffset + indexSize / 2, indexOffset + indexSize, uint64_t(good.size() - 1)})
 		{
@@ -593,24 +593,24 @@ TEST_SUITE("extreme")
 		{
 			auto a = good;
 			reseal(a);
-			CHECK(openArchive(a) == Error::OK);   // reseal 本身不破坏归档
+			CHECK(openArchive(a) == Error::OK);   // reseal itself does not corrupt the archive
 		}
 		{
-			// LZ4 条目声称解压后接近 2 GB：压缩比不可能达到，必须在打开时拒绝（否则读取时会分配 2 GB）
+			// An LZ4 entry claims a decompressed size near 2 GB: that ratio is impossible and must be rejected on open (otherwise the read would allocate 2 GB)
 			auto a = good;
 			ByteIO::writeU64LE(entryField(a, 0, ArchiveFormat::E_SIZE), 0x7E000000ull);
 			reseal(a);
 			CHECK(openArchive(a) == Error::CORRUPTED);
 		}
 		{
-			// 未压缩条目 size 与 storedSize 不一致
+			// An uncompressed entry whose size does not match storedSize
 			auto a = good;
 			ByteIO::writeU64LE(entryField(a, 1, ArchiveFormat::E_SIZE), 1ull << 40);
 			reseal(a);
 			CHECK(openArchive(a) == Error::CORRUPTED);
 		}
 		{
-			// 偏移 + 长度溢出 / 越界
+			// Offset + length overflows / runs out of range
 			auto a = good;
 			ByteIO::writeU64LE(entryField(a, 1, ArchiveFormat::E_OFFSET), ~0ull - 2);
 			reseal(a);
@@ -637,21 +637,21 @@ TEST_SUITE("extreme")
 			CHECK(openArchive(c) == Error::CORRUPTED);
 		}
 		{
-			// 路径池中把 "b" 改成 "a"：重复路径 / 非升序
+			// Change "b" to "a" in the path pool: duplicate path / not ascending
 			auto a = good;
 			const uint32_t nameOffset = ByteIO::readU32LE(entryField(a, 1, ArchiveFormat::E_NAME_OFFSET));
 			const uint64_t indexOffset = ByteIO::readU64LE(a.data() + 48);
 			a[static_cast<size_t>(indexOffset + 2 * ArchiveFormat::ENTRY_SIZE + nameOffset)] = 'a';
 			reseal(a);
 			CHECK(openArchive(a) == Error::CORRUPTED);
-			// nameLength 越界
+			// nameLength out of range
 			auto b = good;
 			ByteIO::writeU32LE(entryField(b, 1, ArchiveFormat::E_NAME_LENGTH), 0xFFFFFFF0u);
 			reseal(b);
 			CHECK(openArchive(b) == Error::CORRUPTED);
 		}
 		{
-			// header 中 entryCount 声称极大，indexSize 也极大
+			// The header claims a huge entryCount, and indexSize is huge too
 			auto a = good;
 			ByteIO::writeU32LE(a.data() + 24, 0xFFFFFFFFu);
 			reseal(a);
@@ -686,7 +686,7 @@ TEST_SUITE("extreme")
 		right.indexKey = o.indexKey;
 		CHECK(fs.mountArchive("/k", dir.sub("k.vfs"), right, {}, &err) != 0);
 		CHECK(readAll(fs, "/k/secret") == "s");
-		// 不存在的文件、目录、不是归档的文件
+		// A missing file, a directory, and a file that is not an archive
 		CHECK(fs.mountArchive("/x", dir.sub("none.vfs"), {}, {}, &err) == 0);
 		CHECK(err == Error::NOT_FOUND);
 		CHECK(fs.mountArchive("/x", dir.path(), {}, {}, &err) == 0);
@@ -700,7 +700,7 @@ TEST_SUITE("extreme")
 		CHECK(fs.mounts().size() == 1);
 	}
 
-	// ================================================================ 故障注入
+	// ================================================================ fault injection
 
 	TEST_CASE("fault injection: read failures make readFile / copyFile / moveFile return IO_ERROR and keep the source")
 	{
@@ -751,14 +751,14 @@ TEST_SUITE("extreme")
 		CHECK(listNames(fs, "/w") == Names{"big.bin"});
 		upperCfg.writeFailAt = -1;
 
-		// copy-up 最后的 rename 失败
+		// The final rename of copy-up fails
 		upperCfg.renameError = Error::IO_ERROR;
 		CHECK_FALSE(fs.openFileStream("/w/big.bin", Mode::APPEND, &err));
 		CHECK(err == Error::IO_ERROR);
 		CHECK(listNames(fs, "/w") == Names{"big.bin"});
 		upperCfg.renameError = Error::OK;
 
-		// 故障解除后 copy-up 成功
+		// After the fault is cleared, copy-up succeeds
 		auto s = fs.openFileStream("/w/big.bin", Mode::APPEND, &err);
 		REQUIRE(s);
 		CHECK(s->size() == 300000);
@@ -773,29 +773,29 @@ TEST_SUITE("extreme")
 		REQUIRE(fs.writeFile("/w/keep.txt", "original") == Error::OK);
 		const std::string big(500000, 'n');
 
-		// 短写：writeFile 循环写完
+		// Short write: writeFile loops until the write is finished
 		cfg.shortWrite = 777;
 		CHECK(fs.writeFile("/w/short.bin", big) == Error::OK);
 		CHECK(readAll(fs, "/w/short.bin") == big);
 		cfg.shortWrite = 0;
 
-		// 写到一半失败（磁盘满）
+		// Failure halfway through a write (disk full)
 		cfg.writeFailAt = 100000;
 		CHECK(fs.writeFile("/w/full.bin", big) == Error::IO_ERROR);
 		CHECK(fs.writeFileAtomic("/w/keep.txt", big.data(), big.size()) == Error::IO_ERROR);
 		cfg.writeFailAt = -1;
-		CHECK(readAll(fs, "/w/keep.txt") == "original");   // 原子保存失败时原文件不变
+		CHECK(readAll(fs, "/w/keep.txt") == "original");   // when an atomic save fails, the original file is unchanged
 		for (const auto& n : listNames(fs, "/w"))
-			CHECK(n.find(".tmp") == std::string::npos);   // 也不留下临时文件
+			CHECK(n.find(".tmp") == std::string::npos);   // and no temporary file is left
 
-		// close 失败
+		// close fails
 		cfg.closeError = EIO;
 		CHECK(fs.writeFile("/w/close.bin", "x") == Error::IO_ERROR);
 		CHECK(fs.writeFileAtomic("/w/keep.txt", "y", 1) == Error::IO_ERROR);
 		cfg.closeError = 0;
 		CHECK(readAll(fs, "/w/keep.txt") == "original");
 
-		// writeFileAtomic 的 rename 失败
+		// writeFileAtomic's rename fails
 		cfg.renameError = Error::IO_ERROR;
 		CHECK(fs.writeFileAtomic("/w/keep.txt", "z", 1) == Error::IO_ERROR);
 		cfg.renameError = Error::OK;
@@ -820,7 +820,7 @@ TEST_SUITE("extreme")
 		cfg.statError = Error::IO_ERROR;
 		Stat st;
 		CHECK(fs.stat("/w/d/f.txt", st) == Error::IO_ERROR);
-		CHECK(fs.stat("/w/d/g.txt", st) == Error::IO_ERROR);   // 上层出错时不能“穿透”到下层
+		CHECK(fs.stat("/w/d/g.txt", st) == Error::IO_ERROR);   // an error on an upper layer must not "fall through" to a lower layer
 		cfg.statError = Error::OK;
 
 		cfg.listError = Error::IO_ERROR;
@@ -847,12 +847,12 @@ TEST_SUITE("extreme")
 		cfg.removeError = Error::OK;
 	}
 
-	// ================================================================ 句柄与大文件
+	// ================================================================ handles and large files
 
 	TEST_CASE("handle exhaustion: native streams fail cleanly and recover; archive streams use no OS handle")
 	{
 #if VFS_PLATFORM_WINDOWS
-		return;   // Windows 的句柄上限很高，这里不模拟
+		return;   // Windows has a very high handle limit, so this is not simulated here
 #else
 		test::TempDir dir;
 		dir.write("n/f.txt", "native");
@@ -870,7 +870,7 @@ TEST_SUITE("extreme")
 		if (old.rlim_cur < lim.rlim_cur || ::setrlimit(RLIMIT_NOFILE, &lim) != 0)
 			return;
 		{
-			// 归档流通过挂载时打开的共享句柄做位置读，不消耗系统句柄
+			// Archive streams do positional reads through the shared handle opened at mount time and do not consume system handles
 			std::vector<std::unique_ptr<IFileStream>> streams;
 			for (int i = 0; i < 2000; ++i)
 			{
@@ -897,11 +897,11 @@ TEST_SUITE("extreme")
 			}
 			CHECK(streams.size() < 2000u);
 			CHECK(err != Error::OK);
-			// 已经打开的流都可用
+			// Streams that are already open all still work
 			char buf[16];
 			CHECK(streams.front()->read(buf, sizeof(buf)) > 0);
 			CHECK(streams.back()->read(buf, sizeof(buf)) > 0);
-			// 内存流不消耗系统句柄
+			// Memory streams do not consume system handles
 			CHECK(readAll(fs, "/m/f.txt") == "memory");
 			streams.clear();
 			CHECK(fs.openFileStream(p, Mode::READ) != nullptr);
@@ -958,7 +958,7 @@ TEST_SUITE("extreme")
 		CHECK(r->seek(-4, SEEK_END) == big - 4);
 		CHECK(r->read(buf, 8) == 4);
 		CHECK(std::string(buf, 4) == "TAIL");
-		// 跨 4 GB 边界读取
+		// Read across the 4 GB boundary
 		CHECK(r->seek((4ll << 30) - 2, SEEK_SET) == (4ll << 30) - 2);
 		CHECK(r->read(buf, 4) == 4);
 	}
@@ -992,7 +992,7 @@ TEST_SUITE("extreme")
 		auto s = fs.openFileStream("/m/f", Mode::READ);
 		REQUIRE(s);
 		std::vector<char> buf(16);
-		// size 参数巨大但文件很短：只返回实际长度
+		// The size argument is huge but the file is short: only the actual length is returned
 		CHECK(s->read(buf.data(), 10) == 10);
 		CHECK(s->seek(0, SEEK_SET) == 0);
 		CHECK(s->read(buf.data(), 0xFFFFFFFFu) == 10);

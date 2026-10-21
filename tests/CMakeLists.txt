@@ -1,4 +1,4 @@
-# 单元测试与命令行端到端测试
+# Unit tests and command-line end-to-end tests
 add_executable(vfs_tests
     main.cpp
     TestUtils.cpp
@@ -23,7 +23,7 @@ add_executable(vfs_tests
     extreme/ExtremeTests.cpp
 )
 target_include_directories(vfs_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-# vfs 通过 vfstool_core 的 PUBLIC 依赖传递进来，不重复链接（否则 Apple ld 会警告 duplicate libraries）
+# vfs arrives through vfstool_core's PUBLIC dependency and is not linked again (otherwise Apple ld warns about duplicate libraries)
 target_link_libraries(vfs_tests PRIVATE vfstool_core vfs_3rd_doctest)
 vfs_set_warnings(vfs_tests)
 vfs_setup_executable(vfs_tests)
@@ -31,13 +31,13 @@ vfs_setup_executable(vfs_tests)
 find_package(Threads REQUIRED)
 target_link_libraries(vfs_tests PRIVATE Threads::Threads)
 
-# 每个 TEST_SUITE 注册成一个 ctest 用例，失败时容易定位
+# Each TEST_SUITE is registered as its own ctest case so a failure is easy to locate
 foreach(suite path union native memory stream archive asset crypto tool concurrency deadlock matrix stress model extreme)
     add_test(NAME vfs.${suite} COMMAND vfs_tests --test-suite=${suite} --no-version)
 endforeach()
 
-# 命令行端到端：pack → info → list → cat → unpack → verify，以及两次打包哈希一致
-# 交叉编译（Emscripten 的 node、MinGW 的 wine）时通过模拟器运行 vfstool
+# Command-line end to end: pack -> info -> list -> cat -> unpack -> verify, and two packs have the same hash
+# When cross-compiling (node for Emscripten, wine for MinGW), run vfstool through an emulator
 string(REPLACE ";" "|" VFS_E2E_EMULATOR "${CMAKE_CROSSCOMPILING_EMULATOR}")
 add_test(NAME vfstool.e2e
     COMMAND ${CMAKE_COMMAND}

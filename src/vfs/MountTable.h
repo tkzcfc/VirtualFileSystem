@@ -1,6 +1,6 @@
-// 本文件：挂载表。
-// 挂载表是不可变快照：查询时拿到 shared_ptr<const MountTable> 后无锁使用；
-// mount/unmount 时复制一份、修改、再发布新快照（copy-on-write）。
+// This file: the mount table.
+// The mount table is an immutable snapshot: a query takes shared_ptr<const MountTable> and uses it without a lock;
+// mount/unmount copies it, edits the copy, and publishes a new snapshot (copy-on-write).
 #pragma once
 
 #include "IBackend.h"
@@ -9,34 +9,34 @@
 NS_VFS_BEGIN
 
 /**
- * 挂载标志。使用时必须带类型名限定，例如 MountFlags::ReadOnly。
+ * Mount flags. Always qualify with the type name, for example MountFlags::ReadOnly.
  */
 enum MountFlags : uint32_t
 {
-	ReadOnly = 1u << 0,     // 把这一层当作只读，即使后端可写
-	Opaque = 1u << 1,       // 遮蔽：挂载点以下比它优先级低的层全部不可见
-	WriteTarget = 1u << 2,  // 默认写入层：在可写候选中优先
+	ReadOnly = 1u << 0,     // treat this layer as read-only even if the backend can write
+	Opaque = 1u << 1,       // masking: every lower-priority layer below this mount point is invisible
+	WriteTarget = 1u << 2,  // default write layer: preferred among writable candidates
 };
 
 /**
- * 卸载标志。
+ * Unmount flags.
  */
 enum UnmountFlags : uint32_t
 {
-	FailIfBusy = 1u << 0,   // 仍有打开的流时返回 BUSY，不卸载
+	FailIfBusy = 1u << 0,   // if streams are still open, return BUSY and do not unmount
 };
 
 /**
- * 挂载选项。
+ * Mount options.
  */
 struct MountOptions
 {
-	int priority = 0;     // 大的优先；相同时后挂载的优先
-	uint32_t flags = 0;   // MountFlags 位组合
+	int priority = 0;     // larger wins; on a tie, the later mount wins
+	uint32_t flags = 0;   // MountFlags bit combination
 };
 
 /**
- * 对外暴露的挂载信息。
+ * Mount information exposed to callers.
  */
 struct MountInfo
 {
@@ -48,28 +48,28 @@ struct MountInfo
 };
 
 /**
- * 每个挂载的运行时状态（在快照之间共享）。
+ * Per-mount runtime state (shared across snapshots).
  */
 struct MountState
 {
-	std::atomic<int64_t> openStreams{0};   // 通过 VFS 打开、尚未关闭的流数量（remount 前后共用）
-	std::atomic<bool> closing{false};      // FailIfBusy 卸载正在检查：此时新打开的流放弃并重试，避免检查与计数之间的竞争
+	std::atomic<int64_t> openStreams{0};   // number of streams opened through the VFS and not yet closed (shared across remount)
+	std::atomic<bool> closing{false};      // a FailIfBusy unmount is checking: new opens give up and retry, avoiding a race between the check and the count
 };
 
 /**
- * 挂载表中的一项。
+ * One entry in the mount table.
  */
 struct MountEntry
 {
 	MountId id = 0;
-	std::string point;                    // 规范挂载点
+	std::string point;                    // canonical mount point
 	std::shared_ptr<IBackend> backend;
 	int priority = 0;
 	uint32_t flags = 0;
 	std::shared_ptr<MountState> state;
 
 	/**
-	 * 这一层是否可写：没有 ReadOnly 标志，且后端有 Write 能力。
+	 * Whether this layer is writable: no ReadOnly flag, and the backend has the Write capability.
 	 */
 	bool writable() const
 	{
@@ -78,54 +78,54 @@ struct MountEntry
 };
 
 /**
- * 路径 P 的层栈中的一层。
+ * One layer in the layer stack of path P.
  */
 struct Layer
 {
 	const MountEntry* mount = nullptr;
-	std::string_view rel;                 // P 相对该挂载点的路径（指向调用方的路径字符串）
+	std::string_view rel;                 // path of P relative to this mount point (points into the caller's path string)
 };
 
 /**
- * 挂载表快照。发布后不再修改。
+ * Mount-table snapshot. Not modified after it is published.
  */
 class VFS_DLL MountTable
 {
 public:
-	std::vector<MountEntry> mounts;                                // 已按优先级排序：priority 降序，同优先级 id 降序
-	std::vector<std::pair<std::string, std::string>> aliases;      // 前缀映射，按前缀长度降序
+	std::vector<MountEntry> mounts;                                // sorted by priority: priority descending, then id descending
+	std::vector<std::pair<std::string, std::string>> aliases;      // prefix mappings, sorted by prefix length descending
 
 	/**
-	 * 排序：priority 大的在前；相同时后挂载的（id 大的）在前。
+	 * Sort: higher priority first; on a tie, the later mount (larger id) first.
 	 */
 	void sort();
 
 	/**
-	 * 收集路径 P 的层栈：所有挂载点是 P 前缀的挂载，按优先级从高到低；
-	 * 遇到 Opaque 挂载后，更低的层不再加入。
-	 * @param path 规范路径（out 中的 rel 指向它，调用方必须保证它在使用期间有效）
+	 * Collect the layer stack of path P: every mount whose mount point is a prefix of P, highest priority first;
+	 * after an Opaque mount, lower layers are not added.
+	 * @param path canonical path (rel in out points into it; the caller must keep it alive while it is used)
 	 */
 	void collectLayers(std::string_view path, std::vector<Layer>& out) const;
 
 	/**
-	 * P 是否是合成的虚拟目录：根目录，或某个挂载点的真祖先。
+	 * Whether P is a synthetic virtual directory: the root, or a true ancestor of some mount point.
 	 */
 	bool isVirtualDir(std::string_view path) const;
 
 	/**
-	 * P 是否正好是某个挂载点，或是某个挂载点的祖先（这类路径不能被删除或改名）。
+	 * Whether P is exactly some mount point, or an ancestor of some mount point (such paths cannot be removed or renamed).
 	 */
 	bool isMountPointOrAncestor(std::string_view path) const;
 
 	/**
-	 * P 是否正好是某个挂载点。
+	 * Whether P is exactly some mount point.
 	 */
 	bool isMountPoint(std::string_view path) const;
 
 	const MountEntry* find(MountId id) const;
 
 	/**
-	 * 应用别名映射：原始路径以某个前缀开头时替换成目标路径（在规范化之前执行）。
+	 * Apply alias mappings: if the raw path starts with a prefix, replace it with the target path (done before normalization).
 	 */
 	std::string applyAlias(std::string_view raw) const;
 };

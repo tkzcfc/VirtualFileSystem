@@ -1,5 +1,5 @@
-// 本文件：故障注入后端。包装任意 IBackend，按配置让 stat / list / open / 读 / 写 / 改名等操作失败，
-// 用于验证 VFS 在 I/O 错误下的错误传播与“失败不留下半成品”。
+// This file: fault-injection backend. Wraps any IBackend and fails stat / list / open / read / write / rename and similar operations as configured,
+// to verify that the VFS propagates I/O errors and that a failure does not leave a partial result.
 #pragma once
 
 #include "vfs/IBackend.h"
@@ -14,18 +14,18 @@ namespace test
 
 struct FaultConfig
 {
-	std::string match;                        // 只对路径包含该子串的操作注入故障（空串表示全部）
+	std::string match;                        // Inject faults only for paths containing this substring (empty means all)
 	vfs::Error statError = vfs::Error::OK;
 	vfs::Error listError = vfs::Error::OK;
 	vfs::Error openError = vfs::Error::OK;
 	vfs::Error renameError = vfs::Error::OK;
 	vfs::Error removeError = vfs::Error::OK;
 	vfs::Error mkdirError = vfs::Error::OK;
-	int64_t readFailAt = -1;                  // 读到该位置之后 read 返回 -1（EIO）
-	int64_t writeFailAt = -1;                 // 写到该位置之后 write 返回 -1（ENOSPC）
-	int shortWrite = 0;                       // >0 时每次 write 最多写这么多字节
-	int closeError = 0;                       // 非 0 时 close 返回 -1 并设置该 errno
-	std::atomic<int> injected{0};             // 已注入的故障次数
+	int64_t readFailAt = -1;                  // After a read reaches this position, read returns -1 (EIO)
+	int64_t writeFailAt = -1;                 // After a write reaches this position, write returns -1 (ENOSPC)
+	int shortWrite = 0;                       // When > 0, each write writes at most this many bytes
+	int closeError = 0;                       // When non-zero, close returns -1 and sets this errno
+	std::atomic<int> injected{0};             // Number of faults already injected
 };
 
 class FaultStream : public vfs::IFileStream

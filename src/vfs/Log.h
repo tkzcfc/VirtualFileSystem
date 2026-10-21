@@ -1,4 +1,4 @@
-// 本文件：可注入的日志输出。库内不直接 printf。
+// This file: injectable log output. The library does not call printf directly.
 #pragma once
 
 #include "Common.h"
@@ -16,13 +16,13 @@ enum class LogLevel
 using LogFunc = std::function<void(LogLevel level, std::string_view message)>;
 
 /**
- * 设置全局日志回调。传空函数表示关闭日志（默认关闭）。
- * 线程安全：可以在任何线程调用；回调本身可能在任意线程被调用。
+ * Set the global log callback. An empty function turns logging off (the default).
+ * Thread safety: may be called from any thread; the callback itself may run on any thread.
  */
 VFS_DLL void setLogger(LogFunc func);
 
 /**
- * 输出一条日志。没有设置回调时什么也不做。
+ * Emit one log line. Does nothing when no callback is set.
  */
 VFS_DLL void log(LogLevel level, std::string_view message);
 

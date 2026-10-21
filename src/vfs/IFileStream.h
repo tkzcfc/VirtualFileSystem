@@ -1,22 +1,22 @@
-// 本文件：流接口 IFileStream。
-// 与 axmol 引擎的 IFileStream 逐字一致（签名、枚举顺序、返回值约定都相同），只是命名空间和导出宏不同；
-// 定义 VFS_WITH_AXMOL 时直接使用引擎的定义，库内实现无需任何改动。
+// This file: the IFileStream stream interface.
+// It matches axmol's IFileStream verbatim (signatures, enum order, and return-value conventions); only the namespace and export macro differ.
+// When VFS_WITH_AXMOL is defined, the engine's definition is used directly and in-library implementations need no changes.
 //
-// 语义约定（所有内置实现一致）：
-//   READ       只读，文件必须存在
-//   WRITE      创建或截断，可读可写
-//   APPEND     不存在则创建，每次 write 都写到末尾，可读
-//   OVERLAPPED 不存在则创建，不截断，随机读写
-//   seek 结果为负返回 -1（errno=EINVAL）；允许 seek 到 EOF 之后，之后 read 返回 0，write 会用 0 填充空洞。
-//   单个流对象不是线程安全的；不同流对象可以完全并发。
+// Semantic conventions (shared by every built-in implementation):
+//   READ       read-only; the file must exist
+//   WRITE      create or truncate; readable and writable
+//   APPEND     create if missing; every write goes to the end; readable
+//   OVERLAPPED create if missing; do not truncate; random read/write
+//   A negative seek result returns -1 (errno=EINVAL); seeking past EOF is allowed, after which read returns 0 and write fills the hole with 0.
+//   A single stream object is not thread-safe; distinct stream objects may be used fully concurrently.
 #pragma once
 
 #include "Common.h"
 
 #if VFS_WITH_AXMOL
 
-// 接入 axmol 时直接复用引擎的接口。
-// 较新的 axmol（dev 分支）头文件位于 axmol/platform/，2.x 位于 core/platform/（include 路径为 platform/）
+// When integrating with axmol, reuse the engine interface directly.
+// Newer axmol (dev branch) headers live under axmol/platform/; 2.x lives under core/platform/ (the include path is platform/)
 #    if __has_include("axmol/platform/IFileStream.h")
 #        include "axmol/platform/IFileStream.h"
 #    else

@@ -33,7 +33,7 @@ namespace native
 std::filesystem::path toFsPath(std::string_view utf8)
 {
 #if VFS_PLATFORM_WINDOWS
-	// Windows 上直接用 UTF-16，顺便处理长路径前缀
+	// On Windows use UTF-16 directly, and apply the long-path prefix along the way
 	return std::filesystem::path(toWidePath(utf8));
 #else
 	std::u8string u8(reinterpret_cast<const char8_t*>(utf8.data()), utf8.size());
@@ -46,7 +46,7 @@ std::string fromFsPath(const std::filesystem::path& p)
 	std::u8string u8 = p.u8string();
 	std::string s(reinterpret_cast<const char*>(u8.data()), u8.size());
 #if VFS_PLATFORM_WINDOWS
-	// 去掉长路径前缀，保证对外（日志、realPath、路径比较）始终是普通的 Win32 路径；两种分隔符都要处理
+	// Strip the long-path prefix so what is exposed (logs, realPath, path comparison) is always an ordinary Win32 path; both separators must be handled
 	auto sep = [](char c) { return c == '\\' || c == '/'; };
 	if (s.size() >= 4 && sep(s[0]) && sep(s[1]) && s[2] == '?' && sep(s[3]))
 	{
@@ -114,11 +114,11 @@ Error errorFromCode(const std::error_code& ec)
 	if (!ec)
 		return Error::OK;
 #if VFS_PLATFORM_WINDOWS
-	// Windows 上 std::filesystem 报告的多是 system_category 的 Win32 错误码，直接按 Win32 映射更准确
+	// On Windows std::filesystem mostly reports Win32 error codes in system_category, and mapping those as Win32 is more accurate
 	if (ec.category() == std::system_category())
 		return errorFromWin32(static_cast<unsigned long>(ec.value()));
 #endif
-	// 其余平台的 std::filesystem 都把错误映射到 generic_category 的 errc，统一按 errno 处理
+	// On every other platform std::filesystem maps errors to errc in generic_category, so they are handled uniformly as errno
 	std::error_condition cond = ec.default_error_condition();
 	if (cond.category() == std::generic_category())
 		return errorFromErrno(cond.value());
@@ -132,9 +132,9 @@ std::wstring toWidePath(std::string_view utf8)
 	std::wstring wide;
 	if (!utf8.empty())
 	{
-		// UTF-16 码元数不会超过 UTF-8 字节数：一次转换，不先求长度（热路径上省一次扫描）。
-		// MB_ERR_INVALID_CHARS：非法 UTF-8 得到空路径（随后的系统调用失败），而不是被替换成 U+FFFD，
-		// 否则两个不同的字节串可能落到同一个本机文件上
+		// The UTF-16 code-unit count cannot exceed the UTF-8 byte count: convert once, without measuring the length first (saves a scan on the hot path).
+		// MB_ERR_INVALID_CHARS: invalid UTF-8 yields an empty path (the following system call fails) instead of being replaced with U+FFFD,
+		// otherwise two different byte strings could land on the same native file
 		wide.resize(utf8.size());
 		int len = ::MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, utf8.data(), static_cast<int>(utf8.size()),
 										wide.data(), static_cast<int>(wide.size()));
@@ -145,11 +145,11 @@ std::wstring toWidePath(std::string_view utf8)
 		if (ch == L'/')
 			ch = L'\\';
 	}
-	// 已经是 Win32 命名空间路径（\\?\ 或设备路径 \\.\），不再处理
+	// Already a Win32 namespace path (\\?\ or a device path \\.\); leave it alone
 	if (wide.compare(0, 4, L"\\\\?\\") == 0 || wide.compare(0, 4, L"\\\\.\\") == 0)
 		return wide;
-	// 短路径保持原样；达到 248（CreateDirectoryW 的限制是 MAX_PATH - 12）时转成带前缀的绝对路径。
-	// 加了前缀后 Win32 不再规范化路径，所以必须先用 GetFullPathNameW 得到绝对、规范的形式
+	// Short paths stay as they are; at 248 (CreateDirectoryW's limit is MAX_PATH - 12) convert to a prefixed absolute path.
+	// After the prefix is added Win32 no longer normalizes the path, so GetFullPathNameW must produce the absolute, canonical form first
 	if (wide.size() < MAX_PATH - 12)
 		return wide;
 	DWORD need = ::GetFullPathNameW(wide.c_str(), 0, nullptr, nullptr);
@@ -213,8 +213,8 @@ Error errorFromWin32(unsigned long code)
 
 bool isTransientWin32(unsigned long code)
 {
-	// ERROR_INVALID_NAME：VFS 传下来的名字都已通过可移植性检查，仍出现时是并发删除中的瞬时状态
-	// （Wine 上目录正被删除时可见）；对真正非法的名字只多花约 63ms
+	// ERROR_INVALID_NAME: names passed down by the VFS have already passed the portability check. When it still appears, it is a transient state during concurrent deletion
+	// (visible on Wine while a directory is being deleted); a genuinely illegal name costs only about 63ms extra
 	return code == ERROR_ACCESS_DENIED || code == ERROR_SHARING_VIOLATION || code == ERROR_LOCK_VIOLATION ||
 		   code == ERROR_DELETE_PENDING || code == ERROR_INVALID_NAME;
 }
@@ -224,23 +224,23 @@ void sleepMs(unsigned long ms)
 	::Sleep(static_cast<DWORD>(ms));
 }
 
-static_assert(ERROR_SHARING_VIOLATION == 32 && ERROR_LOCK_VIOLATION == 33, "retryTransient 里写死的错误码");
+static_assert(ERROR_SHARING_VIOLATION == 32 && ERROR_LOCK_VIOLATION == 33, "error codes hard-coded in retryTransient");
 
 static int64_t fileTimeToUnix(const FILETIME& ft)
 {
-	// FILETIME 是 1601-01-01 起的 100ns 计数
+	// FILETIME is a count of 100ns intervals since 1601-01-01
 	ULARGE_INTEGER v;
 	v.LowPart = ft.dwLowDateTime;
 	v.HighPart = ft.dwHighDateTime;
 	return static_cast<int64_t>(v.QuadPart / 10000000ULL) - 11644473600LL;
 }
 
-// 路径不存在时区分“父目录不存在”（NOT_FOUND）和“某一级父路径是文件”（NOT_DIR）。
-// Windows 对两者都返回 ERROR_PATH_NOT_FOUND，只能逐级检查（只在未命中时发生）。
-// - rootLen > 0（已知前 rootLen 个字符是存在的后端根目录）：从根往下检查，第一个不存在的祖先 → NOT_FOUND，
-//   第一个是文件的祖先 → NOT_DIR。叠加挂载里上层目录只镜像了少量子目录，整棵子树都不存在是最常见的未命中，
-//   这样通常一次调用就能确定（自底向上要把每一级不存在的父目录都查一遍）；
-// - 否则自底向上，找到第一个存在的祖先
+// When a path does not exist, distinguish "a parent directory does not exist" (NOT_FOUND) from "some parent path is a file" (NOT_DIR).
+// Windows returns ERROR_PATH_NOT_FOUND for both, so the only option is to check level by level (this happens only on a miss).
+// - rootLen > 0 (the first rootLen characters are a known existing backend root): check downward from the root. The first missing ancestor -> NOT_FOUND,
+//   the first ancestor that is a file -> NOT_DIR. In a stacked mount the upper directory usually mirrors only a few subdirectories, and a whole missing subtree is the most common miss,
+//   so one call usually decides it (bottom-up would query every missing parent);
+// - otherwise walk bottom-up and find the first ancestor that exists
 static Error classifyMissing(std::string_view utf8Path, size_t rootLen = 0)
 {
 	if (rootLen > 0 && rootLen < utf8Path.size())
@@ -274,7 +274,7 @@ static Error classifyMissing(std::string_view utf8Path, size_t rootLen = 0)
 	return Error::NOT_FOUND;
 }
 
-// 路径（或它的父目录）此刻是否已经不存在。“删除挂起”的对象逻辑上已被删除，也算不存在
+// Whether the path (or its parent directory) is already gone. An object with a delete pending has logically been deleted and counts as gone
 static bool vanished(std::string_view utf8Path)
 {
 	if (::GetFileAttributesW(toWidePath(utf8Path).c_str()) != INVALID_FILE_ATTRIBUTES)
@@ -290,12 +290,12 @@ static std::string_view parentOf(std::string_view utf8Path)
 }
 
 /**
- * Win32 错误码转 Error，并处理并发竞争：
- * - PATH_NOT_FOUND / DIRECTORY：区分 NOT_FOUND 与 NOT_DIR
- * - mustExist（操作的是已有对象：删除、改名源、列目录、stat）时，ACCESS_DENIED / SHARING_VIOLATION /
- *   DELETE_PENDING / INVALID_NAME 之后对象已经消失，说明是被其他线程/进程删掉或移走了，按 NOT_FOUND 报告
- *   （例如另一个线程正在改名同一个目录时，本次改名拿到 ACCESS_DENIED，等它完成后源已不存在）
- * - INVALID_NAME：名字已经过可移植性检查，出现时如果父目录已不存在，也是并发删除造成的
+ * Map a Win32 error code to Error, and handle races:
+ * - PATH_NOT_FOUND / DIRECTORY: distinguish NOT_FOUND from NOT_DIR
+ * - When mustExist (the operation targets an existing object: delete, rename source, list, stat), if the object is gone after ACCESS_DENIED / SHARING_VIOLATION /
+ *   DELETE_PENDING / INVALID_NAME, another thread or process deleted or moved it, so report NOT_FOUND
+ *   (for example another thread is renaming the same directory, this rename gets ACCESS_DENIED, and when that finishes the source is gone)
+ * - INVALID_NAME: the name already passed the portability check; if the parent directory is gone when it appears, concurrent deletion caused it too
  */
 static Error errorForPath(DWORD code, std::string_view utf8Path, bool mustExist = false, size_t rootLen = 0)
 {
@@ -317,23 +317,23 @@ static Error errorForPath(DWORD code, std::string_view utf8Path, bool mustExist 
 	return errorFromWin32(code);
 }
 
-// checkParentDir 的每线程记录：最近确认存在的父目录（完整路径）
+// Per-thread record for checkParentDir: the parent directory most recently confirmed to exist (full path)
 static thread_local std::string t_knownParent;
 
 Error checkParentDir(std::string_view utf8Path, size_t rootLen)
 {
-	// 实测（Windows 11 / NTFS）：查询“中间目录不存在”的路径（ERROR_PATH_NOT_FOUND）在系统内部是串行的，
-	// 8 线程反而比单线程慢；而查询“存在的目录下不存在的名字”可以线性扩展。
-	// 叠加挂载里上层（本机覆盖目录）大多只镜像了少量子目录，未命中几乎都是前一种。
-	// 所以先确认父目录存在（多一次可扩展的查询），父目录不存在时自顶向下分类，不去碰叶子路径
+	// Measured (Windows 11 / NTFS): querying a path whose intermediate directory is missing (ERROR_PATH_NOT_FOUND) is serialized inside the system,
+	// so 8 threads are slower than one; querying a missing name under a directory that exists scales linearly.
+	// In a stacked mount the upper layer (the native override directory) usually mirrors only a few subdirectories, and almost every miss is the first kind.
+	// So confirm the parent exists first (one extra query that scales). When the parent is missing, classify top-down and do not touch the leaf path
 	if (rootLen == 0 || rootLen >= utf8Path.size())
 		return Error::OK;
 	std::string_view parent = parentOf(utf8Path);
 	if (parent.size() <= rootLen)
-		return Error::OK;   // 父目录就是后端根目录
-	// 但查询目录本身会和对该目录内名字的并发查询互相竞争（同样实测 8 线程大幅变慢），
-	// 所以每个线程记住最近确认存在的父目录，命中时跳过预检。这只是“正向”提示：
-	// 目录之后被删掉，叶子查询会拿到 PATH_NOT_FOUND，结果依然正确（只是走回慢路径），并清掉记录
+		return Error::OK;   // The parent is the backend root
+	// Querying the directory itself races concurrent queries of names inside it (also measured: 8 threads get much slower),
+	// so each thread remembers the parent most recently confirmed to exist and skips the pre-check on a hit. This is only a positive hint:
+	// if the directory is deleted later, the leaf query gets PATH_NOT_FOUND, the result is still correct (it just takes the slow path), and the record is cleared
 	if (parent == t_knownParent)
 		return Error::OK;
 	DWORD attr = ::GetFileAttributesW(toWidePath(parent).c_str());
@@ -342,7 +342,7 @@ Error checkParentDir(std::string_view utf8Path, size_t rootLen)
 		DWORD c = ::GetLastError();
 		if (c == ERROR_FILE_NOT_FOUND || c == ERROR_PATH_NOT_FOUND)
 			return classifyMissing(utf8Path, rootLen);
-		return Error::OK;   // 其他错误交给实际操作报告
+		return Error::OK;   // Any other error is left for the real operation to report
 	}
 	if (!(attr & FILE_ATTRIBUTE_DIRECTORY))
 		return Error::NOT_DIR;
@@ -380,13 +380,13 @@ Error statPath(std::string_view utf8Path, Stat& out, size_t rootLen)
 	return Error::OK;
 }
 
-// ---------------------------------------------------------------- 修改操作（Win32）
+// ---------------------------------------------------------------- mutating operations (Win32)
 
 namespace
 {
 
 /**
- * FindFirstFileExW 句柄的 RAII 包装：回调抛出异常、提前返回时也会 FindClose
+ * RAII wrapper for a FindFirstFileExW handle: FindClose still runs if a callback throws or the function returns early
  */
 class FindHandle
 {
@@ -406,7 +406,7 @@ private:
 	HANDLE m_h;
 };
 
-// 这些常量和结构在较老的 SDK / MinGW 头文件里可能没有，按文档的数值和布局自己定义
+// These constants and structures may be missing from older SDK / MinGW headers, so they are defined here from the documented values and layout
 constexpr int kFileDispositionInfoEx = 21;           // FILE_INFO_BY_HANDLE_CLASS::FileDispositionInfoEx
 constexpr int kFileRenameInfoEx = 22;                // FILE_INFO_BY_HANDLE_CLASS::FileRenameInfoEx
 constexpr DWORD kDispositionDelete = 0x1;            // FILE_DISPOSITION_FLAG_DELETE
@@ -419,7 +419,7 @@ struct DispositionInfoEx
 	DWORD Flags;
 };
 
-// 与 FILE_RENAME_INFO（RS1 之后 ReplaceIfExists 与 Flags 是 union）布局一致
+// Layout matches FILE_RENAME_INFO (since RS1, ReplaceIfExists and Flags are a union)
 struct RenameInfoEx
 {
 	DWORD Flags;
@@ -428,7 +428,7 @@ struct RenameInfoEx
 	WCHAR FileName[1];
 };
 
-// 系统 / 文件系统不支持 *InfoEx（Windows 10 1709 之前、FAT、部分网络文件系统）时返回的错误
+// Errors returned when the system / file system does not support *InfoEx (before Windows 10 1709, FAT, some network file systems)
 bool notSupported(DWORD code)
 {
 	return code == ERROR_INVALID_PARAMETER || code == ERROR_NOT_SUPPORTED || code == ERROR_INVALID_FUNCTION ||
@@ -437,12 +437,12 @@ bool notSupported(DWORD code)
 
 HANDLE openForDelete(const std::wstring& wpath)
 {
-	// 只申请 DELETE 权限，三种共享全开；不跟随符号链接（删除 / 改名的是链接本身）
+	// Request only DELETE access, with all three share modes open; do not follow symlinks (delete / rename acts on the link itself)
 	return ::CreateFileW(wpath.c_str(), DELETE | SYNCHRONIZE, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
 						 nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
 }
 
-// POSIX 语义删除：名字立即移除，其他已打开的句柄继续有效。不支持时返回 notSupported 类错误
+// POSIX-semantics delete: the name is removed immediately and other open handles stay valid. If unsupported, return a notSupported-class error
 DWORD posixDelete(const std::wstring& wpath)
 {
 	HANDLE h = openForDelete(wpath);
@@ -457,7 +457,7 @@ DWORD posixDelete(const std::wstring& wpath)
 	return code;
 }
 
-// POSIX 语义改名并替换已有目标：目标即使被其他句柄打开（带 FILE_SHARE_DELETE）也能替换
+// POSIX-semantics rename that replaces an existing target: the target can be replaced even when another handle has it open (with FILE_SHARE_DELETE)
 DWORD posixRename(const std::wstring& wfrom, const std::wstring& wto)
 {
 	HANDLE h = openForDelete(wfrom);
@@ -478,7 +478,7 @@ DWORD posixRename(const std::wstring& wfrom, const std::wstring& wto)
 	return code;
 }
 
-// 目录是否为空。枚举中途出错（权限、网络盘断开）时 code 为错误码、返回 false：不能把没枚举完的目录当成空目录
+// Whether a directory is empty. If enumeration fails midway (permissions, a network drive dropping), code is the error and the function returns false: a directory that was not fully enumerated must not be treated as empty
 bool dirIsEmpty(const std::wstring& wdir, DWORD& code)
 {
 	WIN32_FIND_DATAW fd;
@@ -518,7 +518,7 @@ Error realName(std::string_view dir, std::string_view name, std::string& actual)
 		if (!h.valid())
 			return errorForPath(::GetLastError(), full, true);
 	}
-	// cFileName 是长文件名；传入 8.3 短名时这里返回长名，按字节比较时自然判为不一致
+	// cFileName is the long file name; when an 8.3 short name was passed, this returns the long name, so a byte comparison naturally treats them as different
 	int len = ::WideCharToMultiByte(CP_UTF8, 0, fd.cFileName, -1, nullptr, 0, nullptr, nullptr);
 	actual.assign(len > 0 ? static_cast<size_t>(len - 1) : 0, '\0');
 	if (len > 1)
@@ -528,7 +528,7 @@ Error realName(std::string_view dir, std::string_view name, std::string& actual)
 
 Error listDir(std::string_view path, const std::function<bool(const std::string& name, FileType type)>& cb)
 {
-	// 不预先 stat：目录存在时（常见情况）省掉一次 GetFileAttributesExW，只在 FindFirstFileExW 失败时再判断原因
+	// Do not stat up front: when the directory exists (the common case) that saves a GetFileAttributesExW, and the cause is checked only if FindFirstFileExW fails
 	std::wstring pattern = toWidePath(path);
 	if (!pattern.empty() && pattern.back() != L'\\')
 		pattern.push_back(L'\\');
@@ -544,8 +544,8 @@ Error listDir(std::string_view path, const std::function<bool(const std::string&
 	FindHandle h(raw);
 	if (!h.valid())
 	{
-		// 失败的原因可能是：不存在、是文件（ERROR_DIRECTORY / PATH_NOT_FOUND）、空的驱动器根目录（FILE_NOT_FOUND，
-		// 没有 "." ".."）。用 stat 区分，stat 成功说明对象还在
+		// The failure may be: it does not exist, it is a file (ERROR_DIRECTORY / PATH_NOT_FOUND), or an empty drive root (FILE_NOT_FOUND,
+		// no "." ".."). Distinguish with stat; a successful stat means the object is still there
 		Stat st;
 		Error err = statPath(path, st);
 		if (err != Error::OK)
@@ -561,7 +561,7 @@ Error listDir(std::string_view path, const std::function<bool(const std::string&
 		const wchar_t* n = fd.cFileName;
 		if ((n[0] == L'.' && n[1] == 0) || (n[0] == L'.' && n[1] == L'.' && n[2] == 0))
 			continue;
-		// 设备、管道等特殊对象不暴露给 VFS（与 POSIX 一致）
+		// Devices, pipes, and other special objects are not exposed to the VFS (same as POSIX)
 		if (fd.dwFileAttributes & FILE_ATTRIBUTE_DEVICE)
 			continue;
 		const FileType type = (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) ? FileType::DIR : FileType::FILE;
@@ -572,7 +572,7 @@ Error listDir(std::string_view path, const std::function<bool(const std::string&
 		if (!cb(name, type))
 			return Error::OK;
 	} while (::FindNextFileW(h.get(), &fd));
-	// FindNextFileW 失败不一定是枚举结束：中途的权限 / I/O 错误要报告，不能返回一份不完整的目录
+	// FindNextFileW failing is not necessarily the end of the enumeration: a permission / I/O error midway must be reported, not returned as an incomplete directory
 	code = ::GetLastError();
 	if (code != ERROR_NO_MORE_FILES)
 		return errorForPath(code, path, true);
@@ -582,15 +582,15 @@ Error listDir(std::string_view path, const std::function<bool(const std::string&
 Error makeDir(std::string_view path)
 {
 	std::wstring w = toWidePath(path);
-	// 名字处于“删除挂起”（其他线程刚删掉、仍有句柄未关）时 CreateDirectoryW 返回 ACCESS_DENIED，重试即可
+	// When the name is delete-pending (another thread just deleted it and a handle is still open), CreateDirectoryW returns ACCESS_DENIED; retrying is enough
 	DWORD code = retryTransient([&]() -> unsigned long
 	{
 		return ::CreateDirectoryW(w.c_str(), nullptr) ? ERROR_SUCCESS : ::GetLastError();
 	});
 	if (code == ERROR_SUCCESS)
 		return Error::OK;
-	// 与 POSIX 一致（mount-rules.md §6）：失败时父目录已经被并发删除，报告 NOT_FOUND，
-	// 而不是删除挂起状态下常见的 ACCESS_DENIED
+	// Same as POSIX (mount-rules.md section 6): on failure the parent directory has already been deleted concurrently, so report NOT_FOUND,
+	// not the ACCESS_DENIED that is common while a delete is pending
 	if (code != ERROR_ALREADY_EXISTS && code != ERROR_FILE_EXISTS)
 	{
 		std::string_view parent = parentOf(path);
@@ -637,11 +637,11 @@ Error renamePathOnce(std::string_view from, std::string_view to);
 
 Error renamePath(std::string_view from, std::string_view to)
 {
-	// renamePathOnce 对目录覆盖、文件覆盖目录要先做几次检查（MoveFileExW 自己不按 rename(2) 处理这些），
-	// 这些检查在不同时刻观察源和目标，并发改名时可能看到“源和目标同时存在”这种在原子 rename 下
-	// 不可能出现的状态（例如另一线程刚把源改名成目标，再有线程改回来）。
-	// 由预检查得出的冲突结果（NOT_EMPTY / NOT_DIR / IS_DIR）重新执行确认，真实的冲突是稳定的，
-	// 每次都会得到同样结果；竞争造成的误判会在重试中消失。最多 4 次，只在出错路径上发生
+	// renamePathOnce has to pre-check directory-over-directory and file-over-directory (MoveFileExW itself does not handle those like rename(2)),
+	// and those checks observe the source and the target at different times. Concurrent renames can see "source and target both exist", a state
+	// that cannot occur under an atomic rename (for example another thread just renamed the source to the target, and yet another renames it back).
+	// Conflict results from the pre-check (NOT_EMPTY / NOT_DIR / IS_DIR) are run again to confirm. A real conflict is stable
+	// and yields the same result every time; a misjudgment caused by a race disappears on retry. At most 4 times, and only on the error path
 	Error err = Error::OK;
 	for (int attempt = 0; attempt < 4; ++attempt)
 	{
@@ -656,8 +656,8 @@ Error renamePath(std::string_view from, std::string_view to)
 
 namespace
 {
-// 同一目录下进程内、进程间都唯一的临时名：base.<tag>-<pid>-<n>.tmp。
-// 固定后缀在并发改名同一路径、或上次崩溃留下了同名文件时会冲突
+// A temporary name unique within the process and across processes in the same directory: base.<tag>-<pid>-<n>.tmp.
+// A fixed suffix collides when the same path is renamed concurrently, or when a previous crash left a file of that name
 std::wstring uniqueSiblingName(const std::wstring& base, const wchar_t* tag)
 {
 	static std::atomic<unsigned long long> s_counter{0};
@@ -672,7 +672,7 @@ std::wstring uniqueSiblingName(const std::wstring& base, const wchar_t* tag)
 	return name;
 }
 
-// UTF-16 路径转回 UTF-8（只用于把内部生成的临时路径交给接受 UTF-8 的函数）
+// Convert a UTF-16 path back to UTF-8 (only to hand an internally generated temporary path to a function that takes UTF-8)
 std::string fromWidePath(const std::wstring& w)
 {
 	int len = ::WideCharToMultiByte(CP_UTF8, 0, w.c_str(), static_cast<int>(w.size()), nullptr, 0, nullptr, nullptr);
@@ -686,7 +686,7 @@ Error renamePathOnce(std::string_view from, std::string_view to)
 {
 	const std::wstring wfrom = toWidePath(from);
 	const std::wstring wto = toWidePath(to);
-	// 预检查本身也会遇到并发操作造成的短暂错误，同样有限重试
+	// The pre-check itself can see a short-lived error from a concurrent operation, and retries a limited number of times as well
 	DWORD fa = INVALID_FILE_ATTRIBUTES;
 	DWORD faCode = retryTransient([&]() -> unsigned long
 	{
@@ -696,10 +696,10 @@ Error renamePathOnce(std::string_view from, std::string_view to)
 	if (fa == INVALID_FILE_ATTRIBUTES)
 		return errorForPath(faCode, from, true);
 	const bool fromDir = (fa & FILE_ATTRIBUTE_DIRECTORY) != 0;
-	std::wstring removedTarget;   // 目录覆盖空目录时，被临时改名让出位置的目标目录
+	std::wstring removedTarget;   // When a directory replaces an empty directory, the destination directory temporarily renamed out of the way
 
-	// MoveFileExW 不能用目录替换目录，也不能用文件替换目录。按 POSIX rename(2) 的语义预先处理。
-	// 只差大小写的同一个名字（Windows 上是同一个文件）不做这些检查，单独处理
+	// MoveFileExW cannot replace a directory with a directory, or a directory with a file. Handle that up front to match POSIX rename(2).
+	// The same name differing only in case (one file on Windows) skips these checks and is handled separately
 	DWORD ta = INVALID_FILE_ATTRIBUTES;
 	retryTransient([&]() -> unsigned long
 	{
@@ -710,7 +710,7 @@ Error renamePathOnce(std::string_view from, std::string_view to)
 												 static_cast<int>(wto.size()), TRUE) == CSTR_EQUAL;
 	if (sameName)
 	{
-		// 只改大小写：某些实现（例如 Wine）把它当成改名到自身而什么也不做，借一个临时名字分两步完成
+		// Case-only rename: some implementations (Wine, for example) treat it as renaming onto itself and do nothing, so do it in two steps through a temporary name
 		if (wfrom == wto)
 			return Error::OK;
 		const std::wstring wtmp = uniqueSiblingName(wfrom, L"vfs-case");
@@ -726,7 +726,7 @@ Error renamePathOnce(std::string_view from, std::string_view to)
 		});
 		if (code != ERROR_SUCCESS)
 		{
-			// 改回原名，同样对瞬时错误重试；恢复也失败时文件留在临时名下，返回 IO_ERROR 让调用方知道状态不一致
+			// Rename back to the original name, retrying transient errors the same way; if restoring also fails, the file stays under the temporary name and IO_ERROR tells the caller the state is inconsistent
 			DWORD restore = retryTransient([&]() -> unsigned long
 			{
 				return ::MoveFileExW(wtmp.c_str(), wfrom.c_str(), 0) ? ERROR_SUCCESS : ::GetLastError();
@@ -744,8 +744,8 @@ Error renamePathOnce(std::string_view from, std::string_view to)
 			return vanished(from) ? classifyMissing(from) : Error::IS_DIR;
 		if (fromDir && toDir)
 		{
-			// 这些预检查不是原子的：其他线程可能同时移走了源或目标。出错时重新确认两者，
-			// 源已不存在报告 NOT_FOUND（与 rename(2) 一致），目标已不存在则直接改名
+			// These pre-checks are not atomic: another thread may have moved the source or the target at the same time. On error, re-check both.
+			// If the source is gone, report NOT_FOUND (same as rename(2)); if the target is gone, rename directly
 			DWORD code = ERROR_SUCCESS;
 			bool empty = false;
 			retryTransient([&]() -> unsigned long
@@ -755,8 +755,8 @@ Error renamePathOnce(std::string_view from, std::string_view to)
 			});
 			if (code != ERROR_SUCCESS)
 			{
-				// 无法确认目标是否为空：源已消失报告 NOT_FOUND；否则交给 MoveFileExW 给出权威结果
-				// （目标仍存在时它返回 ALREADY_EXISTS → NOT_EMPTY，目标已消失时直接改名）
+				// Cannot tell whether the target is empty: if the source is gone, report NOT_FOUND; otherwise let MoveFileExW give the authoritative result
+				// (if the target is still there it returns ALREADY_EXISTS -> NOT_EMPTY; if the target is gone it renames directly)
 				if (vanished(from))
 					return classifyMissing(from);
 			}
@@ -764,8 +764,8 @@ Error renamePathOnce(std::string_view from, std::string_view to)
 				return vanished(from) ? classifyMissing(from) : Error::NOT_EMPTY;
 			else
 			{
-				// 目录覆盖空目录：MoveFileExW 不能替换目录。先把空的目标改到一个临时名让出位置，
-				// 改名成功后再删掉它；改名失败时把它改回来，保证失败时目标目录仍在（不是原子的，但不会丢目录）
+				// Directory over an empty directory: MoveFileExW cannot replace a directory. First rename the empty target to a temporary name to free the slot,
+				// then delete it after the rename succeeds; if the rename fails, rename it back, so a failed rename still leaves the destination directory (not atomic, but the directory is not lost)
 				removedTarget = uniqueSiblingName(wto, L"vfs-old");
 				DWORD c = retryTransient([&]() -> unsigned long
 				{
@@ -787,7 +787,7 @@ Error renamePathOnce(std::string_view from, std::string_view to)
 		if (::MoveFileExW(wfrom.c_str(), wto.c_str(), flags))
 			return ERROR_SUCCESS;
 		DWORD c = ::GetLastError();
-		// 目标文件被其他句柄打开时，传统语义的替换会失败（ACCESS_DENIED）；改用 POSIX 语义替换
+		// When the target file is open in another handle, a traditional replace fails (ACCESS_DENIED); use a POSIX-semantics replace instead
 		if (c == ERROR_ACCESS_DENIED && !fromDir)
 		{
 			DWORD p = posixRename(wfrom, wto);
@@ -800,12 +800,12 @@ Error renamePathOnce(std::string_view from, std::string_view to)
 	{
 		if (code == ERROR_SUCCESS)
 		{
-			// 让出位置的旧目标是空目录，删除失败（例如被其他进程占用）只会留下一个空的临时目录，不影响改名结果
+			// The old target moved out of the way is an empty directory. A failed delete (another process holding it, for example) only leaves an empty temporary directory and does not affect the rename result
 			removeDirPath(fromWidePath(removedTarget));
 		}
 		else
 		{
-			// 改名失败：把目标目录改回原名
+			// Rename failed: rename the destination directory back to its original name
 			retryTransient([&]() -> unsigned long
 			{
 				return ::MoveFileExW(removedTarget.c_str(), wto.c_str(), 0) ? ERROR_SUCCESS : ::GetLastError();
@@ -816,8 +816,8 @@ Error renamePathOnce(std::string_view from, std::string_view to)
 		return Error::OK;
 	if (code == ERROR_ALREADY_EXISTS || code == ERROR_FILE_EXISTS)
 	{
-		// 源句柄打开之后被其他线程改名成了目标名（句柄跟着对象走），再改名到目标就成了“目标已存在”；
-		// 按原子 rename 的语义这次改名发生时源已不存在
+		// After the source handle was opened, another thread renamed it to the target name (the handle follows the object), so renaming onto the target becomes "target already exists";
+		// under atomic-rename semantics the source was already gone when this rename happened
 		if (vanished(from))
 			return classifyMissing(from);
 		return fromDir ? Error::NOT_EMPTY : Error::EXISTS;
@@ -842,7 +842,7 @@ Error statPath(std::string_view utf8Path, Stat& out, size_t /*rootLen*/)
 {
 	std::string path(utf8Path);
 	struct stat st;
-	// stat 会跟随 symlink；是否允许跟随由 NativeBackend 另行检查
+	// stat follows symlinks; whether following is allowed is checked separately by NativeBackend
 	if (::stat(path.c_str(), &st) != 0)
 		return errorFromErrno(errno);
 	if (S_ISDIR(st.st_mode))
@@ -857,7 +857,7 @@ Error statPath(std::string_view utf8Path, Stat& out, size_t /*rootLen*/)
 	}
 	else
 	{
-		// 设备、管道、socket 等特殊文件不暴露给 VFS
+		// Devices, pipes, sockets, and other special files are not exposed to the VFS
 		return Error::NOT_FOUND;
 	}
 	out.mtime = static_cast<int64_t>(st.st_mtime);
@@ -870,7 +870,7 @@ Error realName(std::string_view dir, std::string_view name, std::string& actual)
 	full.push_back('/');
 	full.append(name);
 #if VFS_PLATFORM_APPLE
-	// getattrlist 返回目录项中存储的名字（不跟随最后一级符号链接）
+	// getattrlist returns the name stored in the directory entry (it does not follow the final symlink)
 	struct attrlist al;
 	std::memset(&al, 0, sizeof(al));
 	al.bitmapcount = ATTR_BIT_MAP_COUNT;
@@ -885,21 +885,21 @@ Error realName(std::string_view dir, std::string_view name, std::string& actual)
 	if (::getattrlist(full.c_str(), &al, &buf, sizeof(buf), FSOPT_NOFOLLOW) != 0)
 		return errorFromErrno(errno);
 	const char* p = reinterpret_cast<const char*>(&buf.ref) + buf.ref.attr_dataoffset;
-	size_t len = buf.ref.attr_length;   // 包含结尾的 '\0'
+	size_t len = buf.ref.attr_length;   // Includes the trailing '\0'
 	while (len > 0 && p[len - 1] == '\0')
 		--len;
 	actual.assign(p, len);
 	if (actual != name)
 	{
-		// 只差大小写时再确认一次：iOS 模拟器的文件系统按字节区分大小写，但 getattrlist 仍会按
-		// 不区分大小写匹配到另一个名字；此时 lstat 原名失败，说明请求的名字本身不存在
+		// Confirm again when only case differs: the iOS simulator file system is case-sensitive by bytes, but getattrlist still
+		// matches another name case-insensitively; lstat of the original name then fails, which means the requested name itself does not exist
 		struct stat st;
 		if (::lstat(full.c_str(), &st) != 0)
 			return errorFromErrno(errno);
 	}
 	return Error::OK;
 #else
-	// Linux 等平台的文件系统按字节匹配名字：能 stat 到就是同名
+	// On Linux and similar platforms the file system matches names by bytes: if stat succeeds, it is the same name
 	struct stat st;
 	if (::lstat(full.c_str(), &st) != 0)
 		return errorFromErrno(errno);
@@ -925,7 +925,7 @@ Error listDir(std::string_view path, const std::function<bool(const std::string&
 		if (ec)
 			return errorFromCode(ec);
 		std::error_code ec2;
-		// is_directory/is_regular_file 会跟随 symlink；特殊文件（设备、管道）直接跳过
+		// is_directory/is_regular_file follow symlinks; special files (devices, pipes) are skipped outright
 		FileType type;
 		if (it->is_directory(ec2))
 			type = FileType::DIR;
@@ -945,9 +945,9 @@ Error makeDir(std::string_view path)
 	const size_t slash = p.find_last_of('/');
 	const std::string parent = slash != std::string::npos && slash > 0 ? p.substr(0, slash) : std::string();
 	Error err = Error::OK;
-	// 父目录或同名目录正被其他线程删除时，不同系统给出的 errno 不一样：Linux 是 ENOENT，
-	// macOS 上观察到映射成 INVALID_PATH 的错误码。对这类“意外”错误重新确认：父目录已经不存在按 NOT_FOUND
-	// 报告，否则（竞争已经结束）重试，最多 3 次
+	// While a parent directory or a same-named directory is being deleted by another thread, errno differs by system: ENOENT on Linux,
+	// and on macOS an error code that maps to INVALID_PATH has been observed. Re-check this kind of unexpected error: if the parent is already gone, report NOT_FOUND,
+	// otherwise (the race is over) retry, at most 3 times
 	for (int attempt = 0; attempt < 3; ++attempt)
 	{
 		if (::mkdir(p.c_str(), 0777) == 0)
@@ -970,7 +970,7 @@ Error removeDirPath(std::string_view path)
 	std::string p(path);
 	if (::rmdir(p.c_str()) == 0)
 		return Error::OK;
-	// POSIX 允许用 EEXIST 表示目录非空
+	// POSIX allows EEXIST to mean the directory is not empty
 	const int e = errno;
 	return e == EEXIST ? Error::NOT_EMPTY : errorFromErrno(e);
 }
@@ -980,7 +980,7 @@ Error removeFilePath(std::string_view path)
 	std::string p(path);
 	if (::unlink(p.c_str()) == 0)
 		return Error::OK;
-	// Linux 对目录返回 EISDIR，macOS / BSD 返回 EPERM，这里统一成 IS_DIR
+	// Linux returns EISDIR for a directory, macOS / BSD return EPERM; both become IS_DIR here
 	const int e = errno;
 	if (e == EPERM || e == EISDIR)
 	{
@@ -996,7 +996,7 @@ Error renamePath(std::string_view from, std::string_view to)
 	std::string f(from), t(to);
 	if (::rename(f.c_str(), t.c_str()) == 0)
 		return Error::OK;
-	// 目录覆盖非空目录：Linux 返回 ENOTEMPTY，部分系统返回 EEXIST（POSIX 两者都允许），统一成 NOT_EMPTY
+	// Directory over a non-empty directory: Linux returns ENOTEMPTY, some systems return EEXIST (POSIX allows both); both become NOT_EMPTY
 	const int e = errno;
 	return e == EEXIST ? Error::NOT_EMPTY : errorFromErrno(e);
 }
@@ -1012,14 +1012,14 @@ uint64_t processId()
 #endif
 }
 
-// ---------------------------------------------------------------- 位置读
+// ---------------------------------------------------------------- positional reads
 
 #if VFS_PLATFORM_WINDOWS
 
 namespace
 {
 
-// 每个线程一个手动复位事件，供重叠 ReadFile 等待完成；线程退出时关闭
+// One manual-reset event per thread, for overlapped ReadFile to wait on completion; closed when the thread exits
 struct ThreadEvent
 {
 	HANDLE handle = nullptr;
@@ -1063,7 +1063,7 @@ bool PositionalReader::open(std::string_view utf8Path)
 
 intptr_t PositionalReader::reopen() const
 {
-	// ReOpenFile 针对同一个文件对象，不经过路径：归档在挂载后被改名、替换也不会读到别的文件
+	// ReOpenFile targets the same file object and does not go through the path: renaming or replacing the archive after mount cannot make the read see a different file
 	HANDLE primary = reinterpret_cast<HANDLE>(m_handles[0].load(std::memory_order_acquire));
 	HANDLE h = ::ReOpenFile(primary, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
 							FILE_FLAG_OVERLAPPED);
@@ -1098,7 +1098,7 @@ int64_t PositionalReader::readAt(void* buf, size_t size, uint64_t offset) const
 	ov.OffsetHigh = static_cast<DWORD>(offset >> 32);
 	ov.hEvent = ev;
 	DWORD got = 0;
-	// 同步完成时 ReadFile 返回 TRUE；异步时返回 ERROR_IO_PENDING。两种情况都用 GetOverlappedResult 取结果
+	// ReadFile returns TRUE when it completes synchronously, and ERROR_IO_PENDING when asynchronous. Both cases take the result from GetOverlappedResult
 	if (!::ReadFile(handle, buf, want, nullptr, &ov))
 	{
 		const DWORD c = ::GetLastError();
@@ -1159,7 +1159,7 @@ intptr_t PositionalReader::reopen() const
 	int fd = ::open(m_path.c_str(), flags);
 	if (fd == -1)
 		return -1;
-	// 必须仍是同一个文件：挂载之后归档被替换（改名覆盖）时，新句柄会指向新文件，与已加载的索引不一致
+	// It must still be the same file: if the archive is replaced after mount (rename over the top), the new handle would point at the new file and disagree with the index already loaded
 	struct stat st;
 	if (::fstat(fd, &st) != 0 || static_cast<uint64_t>(st.st_dev) != m_dev || static_cast<uint64_t>(st.st_ino) != m_ino)
 	{
@@ -1223,7 +1223,7 @@ bool PositionalReader::isOpen() const
 
 intptr_t PositionalReader::handleForThread() const
 {
-	// 线程第一次使用时轮流分配一个分片，之后固定；分片之间互不共享内核文件对象
+	// The first time a thread uses this, it is assigned a shard in turn and stays there; shards do not share a kernel file object
 	static std::atomic<size_t> s_next{0};
 	thread_local const size_t t_slot = s_next.fetch_add(1, std::memory_order_relaxed);
 	const size_t slot = t_slot % SLOTS;

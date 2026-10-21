@@ -1,10 +1,10 @@
-# vfs_bench 完整结果 — Windows
+# vfs_bench full results - Windows
 
-- CPU：Intel Core i5-12400，6 核 12 线程；内存 32 GiB
-- 系统：Windows 11 企业版 10.0.26100
-- 编译器：MSVC 19.51（VS2026），Release
-- 磁盘：Samsung SSD 980 1TB（NVMe），NTFS；Windows Defender 实时保护开启
-- 日期：2026-10-21（UTC+8），默认参数（--scale 1，--iterations 3，线程 1,2,4,8,N），热缓存，Release
+- CPU: Intel Core i5-12400, 6 cores / 12 threads; 32 GiB RAM
+- OS: Windows 11 Enterprise 10.0.26100
+- Compiler: MSVC 19.51 (VS2026), Release
+- Disk: Samsung SSD 980 1TB (NVMe), NTFS; Windows Defender real-time protection on
+- Date: 2026-10-21 (UTC+8), default parameters (--scale 1, --iterations 3, threads 1,2,4,8,N), warm cache, Release
 
 
 ### read.small

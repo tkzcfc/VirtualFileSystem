@@ -1,5 +1,5 @@
-// 多线程压力测试：在同一目录 / 不同目录中并发创建、写、读、删、改名，挂载表抖动，大量并发句柄。
-// 每个用例都用不变量检查结果，而不仅仅是“没有崩溃”。轮数可用 VFS_TEST_SCALE 放大。
+// Multi-thread stress tests: concurrent create, write, read, delete, and rename in the same directory and in different directories, mount-table churn, and many concurrent handles.
+// Every case checks results with invariants, and not only that nothing crashed. Iteration counts can be scaled with VFS_TEST_SCALE.
 #include "matrix/Envs.h"
 #include <algorithm>
 #include <atomic>
@@ -19,7 +19,7 @@ namespace
 
 const int THREADS = 8;
 
-// 可写根目录 /s 的几种组合
+// Several combinations of a writable root at /s
 struct StressMemory
 {
 	test::TempDir dir;
@@ -38,7 +38,7 @@ struct StressNative
 	}
 };
 
-// 归档在下、内存在上；归档提供 /s/base/*.txt
+// Archive below, memory above; the archive provides /s/base/*.txt
 struct StressMemoryOverArchive
 {
 	test::TempDir dir;
@@ -54,7 +54,7 @@ struct StressMemoryOverArchive
 	}
 };
 
-// 归档在下、本机目录在上
+// Archive below, a native directory above
 struct StressNativeOverArchive
 {
 	test::TempDir dir;
@@ -81,7 +81,7 @@ void runThreads(int n, Fn fn)
 		th.join();
 }
 
-// 由 (线程, 序号) 决定的内容，便于校验
+// Content determined by (thread, index), so it can be checked
 std::string payload(int t, int i)
 {
 	std::string s = "T" + std::to_string(t) + "#" + std::to_string(i) + ":";
@@ -135,7 +135,7 @@ TEST_SUITE("stress")
 		lister.join();
 		INFO("failure details: " << failures.str());
 		CHECK(failures.load() == 0);
-		// 结束状态：每个线程的 10 个槽位中，最后一轮没有删除的文件内容正确
+		// Final state: among each thread's 10 slots, files not deleted in the last round have the correct content
 		for (int t = 0; t < THREADS; ++t)
 		{
 			for (int slot = 0; slot < 10; ++slot)
@@ -256,9 +256,9 @@ TEST_SUITE("stress")
 		REQUIRE(e.fs.createDir("/s/md") == Error::OK);
 		const int rounds = 200 * test::scale();
 		test::FailureLog failures;
-		// 每种操作单独统计返回码，失败时整体打印
+		// Count return codes separately for each operation, and print the whole set on failure
 		test::ErrorHistogram createDirsCodes, createDirCodes, removeDirCodes, removeTreeCodes;
-		// 失败详情包含操作、路径、错误码和原始 OS 错误码（errno / GetLastError）
+		// Failure details include the operation, path, error code, and the raw OS error (errno / GetLastError)
 		auto expect = [&](test::ErrorHistogram& h, const std::string& what, Error err, Error a, Error b, Error c)
 		{
 			h.add(err);
@@ -274,8 +274,8 @@ TEST_SUITE("stress")
 				switch (rng() % 4)
 				{
 				case 0:
-					// createDirs：已存在（包括并发创建）算成功；中间目录被并发删掉时会从头重试，
-					// 只有持续被删除超过重试上限才返回 NOT_FOUND（见 mount-rules.md §6）。这里没有文件，不会 EXISTS
+					// createDirs: already exists (including a concurrent create) counts as success; if an intermediate directory is deleted concurrently, it retries from the start,
+					// and NOT_FOUND is returned only if deletion keeps winning past the retry limit (see mount-rules.md section 6). There are no files here, so EXISTS does not occur
 					expect(createDirsCodes, "createDirs " + d, e.fs.createDirs(d), Error::OK, Error::NOT_FOUND,
 						   Error::OK);
 					break;
@@ -301,7 +301,7 @@ TEST_SUITE("stress")
 		INFO("removeDir(recursive) codes: " << removeTreeCodes.str());
 		INFO("failure details: " << failures.str());
 		CHECK(failures.load() == 0);
-		// 视图一致：walk 到的每一项都能 stat 成功且类型一致
+		// Consistent view: every item walk reaches can be stat'ed successfully and has a matching type
 		e.fs.walk("/s/md", [&](const std::string& full, const DirEntry& d)
 		{
 			Stat st;
@@ -329,7 +329,7 @@ TEST_SUITE("stress")
 				{
 					auto s = e.fs.openFileStream("/s/hot.bin", Mode::READ);
 					if (!s)
-						continue;   // 替换的瞬间可能不存在（本机 WRITE 先截断）
+						continue;   // it may be missing for an instant during replace (native WRITE truncates first)
 					char buf[700];
 					while (true)
 					{
@@ -342,7 +342,7 @@ TEST_SUITE("stress")
 						if (n == 0)
 							break;
 						for (int i = 0; i < n; ++i)
-							if ((buf[i] < 'A' || buf[i] > 'H') && buf[i] != 0)   // resize 扩展的部分为 0
+							if ((buf[i] < 'A' || buf[i] > 'H') && buf[i] != 0)   // the part grown by resize is 0
 								failures.add("unexpected byte " + std::to_string(static_cast<int>(static_cast<unsigned char>(buf[i]))));
 					}
 					++reads;
@@ -424,7 +424,7 @@ TEST_SUITE("stress")
 				}
 			}
 		}
-		// 不留下 copy-up 临时文件
+		// Leave no copy-up temporary files
 		for (const auto& n : test::listNames(e.fs, "/s/base"))
 			CHECK(n.find("tmp") == std::string::npos);
 	}
@@ -442,14 +442,14 @@ TEST_SUITE("stress")
 				std::string s;
 				if (e.fs.readFile("/s/atomic/cfg", s) == Error::OK)
 				{
-					// 读到的必须是某一次完整写入：首字符重复 len 次
+					// What was read must be one complete write: the first character repeated len times
 					if (s.empty() || s.find_first_not_of(s[0]) != std::string::npos)
 						failures.add("incomplete content: " + std::to_string(s.size()) + " bytes");
 				}
 			}
 		});
 		const int rounds = 60 * test::scale();
-		// 内存层总能替换；本机层取决于平台
+		// A memory layer can always replace; a native layer depends on the platform
 		const bool replaceOpen = std::is_same_v<E, StressMemory> || std::is_same_v<E, StressMemoryOverArchive> ||
 								 test::nativeReplaceOpenFile();
 		test::ErrorHistogram atomicCodes;
@@ -460,8 +460,8 @@ TEST_SUITE("stress")
 				const std::string data(2000 + 37 * t, static_cast<char>('a' + t));
 				Error err = e.fs.writeFileAtomic("/s/atomic/cfg", data.data(), data.size());
 				atomicCodes.add(err);
-				// 平台不能替换打开中的文件时（见 test::nativeReplaceOpenFile），读线程持有句柄期间替换
-				// 会失败为 PERMISSION_DENIED：这是平台能力限制，允许，但其余不变量（内容完整、无临时文件）照常检查
+				// When the platform cannot replace a file that is open (see test::nativeReplaceOpenFile), a replace while a reader holds the handle
+				// fails with PERMISSION_DENIED: that is a platform limit and is allowed, but the other invariants (intact content, no temp files) are still checked
 				if (err == Error::PERMISSION_DENIED && !replaceOpen)
 					continue;
 				failures.expectOk(err, "writeFileAtomic cfg");
@@ -473,7 +473,7 @@ TEST_SUITE("stress")
 		INFO("failure details: " << failures.str());
 		if (!replaceOpen)
 			MESSAGE("native file system cannot replace open files (no POSIX rename semantics); writeFileAtomic checks relaxed");
-		// 至少要有成功的写入
+		// There must be at least one successful write
 		CHECK(atomicCodes.count(Error::OK) > 0);
 		CHECK(failures.load() == 0);
 		CHECK(test::listNames(e.fs, "/s/atomic") == std::vector<std::string>{"cfg"});
@@ -547,7 +547,7 @@ TEST_SUITE("stress")
 			m->setReadOnly(true);
 			layers.push_back(m);
 		}
-		REQUIRE(fs.mount("/x", layers[0], env::prio(-100)) != 0);   // 保底层始终在
+		REQUIRE(fs.mount("/x", layers[0], env::prio(-100)) != 0);   // keep the bottom layer present the whole time
 
 		std::atomic<bool> done{false};
 		test::FailureLog failures;
@@ -667,7 +667,7 @@ TEST_SUITE("stress")
 					fs.removeDir("/m/t" + std::to_string(t), true);
 				uint64_t g = fs.generation();
 				if (g < last)
-					++failures;   // generation 单调递增
+					++failures;   // generation increases monotonically
 				last = g;
 			}
 		});

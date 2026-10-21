@@ -1,4 +1,4 @@
-// .vfs 归档测试：往返、可复现、对齐、去重、空目录、密钥、损坏检测、版本不匹配、附加到其他文件、写入端错误
+// .vfs archive tests: round trip, reproducibility, alignment, dedup, empty directories, keys, corruption detection, version mismatch, appending to another file, writer-side errors
 #include "TestUtils.h"
 #include "vfs/archive/ArchiveBackend.h"
 #include "vfs/archive/ArchiveFormat.h"
@@ -25,7 +25,7 @@ FileWriteOptions opt(bool encrypt, bool compress)
 	return o;
 }
 
-// 可压缩的文本内容
+// Compressible text content
 std::vector<uint8_t> textContent(size_t lines, int seed)
 {
 	std::string s;
@@ -34,7 +34,7 @@ std::vector<uint8_t> textContent(size_t lines, int seed)
 	return test::bytes(s);
 }
 
-// 一组覆盖各种组合的样例文件
+// A set of sample files covering the combinations
 std::vector<test::ArchiveFile> sampleFiles()
 {
 	return {
@@ -44,7 +44,7 @@ std::vector<test::ArchiveFile> sampleFiles()
 		{"images/icon.png", test::randomBytes(777, 4), opt(false, false)},
 		{"中文/配置.json", test::bytes("{\"语言\":\"中文\"}"), opt(true, false)},
 		{"empty.txt", {}, opt(true, true)},
-		{"random-compress.bin", test::randomBytes(5000, 5), opt(false, true)},   // 压不小，存原文
+		{"random-compress.bin", test::randomBytes(5000, 5), opt(false, true)},   // Does not shrink, stored as-is
 		{"a/b/c/d/deep.txt", test::bytes("deep"), opt(false, false)},
 	};
 }
@@ -92,8 +92,8 @@ TEST_SUITE("archive")
 		ArchiveWriteStats stats;
 		REQUIRE(test::buildArchive(dir.sub("a.vfs"), files, {}, &stats) == Error::OK);
 		CHECK(stats.fileCount == files.size());
-		CHECK(stats.encryptedCount == 3);   // 空文件即使要求加密也不加密（没有数据）
-		CHECK(stats.compressedCount == 2);   // main.lua、util.lua；random 和 empty 不压缩
+		CHECK(stats.encryptedCount == 3);   // Empty files are not encrypted even when encryption is requested (there is no data)
+		CHECK(stats.compressedCount == 2);   // main.lua and util.lua; random and empty are not compressed
 		CHECK(stats.archiveSize == test::readNative(dir.sub("a.vfs")).size());
 
 		auto b = openOk(dir.sub("a.vfs"));
@@ -145,7 +145,7 @@ TEST_SUITE("archive")
 		CHECK(a.size() > 0);
 		CHECK(a == b);
 
-		// 内容变化一个字节，文件就不同
+		// Changing one byte of content makes the file different
 		files[0].content.push_back('!');
 		REQUIRE(test::buildArchive(dir.sub("3.vfs"), files) == Error::OK);
 		CHECK(test::readNative(dir.sub("3.vfs")) != a);
@@ -255,17 +255,17 @@ TEST_SUITE("archive")
 		const auto files = sampleFiles();
 		const std::vector<uint8_t> key = test::randomBytes(32, 77);
 
-		// 默认：加密索引，密钥存于文件，打开不需要密钥
+		// Default: encrypted index, key stored in the file, opening needs no key
 		REQUIRE(test::buildArchive(dir.sub("default.vfs"), files) == Error::OK);
 		auto b = openOk(dir.sub("default.vfs"));
 		CHECK((b->index()->header.flags & ArchiveFlags::IndexEncrypted) != 0);
 		CHECK((b->index()->header.flags & ArchiveFlags::KeyStored) != 0);
-		// 索引被加密：文件名不以明文出现
+		// Index is encrypted: file names do not appear in the clear
 		const auto raw = test::readNative(dir.sub("default.vfs"));
 		const std::string name = "scripts/main.lua";
 		CHECK(std::search(raw.begin(), raw.end(), name.begin(), name.end()) == raw.end());
 
-		// 外部密钥，不存储
+		// External key, not stored
 		ArchiveWriteOptions o;
 		o.indexKey = key;
 		REQUIRE(test::buildArchive(dir.sub("keyed.vfs"), files, o) == Error::OK);
@@ -280,15 +280,15 @@ TEST_SUITE("archive")
 		CHECK(openErr(keyed, ro) == Error::OK);
 		auto kb = openOk(dir.sub("keyed.vfs"), ro);
 		CHECK(readEntryVia(*kb, "images/bg.png") == files[2].content);
-		// 文件头里不应该出现密钥
+		// The key must not appear in the file header
 		CHECK(std::search(keyed.begin(), keyed.end(), key.begin(), key.end()) == keyed.end());
 
-		// 外部密钥并存储
+		// External key, and store it
 		o.storeKey = true;
 		REQUIRE(test::buildArchive(dir.sub("stored.vfs"), files, o) == Error::OK);
 		CHECK(openErr(test::readNative(dir.sub("stored.vfs"))) == Error::OK);
 
-		// 明文索引
+		// Plaintext index
 		ArchiveWriteOptions plain;
 		plain.encryptIndex = false;
 		REQUIRE(test::buildArchive(dir.sub("plain.vfs"), files, plain) == Error::OK);
@@ -297,7 +297,7 @@ TEST_SUITE("archive")
 		const auto praw = test::readNative(dir.sub("plain.vfs"));
 		CHECK(std::search(praw.begin(), praw.end(), name.begin(), name.end()) != praw.end());
 
-		// 写入端：密钥长度不对
+		// Writer side: wrong key length
 		ArchiveWriteOptions badKey;
 		badKey.indexKey = std::vector<uint8_t>(31, 0);
 		CHECK(test::buildArchive(dir.sub("bad.vfs"), files, badKey) == Error::KEY_INVALID);
@@ -362,7 +362,7 @@ TEST_SUITE("archive")
 		CHECK(readEntryVia(*b, "big.bin") == big);
 		CHECK(b->verifyAll() == Error::OK);
 
-		// 本机文件在 write 时才打开：不存在时 write 失败，且不留下输出文件
+		// The native file is opened only at write time: if it is missing, write fails and leaves no output file
 		ArchiveWriter w3;
 		CHECK(w3.addFile("x", dir.sub("missing.bin")) == Error::OK);
 		CHECK(w3.write(dir.sub("missing.vfs")) == Error::NOT_FOUND);
@@ -396,13 +396,13 @@ TEST_SUITE("archive")
 		CHECK(test::buildArchive(dir.sub("5.vfs"), {{"", {}, {}}}) == Error::INVALID_PATH);
 		ArchiveWriter w;
 		CHECK(w.addData("a", {}) == Error::OK);
-		CHECK(w.addData("a", {}) == Error::OK);   // 延迟到 write 时检查
+		CHECK(w.addData("a", {}) == Error::OK);   // The check is deferred until write
 		CHECK(w.write(dir.sub("6.vfs")) == Error::EXISTS);
 		CHECK_FALSE(w.lastError().empty());
 		CHECK_FALSE(dir.exists("6.vfs"));
 		for (const auto& e : std::filesystem::directory_iterator(test::u8(dir.path())))
-			CHECK(e.path().filename().string().rfind("6.vfs", 0) != 0);   // 也没有留下 6.vfs.<pid>-<n>.tmp
-		// 前导 '/' 与反斜杠会被规范化
+			CHECK(e.path().filename().string().rfind("6.vfs", 0) != 0);   // And no 6.vfs.<pid>-<n>.tmp was left behind
+		// A leading '/' and backslashes are normalized
 		CHECK(test::buildArchive(dir.sub("7.vfs"), {{"/x\\y.txt", test::bytes("1"), {}}}) == Error::OK);
 		CHECK(openOk(dir.sub("7.vfs"))->index()->findFile("x/y.txt") != nullptr);
 	}
@@ -430,7 +430,7 @@ TEST_SUITE("archive")
 		o.baseOffset = static_cast<int64_t>(base) + 1;
 		CHECK(openErr(exe, o) == Error::CORRUPTED);
 
-		// 归档后面还有多余数据（footer 不在末尾）时，起点 0 的仍可打开
+		// When extra data follows the archive (footer is not at the end), one that starts at 0 can still be opened
 		auto tail = data;
 		tail.insert(tail.end(), 100, 0xAB);
 		CHECK(openErr(tail) == Error::OK);
@@ -455,7 +455,7 @@ TEST_SUITE("archive")
 	{
 		test::TempDir dir;
 		ArchiveWriteOptions o;
-		o.alignment = 1;   // 无填充字节，数据区每个字节都属于某个文件
+		o.alignment = 1;   // No padding bytes; every byte of the data region belongs to some file
 		std::vector<test::ArchiveFile> files = {
 			{"a.txt", test::bytes("hello world"), opt(false, false)},
 			{"b.lua", textContent(20, 1), opt(true, true)},
@@ -490,7 +490,7 @@ TEST_SUITE("archive")
 				Error v = ArchiveReader::verify(*index);
 				if (v != Error::CORRUPTED)
 				{
-					// 极少数情况：翻转 LZ4 匹配偏移后恰好复制出相同的内容，解出的原文没变，不算损坏
+					// Rare case: flipping an LZ4 match offset happens to copy the same bytes, so the decoded plaintext is unchanged and is not corruption
 					for (const auto& f : files)
 					{
 						std::vector<uint8_t> out;
@@ -504,7 +504,7 @@ TEST_SUITE("archive")
 			}
 			else
 			{
-				// footer：起点 0 有 magic 时不依赖 footer
+				// footer: when magic is at offset 0, the footer is not required
 				CHECK(index != nullptr);
 			}
 		}
@@ -527,7 +527,7 @@ TEST_SUITE("archive")
 			std::vector<uint8_t> cut(data.begin(), data.begin() + static_cast<std::ptrdiff_t>(len));
 			Error err = Error::OK;
 			auto index = ArchiveReader::open(std::make_shared<MemoryArchiveSource>(cut), {}, &err);
-			// 只少了 footer 时仍可打开（magic 在起点）；否则必须失败
+			// Missing only the footer still opens (magic is at the start); otherwise it must fail
 			if (len < indexEnd)
 				CHECK(index == nullptr);
 		}
@@ -553,12 +553,12 @@ TEST_SUITE("archive")
 			int flips = 1 + static_cast<int>(next() % 8);
 			for (int k = 0; k < flips; ++k)
 				copy[next() % copy.size()] = static_cast<uint8_t>(next());
-			// 一部分用例重新计算 header 校验和，让解析继续往下走
+			// Some cases recompute the header checksum so parsing continues further
 			if (iter % 2 == 0)
 				fixHeaderChecksum(copy);
 			if (iter % 3 == 0)
 			{
-				// 也重新计算索引哈希，迫使条目解析处理垃圾数据（明文索引）
+				// Also recompute the index hash, forcing entry parsing to handle garbage (plaintext index)
 				ArchiveHeader h;
 				if (h.parse(copy.data()) == Error::OK && h.indexOffset + h.indexSize <= copy.size())
 				{
@@ -644,7 +644,7 @@ TEST_SUITE("archive")
 		Stat st;
 		REQUIRE(b->stat("t.txt", st) == Error::OK);
 		CHECK(st.mtime == 1700000000);
-		// 索引中存 0；stat 时 0 表示未知，回退为归档文件自身的 mtime
+		// The index stores 0; on stat, 0 means unknown and falls back to the archive file's own mtime
 		CHECK(b->index()->findFile("z.txt")->mtime == 0);
 		REQUIRE(b->stat("z.txt", st) == Error::OK);
 		CHECK(st.mtime == b->index()->sourceMtime);

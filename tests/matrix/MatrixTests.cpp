@@ -1,4 +1,4 @@
-// 后端 × 分层组合矩阵：同一套文件 / 目录 / 改名 / 流操作在 9 种挂载组合上逐一验证。
+// Backend x layer-combination matrix: the same file / directory / rename / stream operations are checked on each of 9 mount combinations.
 #include "Envs.h"
 #include <algorithm>
 #include <cstring>
@@ -22,7 +22,7 @@ std::string blob(size_t size, uint64_t seed)
 
 TEST_SUITE("matrix")
 {
-	// ================================================================ 文件读写
+	// ================================================================ file read/write
 
 	TEST_CASE_TEMPLATE("files: writes and reads of various sizes", E, VFS_ENVS)
 	{
@@ -54,7 +54,7 @@ TEST_SUITE("matrix")
 			auto s = e.fs.openFileStream("/w/m.txt", Mode::APPEND);
 			REQUIRE(s);
 			s->seek(0, SEEK_SET);
-			CHECK(s->write("de", 2) == 2);   // APPEND 总是写到末尾
+			CHECK(s->write("de", 2) == 2);   // APPEND always writes at the end
 			CHECK(s->write("f", 1) == 1);
 		}
 		CHECK(readAll(e.fs, "/w/m.txt") == "abcdef");
@@ -71,7 +71,7 @@ TEST_SUITE("matrix")
 		}
 		CHECK(readAll(e.fs, "/w/m.txt") == "abXYef");
 
-		// APPEND / OVERLAPPED 创建不存在的文件
+		// APPEND / OVERLAPPED create a file that does not exist
 		{
 			auto s = e.fs.openFileStream("/w/new_append.txt", Mode::APPEND);
 			REQUIRE(s);
@@ -114,7 +114,7 @@ TEST_SUITE("matrix")
 		CHECK(err == Error::NOT_FOUND);
 	}
 
-	// ================================================================ 目录
+	// ================================================================ directories
 
 	TEST_CASE_TEMPLATE("directories: createDir / createDirs / list / removeDir lifecycle", E, VFS_ENVS)
 	{
@@ -156,7 +156,7 @@ TEST_SUITE("matrix")
 		Names expected = {"10", "2", "Alpha", "_x", "a.txt", "beta", "dir/", "sub/", "zeta"};
 		CHECK(names == expected);
 		CHECK(std::is_sorted(names.begin(), names.end()));
-		// 覆盖底层文件不产生重复项
+		// Overwriting a lower-layer file does not produce a duplicate entry
 		REQUIRE(e.fs.writeFile("/w/base/a.txt", "A2") == Error::OK);
 		CHECK(listNames(e.fs, "/w/base") == expected);
 	}
@@ -218,20 +218,20 @@ TEST_SUITE("matrix")
 		CHECK(e.fs.rename("/w/r/a/g.txt", "/w/r/b/g.txt") == Error::OK);
 		CHECK(readAll(e.fs, "/w/r/b/g.txt") == "F");
 
-		// 覆盖已有文件
+		// Overwrite an existing file
 		REQUIRE(e.fs.writeFile("/w/r/b/old.txt", "OLD") == Error::OK);
 		CHECK(e.fs.rename("/w/r/b/g.txt", "/w/r/b/old.txt") == Error::OK);
 		CHECK(readAll(e.fs, "/w/r/b/old.txt") == "F");
 		CHECK_FALSE(e.fs.exists("/w/r/b/g.txt"));
 
-		// 文件改名到已有目录
+		// Rename a file onto an existing directory
 		CHECK(e.fs.rename("/w/r/b/old.txt", "/w/r/a") == Error::IS_DIR);
-		// 源不存在
+		// Source does not exist
 		CHECK(e.fs.rename("/w/r/none", "/w/r/x") == Error::NOT_FOUND);
-		// 目标父目录不存在 / 是文件
+		// Target parent does not exist / is a file
 		CHECK(e.fs.rename("/w/r/b/old.txt", "/w/r/zz/old.txt") == Error::NOT_FOUND);
 		CHECK(e.fs.rename("/w/r/b/old.txt", "/w/r/b/old.txt/x") == Error::NOT_DIR);
-		// 相同路径直接成功
+		// The same path succeeds immediately
 		CHECK(e.fs.rename("/w/r/b/old.txt", "/w/r/b/old.txt") == Error::OK);
 		CHECK(e.fs.rename("/w/r/b/old.txt", "/w/r/b/./old.txt") == Error::OK);
 		CHECK(readAll(e.fs, "/w/r/b/old.txt") == "F");
@@ -250,18 +250,18 @@ TEST_SUITE("matrix")
 		CHECK(readAll(e.fs, "/w/t/moved/inner/x.txt") == "X");
 		CHECK(readAll(e.fs, "/w/t/moved/y.txt") == "Y");
 
-		// 目录改名到已有文件
+		// Rename a directory onto an existing file
 		REQUIRE(e.fs.writeFile("/w/t/file", "f") == Error::OK);
 		CHECK(e.fs.rename("/w/t/moved", "/w/t/file") == Error::NOT_DIR);
 
-		// 覆盖非空目录：失败，两边都不变
+		// Overwrite a non-empty directory: fails, and both sides stay unchanged
 		REQUIRE(e.fs.createDirs("/w/t/full") == Error::OK);
 		REQUIRE(e.fs.writeFile("/w/t/full/keep.txt", "K") == Error::OK);
 		CHECK(e.fs.rename("/w/t/moved", "/w/t/full") != Error::OK);
 		CHECK(readAll(e.fs, "/w/t/full/keep.txt") == "K");
 		CHECK(readAll(e.fs, "/w/t/moved/y.txt") == "Y");
 
-		// 覆盖空目录：POSIX 语义成功
+		// Overwrite an empty directory: succeeds under POSIX semantics
 		REQUIRE(e.fs.createDir("/w/t/empty") == Error::OK);
 		CHECK(e.fs.rename("/w/t/moved", "/w/t/empty") == Error::OK);
 		CHECK(readAll(e.fs, "/w/t/empty/inner/x.txt") == "X");
@@ -278,7 +278,7 @@ TEST_SUITE("matrix")
 		CHECK(e.fs.copyFile("/w/none", "/w/c3.txt") == Error::NOT_FOUND);
 		CHECK_FALSE(e.fs.exists("/w/c3.txt"));
 
-		// 复制到自身：内容不能丢
+		// Copy onto itself: the content must not be lost
 		CHECK(e.fs.copyFile("/w/c.txt", "/w/c.txt") == Error::OK);
 		CHECK(readAll(e.fs, "/w/c.txt") == "copy me");
 
@@ -291,12 +291,12 @@ TEST_SUITE("matrix")
 		CHECK(readAll(e.fs, "/w/atomic.bin") == big);
 		CHECK(e.fs.writeFileAtomic("/w/atomic.bin", "small", 5) == Error::OK);
 		CHECK(readAll(e.fs, "/w/atomic.bin") == "small");
-		// 不留下任何临时文件
+		// Leave no temporary files
 		for (const auto& n : listNames(e.fs, "/w"))
 			CHECK(n.find("tmp") == std::string::npos);
 	}
 
-	// ================================================================ 底层文件
+	// ================================================================ lower-layer files
 
 	TEST_CASE_TEMPLATE("lower files: read, override, restore after removing the override, remove, rename", E, VFS_ENVS)
 	{
@@ -308,7 +308,7 @@ TEST_SUITE("matrix")
 		REQUIRE(e.fs.stat("/w/base/a.txt", st) == Error::OK);
 		CHECK(st.writable == e.baseWritable);
 
-		// 覆盖：总是可以（只读层上通过遮蔽实现）
+		// Overwrite: always possible (on a read-only layer it is done by masking)
 		REQUIRE(e.fs.writeFile("/w/base/a.txt", "A2") == Error::OK);
 		CHECK(readAll(e.fs, "/w/base/a.txt") == "A2");
 		REQUIRE(e.fs.stat("/w/base/a.txt", st) == Error::OK);
@@ -317,9 +317,9 @@ TEST_SUITE("matrix")
 		if (e.baseWritable)
 			CHECK_FALSE(e.fs.exists("/w/base/a.txt"));
 		else
-			CHECK(readAll(e.fs, "/w/base/a.txt") == "A");   // 原版重新露出
+			CHECK(readAll(e.fs, "/w/base/a.txt") == "A");   // the original shows through again
 
-		// 直接删除 / 改名底层文件
+		// Delete / rename a lower-layer file directly
 		if (e.baseWritable)
 		{
 			CHECK(e.fs.rename("/w/base/sub/b.txt", "/w/base/b_renamed.txt") == Error::OK);
@@ -354,7 +354,7 @@ TEST_SUITE("matrix")
 			CHECK(s->write("Z", 1) == 1);
 		}
 		CHECK(readAll(e.fs, "/w/base/sub/b.txt") == "BZ");
-		// copy-up 不留下临时文件
+		// copy-up leaves no temporary files
 		CHECK(listNames(e.fs, "/w/base/sub") == Names{"b.txt"});
 		CHECK(listNames(e.fs, "/w/base") == (Names{"a.txt", "sub/"}));
 	}
@@ -382,20 +382,20 @@ TEST_SUITE("matrix")
 		}
 	}
 
-	// ================================================================ 名字与路径
+	// ================================================================ names and paths
 
 	TEST_CASE_TEMPLATE("names: Chinese, Japanese, emoji, spaces, leading dot, multiple dots, 255-byte names", E, VFS_ENVS)
 	{
 		E e;
 		const std::string names[] = {
 			"中文文件.txt", "日本語のファイル", "emoji_😀🎮.dat", "has space.txt", " leading", ".hidden",
-			"a.b.c.d", "...x", std::string(255, 'n'), std::string(85, '\xE4') /* 占位，下面替换 */,
+			"a.b.c.d", "...x", std::string(255, 'n'), std::string(85, '\xE4') /* placeholder, replaced below */,
 		};
 		for (std::string n : names)
 		{
 			if (n[0] == '\xE4')
 			{
-				// 85 个三字节汉字 = 255 字节
+				// 85 three-byte CJK characters = 255 bytes
 				n.clear();
 				for (int i = 0; i < 85; ++i)
 					n += "字";
@@ -407,7 +407,7 @@ TEST_SUITE("matrix")
 			CHECK(readAll(e.fs, path) == n);
 			Names listed = listNames(e.fs, "/w/names");
 			CHECK(std::find(listed.begin(), listed.end(), n) != listed.end());
-			// 长名字改成短名字，短名字加后缀（避免超过 255 字节的单段上限）
+			// Rename a long name to a short name, and add a suffix to a short name (stay under the 255-byte single-segment limit)
 			const std::string renamed = n.size() > 200 ? std::string("/w/names/short") : path + "_r";
 			CHECK(e.fs.rename(path, renamed) == Error::OK);
 			CHECK(readAll(e.fs, renamed) == n);
@@ -445,8 +445,8 @@ TEST_SUITE("matrix")
 		CHECK_FALSE(e.fs.exists("/w/CASE.TXT"));
 		CHECK(e.fs.removeFile("/w/case.txt") == Error::OK);
 		CHECK(readAll(e.fs, "/w/Case.txt") == "upper");
-		// 底层文件：内存、归档按字节匹配；本机底层在大小写不敏感的文件系统上（未开 exactCase）
-		// 会匹配到只差大小写的名字，这是 docs/mount-rules.md 中记录的平台差异
+		// Lower-layer files: memory and archive match by bytes; a native lower layer on a case-insensitive filesystem (exactCase off)
+		// matches a name that differs only in case. This platform difference is recorded in docs/mount-rules.md
 		INFO("nativeBase=" << e.nativeBase << " nativeCaseSensitive=" << test::nativeCaseSensitive());
 		CHECK(e.fs.exists("/w/BASE/a.txt") == !e.baseCaseSensitive());
 		CHECK(e.fs.exists("/w/base/A.txt") == !e.baseCaseSensitive());
@@ -457,7 +457,7 @@ TEST_SUITE("matrix")
 		E e;
 		if (e.caseSensitive() || e.caseLookupOnly())
 			return;
-		// Windows / macOS 默认文件系统：这是平台能力，VFS 不做模拟（需要一致行为请开 NativeOptions::exactCase）
+		// Default filesystems on Windows / macOS: this is a platform capability, and the VFS does not emulate it (enable NativeOptions::exactCase for consistent behavior)
 		REQUIRE(e.fs.writeFile("/w/Case.txt", "upper") == Error::OK);
 		REQUIRE(e.fs.writeFile("/w/case.txt", "lower") == Error::OK);
 		CHECK(readAll(e.fs, "/w/Case.txt") == "lower");
@@ -483,7 +483,7 @@ TEST_SUITE("matrix")
 		CHECK(e.fs.removeFile("/w/p/q.txt/") == Error::OK);
 	}
 
-	// ================================================================ 流
+	// ================================================================ streams
 
 	TEST_CASE_TEMPLATE("streams: seek past EOF, zero-byte read/write, use after close, zero-filled holes", E, VFS_ENVS)
 	{
@@ -513,7 +513,7 @@ TEST_SUITE("matrix")
 		CHECK(s->size() == -1);
 		CHECK(readAll(e.fs, "/w/s.bin") == std::string("abc\0\0\0Z", 7));
 
-		// 底层只读文件的读流：EOF 之后的 seek 与 0 字节读
+		// Read stream of a lower-layer read-only file: seek past EOF and a 0-byte read
 		auto r = e.fs.openFileStream("/w/base/sub/b.txt", Mode::READ);
 		REQUIRE(r);
 		CHECK(r->seek(0, SEEK_END) == 1);
@@ -533,7 +533,7 @@ TEST_SUITE("matrix")
 		REQUIRE(e.fs.removeFile("/w/open.bin") == Error::OK);
 		CHECK_FALSE(e.fs.exists("/w/open.bin"));
 		CHECK(test::str(test::readStream(*s)) == data);
-		// 同名新文件与旧流无关
+		// A new file of the same name is unrelated to the old stream
 		REQUIRE(e.fs.writeFile("/w/open.bin", "new") == Error::OK);
 		CHECK(readAll(e.fs, "/w/open.bin") == "new");
 	}
@@ -561,7 +561,7 @@ TEST_SUITE("matrix")
 		}
 	}
 
-	// ================================================================ 元数据
+	// ================================================================ metadata
 
 	TEST_CASE_TEMPLATE("stat and generation: type, size and writable flag follow operations", E, VFS_ENVS)
 	{
@@ -580,7 +580,7 @@ TEST_SUITE("matrix")
 		const uint64_t g1 = e.fs.generation();
 		readAll(e.fs, "/w/st.txt");
 		e.fs.list("/w");
-		CHECK(e.fs.generation() == g1);   // 只读操作不改变
+		CHECK(e.fs.generation() == g1);   // read-only operations do not change it
 		REQUIRE(e.fs.createDir("/w/gd") == Error::OK);
 		CHECK(e.fs.generation() > g1);
 

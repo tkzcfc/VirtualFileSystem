@@ -1,5 +1,5 @@
-// 分层挂载 + 别名：本机目录（模拟开发资源）叠在内存层（模拟发布资源）之上，
-// 再挂一个可写的存档目录，并用 "res://"、"save://" 别名访问。
+// Layered mounts plus aliases: a native directory (standing in for development assets) is stacked on a memory layer (standing in for shipped assets),
+// then a writable save directory is mounted and reached through the "res://" and "save://" aliases.
 #include "vfs/VirtualFileSystem.h"
 #include <cstdio>
 #include <filesystem>
@@ -9,7 +9,7 @@ namespace fs_ = std::filesystem;
 
 int main()
 {
-	// 准备一个临时本机目录作为“开发覆盖层”
+	// Prepare a temporary native directory to act as the "development overlay"
 	const fs_::path work = fs_::temp_directory_path() / "vfs_example_layers";
 	fs_::remove_all(work);
 	fs_::create_directories(work / "dev" / "ui");
@@ -17,21 +17,21 @@ int main()
 	{
 	VirtualFileSystem fs;
 
-	// 1. 底层：内存后端，预填“发布版”资源（优先级 0）
+	// 1. Bottom layer: memory backend, prefilled with "shipped" assets (priority 0)
 	std::shared_ptr<MemoryBackend> shipped;
 	fs.mountMemory("/res", MountOptions{0, MountFlags::ReadOnly}, &shipped);
 	shipped->addFile("config.json", {'{', '"', 'v', '"', ':', '1', '}'});
 	shipped->addFile("ui/title.txt", {'S', 'h', 'i', 'p', 'p', 'e', 'd'});
 
-	// 2. 上层：本机开发目录（优先级 10），同名文件以它为准
+	// 2. Upper layer: native development directory (priority 10); a file with the same name wins here
 	fs.mountNative("/res", (work / "dev").string(), MountOptions{10, MountFlags::ReadOnly});
 
-	// 3. 可写存档目录单独挂在 /save；createRoot 让不存在的根目录自动创建
+	// 3. A writable save directory is mounted on its own at /save; createRoot creates a missing root automatically
 	NativeOptions saveOptions;
 	saveOptions.createRoot = true;
 	fs.mountNative("/save", (work / "save").string(), MountOptions{0, MountFlags::WriteTarget}, saveOptions);
 
-	// 4. 别名：res://xxx 等价于 /res/xxx
+	// 4. Aliases: res://xxx is equivalent to /res/xxx
 	fs.addAlias("res://", "/res");
 	fs.addAlias("save://", "/save");
 
@@ -39,7 +39,7 @@ int main()
 	fs.readFile("res://ui/title.txt", text);
 	std::printf("title before override: %s\n", text.c_str());
 
-	// 在开发目录放一个同名文件（直接写磁盘，模拟美术更新资源），它会遮蔽内存层里的版本
+	// Place a same-named file in the development directory (written straight to disk, as if art updated the asset); it hides the version in the memory layer
 	{
 		std::FILE* f = std::fopen((work / "dev" / "ui" / "title.txt").string().c_str(), "wb");
 		std::fputs("Dev build", f);
@@ -48,25 +48,25 @@ int main()
 	fs.readFile("res://ui/title.txt", text);
 	std::printf("title after override:  %s\n", text.c_str());
 
-	// /res 的两层都是只读，写入会失败；存档写到 /save
+	// Both layers of /res are read-only, so a write fails; saves go to /save
 	Error e = fs.writeFile("res://config.json", "{}");
 	std::printf("write to res:// -> %s\n", errorName(e));
 	fs.writeFile("save://slot1.dat", "level=3");
 	fs.readFile("save://slot1.dat", text);
 	std::printf("save://slot1.dat = %s\n", text.c_str());
 
-	// 合并视图：两层的 ui/ 目录内容合并
+	// Merged view: the ui/ directory contents of both layers are combined
 	for (const auto& entry : fs.list("res://"))
 		std::printf("res://%s%s\n", entry.name.c_str(), entry.type == FileType::DIR ? "/" : "");
 
-	// 查看可见文件来自哪个挂载
+	// See which mount the visible file comes from
 	Stat st;
 	fs.stat("res://ui/title.txt", st);
 	for (const auto& m : fs.mounts())
 		if (m.id == st.mount)
 			std::printf("ui/title.txt comes from the %s layer\n", m.backend->typeName());
 
-	}   // fs 析构：卸载全部挂载、关闭本机句柄（Windows 上之后才能删除目录）
+	}   // fs destructor: unmount everything and close native handles (on Windows the directory can be deleted only after that)
 	fs_::remove_all(work);
 	return 0;
 }

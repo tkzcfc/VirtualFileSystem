@@ -1,5 +1,5 @@
-// 本文件：vfstool 各子命令的参数结构与实现入口。
-// 每个命令都是 vfstool_core 中的一个函数，CLI（main.cpp）只负责解析参数；测试直接调用这些函数。
+// This file: argument structs and implementation entry points for each vfstool subcommand.
+// Each command is a function in vfstool_core. The CLI (main.cpp) only parses arguments; tests call these functions directly.
 #pragma once
 
 #include "Glob.h"
@@ -13,30 +13,30 @@ namespace tool
 {
 
 /**
- * 退出码。
+ * Exit codes.
  */
 enum class ExitCode : int
 {
-	OK = 0,          // 成功
-	USAGE = 1,       // 用法错误
-	IO = 2,          // IO 错误
-	FORMAT = 3,      // 格式或版本错误
-	INTEGRITY = 4,   // 完整性校验失败
-	KEY = 5,         // 缺少密钥或密钥错误
+	OK = 0,          // Success
+	USAGE = 1,       // Usage error
+	IO = 2,          // IO error
+	FORMAT = 3,      // Format or version error
+	INTEGRITY = 4,   // Integrity check failed
+	KEY = 5,         // Missing key or wrong key
 };
 
 /**
- * 密钥来源。优先级：keyFile > keyHex > 环境变量 VFS_KEY。
+ * Key source. Priority: keyFile > keyHex > environment variable VFS_KEY.
  */
 struct KeySource
 {
-	std::string keyFile;   // 32 字节原始数据，或 64 个 hex 字符（允许末尾换行）
-	std::string keyHex;    // 64 个 hex 字符；会打印警告（会被 shell history 和 ps 看到）
-	bool useEnv = true;    // 是否读取环境变量 VFS_KEY
+	std::string keyFile;   // 32 bytes of raw data, or 64 hex characters (a trailing newline is allowed)
+	std::string keyHex;    // 64 hex characters; a warning is printed (visible in shell history and ps)
+	bool useEnv = true;    // Whether to read the environment variable VFS_KEY
 };
 
 /**
- * 打开已有归档时的公共参数。
+ * Shared arguments for opening an existing archive.
  */
 struct ArchiveArgs
 {
@@ -47,25 +47,25 @@ struct ArchiveArgs
 
 struct PackOptions
 {
-	std::string inputDir;                // 源目录
-	std::string outputPath;              // 输出 .vfs
-	std::string prefix;                  // 归档内路径前缀
-	std::vector<Rule> filterRules;       // --include（positive）/ --exclude，按命令行顺序
+	std::string inputDir;                // Source directory
+	std::string outputPath;              // Output .vfs
+	std::string prefix;                  // Path prefix inside the archive
+	std::vector<Rule> filterRules;       // --include (positive) / --exclude, in command-line order
 	std::vector<Rule> encryptRules;      // --encrypt / --no-encrypt
 	std::vector<Rule> compressRules;     // --compress / --no-compress
-	bool encryptAll = false;             // 默认加密所有文件（之后的 --no-encrypt 仍然生效）
-	bool compressAll = false;            // 默认压缩所有文件
-	uint32_t alignment = 16;             // 数据对齐
-	KeySource key;                       // 外部索引密钥（不给则派生并存入文件）
-	bool storeKey = false;               // 外部密钥也存进文件
-	bool noIndexEncrypt = false;         // 不加密索引
-	uint32_t xorKeyLength = 32;          // 单文件 XOR key 长度（16..32）
-	int compressionLevel = 9;            // LZ4 HC 级别
-	bool keepMtime = false;              // 写入真实 mtime（默认 0，便于复现）
-	bool emptyDirs = false;              // 保留空目录（默认不保留）
-	bool noDedup = false;                // 关闭内容去重
-	bool noDefaultExcludes = false;      // 关闭默认排除（.git/.svn/.DS_Store/Thumbs.db/desktop.ini）
-	bool dryRun = false;                 // 只打印将要打包的文件
+	bool encryptAll = false;             // Encrypt every file by default (a later --no-encrypt still applies)
+	bool compressAll = false;            // Compress every file by default
+	uint32_t alignment = 16;             // Data alignment
+	KeySource key;                       // External index key (if omitted, one is derived and stored in the file)
+	bool storeKey = false;               // Also store an external key in the file
+	bool noIndexEncrypt = false;         // Do not encrypt the index
+	uint32_t xorKeyLength = 32;          // Per-file XOR key length (16..32)
+	int compressionLevel = 9;            // LZ4 HC level
+	bool keepMtime = false;              // Write the real mtime (default 0, for reproducibility)
+	bool emptyDirs = false;              // Keep empty directories (omitted by default)
+	bool noDedup = false;                // Disable content dedup
+	bool noDefaultExcludes = false;      // Disable the default excludes (.git/.svn/.DS_Store/Thumbs.db/desktop.ini)
+	bool dryRun = false;                 // Only print the files that would be packed
 	bool verbose = false;
 };
 
@@ -74,8 +74,8 @@ struct UnpackOptions
 	ArchiveArgs archive;
 	std::string outputDir;
 	std::vector<Rule> filterRules;
-	bool force = false;      // 覆盖已存在的文件
-	bool noVerify = false;   // 不校验内容哈希
+	bool force = false;      // Overwrite existing files
+	bool noVerify = false;   // Do not check content hashes
 	bool verbose = false;
 };
 
@@ -88,8 +88,8 @@ struct InfoOptions
 struct ListOptions
 {
 	ArchiveArgs archive;
-	std::string pattern;     // 可选 glob 过滤
-	bool longFormat = false; // -l：显示大小、存储大小、标志、哈希
+	std::string pattern;     // Optional glob filter
+	bool longFormat = false; // -l: show size, stored size, flags, hash
 	bool json = false;
 };
 
@@ -102,7 +102,7 @@ struct CatOptions
 struct ExtractOptions
 {
 	ArchiveArgs archive;
-	std::vector<std::string> paths;   // 文件或目录（目录会提取其下所有文件）
+	std::vector<std::string> paths;   // Files or directories (a directory extracts every file under it)
 	std::string outputDir;
 	bool force = false;
 };
@@ -115,7 +115,7 @@ struct VerifyOptions
 
 struct KeygenOptions
 {
-	std::string outputFile;   // 为空时打印到 stdout
+	std::string outputFile;   // Print to stdout when empty
 };
 
 int runPack(const PackOptions& options, std::ostream& out, std::ostream& err);
@@ -134,34 +134,34 @@ int runVerify(const VerifyOptions& options, std::ostream& out, std::ostream& err
 
 int runKeygen(const KeygenOptions& options, std::ostream& out, std::ostream& err);
 
-// ---------------------------------------------------------------- 公共工具
+// ---------------------------------------------------------------- shared helpers
 
 /**
- * 按优先级解析密钥。没有任何来源时 key 为空并返回 OK。
- * @return OK；格式不对返回 KEY_INVALID；key 文件读不到返回 IO 错误
+ * Resolve the key by priority. When there is no source, key is empty and OK is returned.
+ * @return OK; KEY_INVALID if the format is wrong; an IO error if the key file cannot be read
  */
 Error resolveKey(const KeySource& source, std::vector<uint8_t>& key, std::ostream& err);
 
 /**
- * 解析 64 个 hex 字符（允许首尾空白）。
+ * Parse 64 hex characters (leading and trailing whitespace is allowed).
  */
 bool parseHexKey(std::string_view text, std::vector<uint8_t>& key);
 
 std::string toHex(const uint8_t* data, size_t size);
 
 /**
- * 打开归档并在失败时输出错误信息。
- * @return 退出码
+ * Open an archive and print an error message on failure.
+ * @return exit code
  */
 int openArchive(const ArchiveArgs& args, std::shared_ptr<const ArchiveIndex>& index, std::ostream& err);
 
 /**
- * vfs::Error 映射到退出码。
+ * Map vfs::Error to an exit code.
  */
 int exitCodeFor(Error e);
 
 /**
- * 把条目内容写到本机目录 outDir/entry.path。
+ * Write the entry contents to the native path outDir/entry.path.
  */
 Error writeEntryToDisk(const ArchiveIndex& index, const ArchiveEntry& entry, const std::string& outDir, bool force,
 					   bool verify, IFileStream* stream);

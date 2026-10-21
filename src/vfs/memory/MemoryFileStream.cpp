@@ -20,7 +20,7 @@ MemoryFileStream::~MemoryFileStream()
 
 bool MemoryFileStream::open(std::string_view /*path*/, IFileStream::Mode /*mode*/)
 {
-	// 内存流只能由后端构造
+	// A memory stream can only be constructed by the backend
 	errno = ENOTSUP;
 	return false;
 }
@@ -54,7 +54,7 @@ int64_t MemoryFileStream::seek(int64_t offset, int origin) const
 		errno = EINVAL;
 		return -1;
 	}
-	// 结果为负时按 POSIX 返回 EINVAL，位置保持不变（判断本身不能溢出：-INT64_MIN 没有定义）
+	// If the result would be negative, return EINVAL as POSIX does and leave the position unchanged (the check itself must not overflow: -INT64_MIN is undefined)
 	if ((offset < 0 && (offset == INT64_MIN || base < -offset)) || (offset > 0 && base > INT64_MAX - offset))
 	{
 		errno = EINVAL;
@@ -76,7 +76,7 @@ int MemoryFileStream::read(void* buf, unsigned int size) const
 
 	std::shared_lock<SharedMutex> lock(m_buffer->mutex);
 	const int64_t total = static_cast<int64_t>(m_buffer->data.size());
-	// 位置在 EOF 或之后：返回 0
+	// Position at or past EOF: return 0
 	if (m_pos >= total)
 		return 0;
 	size_t len = static_cast<size_t>(std::min<int64_t>(size, total - m_pos));
@@ -94,7 +94,7 @@ int MemoryFileStream::write(const void* buf, unsigned int size) const
 	}
 	if (m_mode == Mode::READ)
 	{
-		// 与 POSIX 对只读 fd 写入的行为一致
+		// Matches POSIX behavior for a write to a read-only fd
 		errno = EBADF;
 		return -1;
 	}
@@ -103,7 +103,7 @@ int MemoryFileStream::write(const void* buf, unsigned int size) const
 
 	std::unique_lock<SharedMutex> lock(m_buffer->mutex);
 	auto& data = m_buffer->data;
-	// APPEND：与 O_APPEND 一致，每次写之前把位置移到当前末尾
+	// APPEND: same as O_APPEND, move the position to the current end before every write
 	if (m_mode == Mode::APPEND)
 		m_pos = static_cast<int64_t>(data.size());
 
@@ -113,7 +113,7 @@ int MemoryFileStream::write(const void* buf, unsigned int size) const
 		errno = EFBIG;
 		return -1;
 	}
-	// seek 越过 EOF 后写入：resize 会用 0 填充空洞。分配失败按 POSIX 风格返回错误，不让异常穿过流接口
+	// Write after a seek past EOF: resize fills the hole with 0. On allocation failure, return an error in the POSIX style and do not let an exception cross the stream interface
 	if (end > data.size())
 	{
 		try
@@ -182,7 +182,7 @@ bool MemoryFileStream::resize(int64_t newSize) const
 		return false;
 	}
 	m_buffer->mtime.store(currentUnixTime(), std::memory_order_relaxed);
-	// 与 ftruncate 一致：不移动当前位置
+	// Same as ftruncate: do not move the current position
 	return true;
 }
 

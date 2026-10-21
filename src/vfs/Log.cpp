@@ -18,7 +18,7 @@ void setLogger(LogFunc func)
 
 void log(LogLevel level, std::string_view message)
 {
-	// 只在锁内复制指针，回调在锁外执行，避免回调里再打日志造成死锁
+	// Copy the pointer only while holding the lock; run the callback outside the lock so logging from inside the callback cannot deadlock
 	std::shared_ptr<LogFunc> func;
 	{
 		std::lock_guard<std::mutex> lock(s_logMutex);

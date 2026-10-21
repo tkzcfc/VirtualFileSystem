@@ -22,7 +22,7 @@ std::shared_ptr<NativeBackend> NativeBackend::create(std::string_view rootDir, c
 
 	std::u8string u8 = p.generic_u8string();
 	std::string root(reinterpret_cast<const char*>(u8.data()), u8.size());
-	// 去掉结尾的 '/'（但保留 "/" 和 "C:/" 这种根）
+	// Strip a trailing '/' (but keep roots such as "/" and "C:/")
 	while (root.size() > 1 && root.back() == '/' && !(root.size() == 3 && root[1] == ':'))
 		root.pop_back();
 
@@ -58,7 +58,7 @@ NativeBackend::NativeBackend(std::string root, const NativeOptions& options)
 {
 	if (!m_options.followSymlinks)
 	{
-		// 规范根目录本身允许是 symlink，比较的是解析后的真实位置
+		// The canonical root itself may be a symlink; what is compared is the resolved real location
 		std::error_code ec;
 		stdfs::path canon = stdfs::weakly_canonical(native::toFsPath(m_root), ec);
 		m_canonicalRoot = ec ? m_root : native::fromFsPath(canon.generic_u8string());
@@ -81,7 +81,7 @@ uint32_t NativeBackend::capabilities() const
 
 Error NativeBackend::toNative(std::string_view rel, std::string& out) const
 {
-	// 逐段检查：后端收到的路径已经规范化，这里只额外拒绝不可移植的名字
+	// Check component by component: the path the backend receives is already normalized; this only additionally rejects non-portable names
 	size_t start = 0;
 	while (start < rel.size())
 	{
@@ -91,8 +91,8 @@ Error NativeBackend::toNative(std::string_view rel, std::string& out) const
 		if (!Path::isPortableComponent(rel.substr(start, end - start)))
 			return Error::INVALID_PATH;
 #if VFS_PLATFORM_WASM
-		// Emscripten 的文件系统层（包括 NODERAWFS）会把超过 255 字节的名字静默截断后照常创建，
-		// 结果写到另一个文件上；这里按常见文件系统的上限直接拒绝
+		// Emscripten's filesystem layer (including NODERAWFS) silently truncates a name longer than 255 bytes and still creates it,
+		// so the write lands on a different file; reject it here at the usual filesystem limit
 		if (end - start > 255)
 			return Error::INVALID_PATH;
 #endif
@@ -111,13 +111,13 @@ Error NativeBackend::toNative(std::string_view rel, std::string& out) const
 
 	if (!m_options.followSymlinks && !rel.empty())
 	{
-		// 解析 symlink 后必须仍在根目录之内
+		// After resolving symlinks the path must still be inside the root
 		std::error_code ec;
 		stdfs::path canon = stdfs::weakly_canonical(native::toFsPath(out), ec);
 		if (ec)
 		{
-			// 解析失败（权限、符号链接循环等）时无法确认路径仍在根目录之内：拒绝，而不是放行。
-			// 路径不存在不会走到这里（weakly_canonical 对不存在的部分按字面拼接）
+			// If resolution fails (permissions, a symlink loop, and so on) it is impossible to confirm the path is still inside the root: reject it instead of allowing it.
+			// A missing path does not reach here (weakly_canonical concatenates the missing tail literally)
 			Error ce = native::errorFromCode(ec);
 			return ce == Error::NOT_FOUND || ce == Error::NOT_DIR ? ce : Error::PERMISSION_DENIED;
 		}
@@ -134,7 +134,7 @@ Error NativeBackend::matchCase(std::string_view rel, bool& lastMismatch) const
 	lastMismatch = false;
 	std::string dir = m_root;
 	if (!dir.empty() && dir.back() == '/')
-		dir.pop_back();   // 根是 "/" 或 "C:/" 时 realName 会再补一个 '/'
+		dir.pop_back();   // when the root is "/" or "C:/", realName adds another '/'
 	std::string actual;
 	size_t start = 0;
 	while (start < rel.size())
@@ -143,8 +143,8 @@ Error NativeBackend::matchCase(std::string_view rel, bool& lastMismatch) const
 		if (end == std::string_view::npos)
 			end = rel.size();
 		std::string_view seg = rel.substr(start, end - start);
-		// 不存在时不在这里判断，交给后续的实际操作报告；其他错误（I/O、权限）原样返回：
-		// 确认不了大小写就不能当作“大小写一致”放行，否则 exactCase 会在出错时失效
+		// A missing entry is not decided here; the later real operation reports it. Other errors (I/O, permissions) are returned as-is:
+		// if case cannot be confirmed, do not treat it as "case matches" and let it through, or exactCase would fail open on errors
 		Error re = native::realName(dir, seg, actual);
 		if (re == Error::NOT_FOUND || re == Error::NOT_DIR)
 			return Error::OK;
@@ -168,7 +168,7 @@ Error NativeBackend::matchCase(std::string_view rel, bool& lastMismatch) const
 
 void NativeBackend::checkCase(std::string_view rel) const
 {
-	// 在大小写不敏感的文件系统上（Windows/macOS），"A.png" 能打开 "a.png"，发布到归档后就找不到了
+	// On a case-insensitive filesystem (Windows/macOS), "A.png" can open "a.png", and after publishing into an archive that file is then missing
 	bool last = false;
 	if (matchCase(rel, last) != Error::OK || last)
 		log(LogLevel::WARN, "vfs: path case differs from the actual name on disk: " + std::string(rel));
@@ -185,7 +185,7 @@ Error NativeBackend::stat(std::string_view rel, Stat& out) const
 	{
 		if (m_options.exactCase)
 		{
-			// 按字节匹配：任何一级只差大小写都视为不存在
+			// Byte-for-byte match: any component that differs only in case is treated as not found
 			bool last = false;
 			Error ce = matchCase(rel, last);
 			if (ce != Error::OK)
@@ -210,14 +210,14 @@ std::unique_ptr<IFileStream> NativeBackend::open(std::string_view rel, IFileStre
 	Error e = toNative(rel, full);
 	if (e == Error::OK && m_options.exactCase)
 	{
-		// 读：只差大小写视为不存在；写：会落到那个只差大小写的已有文件上，返回 EXISTS 而不是悄悄覆盖它
+		// Read: a case-only difference is not found. Write: it would land on the existing file that differs only in case, so return EXISTS instead of quietly overwriting it
 		bool last = false;
 		e = matchCase(rel, last);
 		if (e == Error::OK && last)
 			e = mode == IFileStream::Mode::READ ? Error::NOT_FOUND : Error::EXISTS;
 	}
 	if (e == Error::OK && mode == IFileStream::Mode::READ)
-		e = native::checkParentDir(full, m_root.size());   // Windows：避开“中间目录不存在”的串行查询
+		e = native::checkParentDir(full, m_root.size());   // Windows: avoid the serialized query for "intermediate directory does not exist"
 	if (e != Error::OK)
 	{
 		setError(err, e);
@@ -231,7 +231,7 @@ std::unique_ptr<IFileStream> NativeBackend::open(std::string_view rel, IFileStre
 		setError(err, native::errorFromErrno(code));
 		return nullptr;
 	}
-	// VFS 在单层时直接 open、不先 stat，所以大小写核对也要在这里做
+	// With a single layer the VFS opens directly and does not stat first, so the case check has to happen here too
 	if (m_options.strictCase && !m_options.exactCase && !rel.empty())
 		checkCase(rel);
 	setError(err, Error::OK);
@@ -287,7 +287,7 @@ Error NativeBackend::removeDir(std::string_view rel)
 {
 	if (m_options.readOnly)
 		return Error::READ_ONLY;
-	// 后端根目录就是挂载点，不允许删除
+	// The backend root is the mount point and must not be deleted
 	if (rel.empty())
 		return Error::BUSY;
 	std::string full;
@@ -299,7 +299,7 @@ Error NativeBackend::removeDir(std::string_view rel)
 		bool last = false;
 		Error ce = matchCase(rel, last);
 		if (ce != Error::OK)
-			return ce;   // 确认不了大小写（I/O、权限错误）时原样返回，不当作“不存在”
+			return ce;   // if case cannot be confirmed (I/O or permission error), return it as-is instead of treating it as "not found"
 		if (last)
 			return Error::NOT_FOUND;
 	}
@@ -325,7 +325,7 @@ Error NativeBackend::removeFile(std::string_view rel)
 		bool last = false;
 		Error ce = matchCase(rel, last);
 		if (ce != Error::OK)
-			return ce;   // 确认不了大小写（I/O、权限错误）时原样返回，不当作“不存在”
+			return ce;   // if case cannot be confirmed (I/O or permission error), return it as-is instead of treating it as "not found"
 		if (last)
 			return Error::NOT_FOUND;
 	}
@@ -342,7 +342,7 @@ Error NativeBackend::rename(std::string_view from, std::string_view to)
 {
 	if (m_options.readOnly)
 		return Error::READ_ONLY;
-	// 后端根目录不能作为改名的源或目标（与 MemoryBackend 一致，见 mount-rules.md §12）
+	// The backend root cannot be the source or target of a rename (same as MemoryBackend; see mount-rules.md section 12)
 	if (from.empty() || to.empty())
 		return Error::INVALID_PATH;
 	std::string fullFrom, fullTo;
@@ -363,8 +363,8 @@ Error NativeBackend::rename(std::string_view from, std::string_view to)
 		err = matchCase(to, last);
 		if (err != Error::OK)
 			return err;
-		// 目标只差大小写：如果就是源自身（同一目录、真实名字就是源的名字，即只改大小写）照常改名，
-		// 否则会覆盖另一个名字的文件，返回 EXISTS
+		// Target differs only in case: if it is the source itself (same directory, and the real name is the source name, i.e. only the case changes) rename as usual;
+		// otherwise it would overwrite a file with a different name, so return EXISTS
 		if (last)
 		{
 			const size_t fs = from.rfind('/'), ts = to.rfind('/');
@@ -382,7 +382,7 @@ Error NativeBackend::rename(std::string_view from, std::string_view to)
 				return Error::EXISTS;
 		}
 	}
-	// POSIX 上是 rename(2)；Windows 上按 rename(2) 的语义实现（见 NativeUtils.h）
+	// On POSIX this is rename(2); on Windows it is implemented with rename(2) semantics (see NativeUtils.h)
 	return native::renamePath(fullFrom, fullTo);
 }
 

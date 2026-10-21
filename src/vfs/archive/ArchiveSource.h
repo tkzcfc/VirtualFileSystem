@@ -1,4 +1,4 @@
-// 本文件：归档的数据来源抽象。归档可以来自本机文件，也可以来自内存（例如嵌入在可执行文件里）。
+// This file: the abstraction for an archive's data source. An archive may come from a native file or from memory (for example embedded in the executable).
 #pragma once
 
 #include "../IFileStream.h"
@@ -8,11 +8,11 @@
 NS_VFS_BEGIN
 
 /**
- * 归档数据来源。
- * 线程安全：openStream / readAt 可以被多个线程并发调用。
- * - 支持位置读（supportsReadAt() 为 true）的来源：归档内的文件流直接用 readAt 读取，打开文件时没有系统调用，
- *   多个线程读同一归档时互不加锁；
- * - 其他来源：每个流调用 openStream 拿一个独立的只读流（独立的 OS 句柄或独立的游标）。
+ * Archive data source.
+ * Thread safety: openStream / readAt may be called concurrently from multiple threads.
+ * - A source that supports positional reads (supportsReadAt() is true): file streams inside the archive read through readAt, opening a file makes no system call,
+ *   and multiple threads reading the same archive do not lock each other;
+ * - Other sources: each stream calls openStream to obtain an independent read-only stream (its own OS handle or its own cursor).
  */
 class VFS_DLL IArchiveSource
 {
@@ -20,28 +20,28 @@ public:
 	virtual ~IArchiveSource() = default;
 
 	/**
-	 * 打开一个新的只读流，位置为 0。
+	 * Open a new read-only stream, positioned at 0.
 	 */
 	virtual std::unique_ptr<IFileStream> openStream(Error* err) const = 0;
 
 	/**
-	 * 是否支持 readAt。返回 true 时，readAt 必须可以被多个线程同时调用。
+	 * Whether readAt is supported. When this returns true, readAt must be callable from multiple threads at once.
 	 */
 	virtual bool supportsReadAt() const { return false; }
 
 	/**
-	 * 位置读：从 offset 处读取最多 size 字节，不改变任何共享状态。
-	 * @return 实际读取的字节数（到达末尾时可能少于 size），出错返回 -1（errno 已设置）。默认实现不支持，返回 -1（ENOTSUP）
+	 * Positional read: read at most size bytes from offset, without changing any shared state.
+	 * @return The number of bytes actually read (may be less than size at end of file), or -1 on error (errno is set). The default implementation does not support this and returns -1 (ENOTSUP).
 	 */
 	virtual int64_t readAt(void* buf, size_t size, uint64_t offset) const;
 
 	/**
-	 * 来源的修改时间（Unix 秒），条目 mtime 为 0 时用它代替。
+	 * Modification time of the source (Unix seconds), used in place of an entry mtime of 0.
 	 */
 	virtual int64_t mtime() const { return 0; }
 
 	/**
-	 * 描述（本机路径或 "<memory>"），用于日志。
+	 * Description (native path or "<memory>"), used in logs.
 	 */
 	virtual std::string describe() const = 0;
 };
@@ -52,9 +52,9 @@ class PositionalReader;
 }
 
 /**
- * 本机文件来源：构造时打开一个共享的只读句柄，所有流通过它做位置读（POSIX pread / Windows 重叠 ReadFile），
- * 打开归档内的文件不需要再打开 OS 句柄。句柄允许其他进程删除、改名、替换归档文件。
- * 共享句柄打开失败时退回“每次 openStream 打开一个新句柄”。
+ * Native file source: the constructor opens one shared read-only handle, and every stream reads through it by position (POSIX pread / Windows overlapped ReadFile),
+ * so opening a file inside the archive does not open another OS handle. The handle allows other processes to delete, rename, or replace the archive file.
+ * If the shared handle fails to open, fall back to "open a new handle on every openStream".
  */
 class VFS_DLL FileArchiveSource : public IArchiveSource
 {
@@ -76,13 +76,13 @@ public:
 
 private:
 	std::string m_nativePath;
-	int64_t m_mtime;   // 构造时记录，保证同一次挂载内稳定
-	std::unique_ptr<native::PositionalReader> m_reader;   // 共享的位置读句柄（打开失败时为空）
+	int64_t m_mtime;   // Recorded at construction so it stays stable for one mount
+	std::unique_ptr<native::PositionalReader> m_reader;   // Shared positional-read handle (null if open failed)
 };
 
 /**
- * 内存来源：数据由 shared_ptr 共享，每次 openStream 返回一个独立游标的只读内存流；readAt 直接复制。
- * 数据在挂载期间不能被修改。
+ * Memory source: the data is shared by shared_ptr, each openStream returns a read-only memory stream with its own cursor, and readAt copies directly.
+ * The data must not be modified while the archive is mounted.
  */
 class VFS_DLL MemoryArchiveSource : public IArchiveSource
 {

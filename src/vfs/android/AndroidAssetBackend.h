@@ -1,12 +1,12 @@
-// 本文件：Android APK 资源后端（只读，基于 AAssetManager）。只在 Android 上编译。
+// This file: the Android APK asset backend (read-only, based on AAssetManager). Compiled only on Android.
 //
-// 用法：
-//   // Java 层把 AssetManager 传下来（axmol 的 FileUtilsAndroid::setAssetManagerFromJava 做的是同一件事）
+// Usage:
+//   // The Java side passes AssetManager down (axmol's FileUtilsAndroid::setAssetManagerFromJava does the same thing)
 //   vfs::AndroidAssetBackend::setAssetManagerFromJava(env, assetManager);
-//   fs.mount("/res", vfs::AndroidAssetBackend::create());          // 挂载整个 assets/
-//   fs.mount("/res", vfs::AndroidAssetBackend::create({"res"}));   // 只挂载 assets/res/
+//   fs.mount("/res", vfs::AndroidAssetBackend::create());          // mount all of assets/
+//   fs.mount("/res", vfs::AndroidAssetBackend::create({"res"}));   // mount only assets/res/
 //
-// 已经接入 axmol 时可以直接用引擎的 AAssetManager：
+// When axmol is already integrated, use the engine's AAssetManager directly:
 //   vfs::AndroidAssetBackend::setAssetManager(ax::FileUtilsAndroid::getAssetManager());
 #pragma once
 
@@ -24,28 +24,28 @@ class VFS_DLL AndroidAssetBackend
 {
 public:
 	/**
-	 * 设置全局 AAssetManager（不持有所有权；调用方保证它在使用期间有效，例如 Java 层持有 AssetManager）。
+	 * Set the global AAssetManager (does not take ownership; the caller keeps it alive for the whole use, for example the Java side holds the AssetManager).
 	 */
 	static void setAssetManager(AAssetManager* manager);
 
 	/**
-	 * 从 Java 的 android.content.res.AssetManager 设置：内部创建全局引用，保证 Java 对象不被回收。
-	 * 重复调用时替换旧的引用。
+	 * Set it from Java's android.content.res.AssetManager: a global reference is created internally so the Java object is not collected.
+	 * A later call replaces the previous reference.
 	 */
 	static void setAssetManagerFromJava(JNIEnv* env, jobject assetManager);
 
 	static AAssetManager* getAssetManager();
 
 	/**
-	 * 基于 AAssetManager 的资源来源（线程安全）。
+	 * Asset source backed by AAssetManager (thread-safe).
 	 */
 	static std::shared_ptr<IAssetProvider> createProvider(AAssetManager* manager);
 
 	/**
-	 * 创建资源后端。
-	 * @param options 选项（子目录、清单）
-	 * @param manager 为 nullptr 时使用 setAssetManager 设置的全局对象
-	 * @param err     可选的错误输出：没有可用的 AAssetManager 返回 UNSUPPORTED
+	 * Create the asset backend.
+	 * @param options options (subdirectory, manifest)
+	 * @param manager when nullptr, use the global object set by setAssetManager
+	 * @param err     optional error output: UNSUPPORTED when no AAssetManager is available
 	 */
 	static std::shared_ptr<AssetBackend> create(const AssetOptions& options = {}, AAssetManager* manager = nullptr,
 												Error* err = nullptr);

@@ -1,4 +1,4 @@
-// 本文件：测试公共工具（临时目录、本机文件读写、归档构建、确定性随机数据）。
+// This file: shared test helpers (temp directories, native file IO, archive building, deterministic random data).
 #pragma once
 
 #include "doctest.h"
@@ -11,8 +11,8 @@
 #include <string>
 #include <vector>
 
-// 让 doctest 在断言失败时打印错误码名字。
-// 注意：doctest 对枚举优先按底层整数打印（不会用 StringMaker 特化），必须提供 operator<<
+// Make doctest print the error-code name when an assertion fails.
+// Note: doctest prefers to print enums as their underlying integer (it will not use a StringMaker specialization), so operator<< is required
 namespace vfs
 {
 inline std::ostream& operator<<(std::ostream& os, Error e)
@@ -34,7 +34,7 @@ namespace test
 {
 
 /**
- * 临时目录，析构时递归删除。
+ * Temporary directory, recursively deleted on destruction.
  */
 class TempDir
 {
@@ -47,18 +47,18 @@ public:
 
 	TempDir& operator=(const TempDir&) = delete;
 
-	// 目录本身的 UTF-8 路径（'/' 分隔）
+	// UTF-8 path of the directory itself ('/' separated)
 	const std::string& path() const { return m_path; }
 
-	// 子路径
+	// Child path
 	std::string sub(std::string_view rel) const;
 
-	// 写文件（自动创建父目录）
+	// Write a file (parent directories are created automatically)
 	void write(std::string_view rel, std::string_view content) const;
 
 	void write(std::string_view rel, const std::vector<uint8_t>& content) const;
 
-	// 创建目录
+	// Create a directory
 	void mkdir(std::string_view rel) const;
 
 	bool exists(std::string_view rel) const;
@@ -69,33 +69,33 @@ private:
 	std::string m_path;
 };
 
-// UTF-8 字符串转 std::filesystem::path
+// Convert a UTF-8 string to std::filesystem::path
 std::filesystem::path u8(std::string_view s);
 
-// 读写整个本机文件
+// Read or write an entire native file
 std::vector<uint8_t> readNative(const std::string& path);
 
 void writeNative(const std::string& path, const std::vector<uint8_t>& data);
 
-// 确定性伪随机数据（xorshift），保证每次测试数据相同
+// Deterministic pseudo-random data (xorshift), so every run uses the same test data
 std::vector<uint8_t> randomBytes(size_t size, uint64_t seed);
 
-// 字符串转字节
+// String to bytes
 std::vector<uint8_t> bytes(std::string_view s);
 
 std::string str(const std::vector<uint8_t>& v);
 
-// 通过 VFS 读出整个文件为字符串；失败返回 "<ERR:NAME>"
+// Read a whole file through the VFS as a string; on failure return "<ERR:NAME>"
 std::string readAll(const vfs::VirtualFileSystem& fs, std::string_view path);
 
-// 通过流读出全部剩余内容
+// Read all remaining bytes through a stream
 std::vector<uint8_t> readStream(vfs::IFileStream& stream);
 
-// 列目录，返回 "name" 或 "name/"（目录）组成的列表
+// List a directory as "name" or "name/" (directory) entries
 std::vector<std::string> listNames(const vfs::VirtualFileSystem& fs, std::string_view path);
 
 /**
- * 构建一个归档文件：files 中每一项为 (路径, 内容)，options 指定每文件的加密/压缩。
+ * Build an archive file: each item in files is (path, content), and options set per-file encryption/compression.
  */
 struct ArchiveFile
 {
@@ -105,38 +105,38 @@ struct ArchiveFile
 };
 
 /**
- * 慢测试开关：环境变量 VFS_TEST_SLOW=1 时返回 true。
- * 慢测试统一写成 TEST_CASE("..." * doctest::skip(!test::slowEnabled()))，默认运行时跳过。
+ * Slow-test switch: returns true when the environment variable VFS_TEST_SLOW=1.
+ * Slow tests are written as TEST_CASE("..." * doctest::skip(!test::slowEnabled())) and are skipped by default.
  */
 bool slowEnabled();
 
 /**
- * 运行时探测本机临时目录所在文件系统是否区分大小写（Linux 通常是，Windows/macOS 默认不是）。
- * 结果缓存，只探测一次。
+ * Probe at runtime whether the filesystem of the local temp directory is case-sensitive (Linux usually is; Windows/macOS are not by default).
+ * The result is cached; the probe runs once.
  */
 bool nativeCaseSensitive();
 
 /**
- * 运行时探测：查找区分大小写、但创建时只差大小写的名字仍然冲突（EEXIST）的文件系统，例如 iOS 模拟器
- * （底层是宿主机不区分大小写的 APFS）。真实设备与常见桌面文件系统都不是这种情况。
+ * Probe at runtime for a filesystem whose lookup is case-sensitive, but creating a name that differs only in case still conflicts (EEXIST), for example the iOS simulator
+ * (the underlying volume is the host's case-insensitive APFS). Real devices and common desktop filesystems are not like this.
  */
 bool nativeCaseLookupOnly();
 
 /**
- * 运行时探测：本机文件系统能否替换（rename 覆盖）一个正被打开的文件。
- * POSIX 总是可以；Windows 需要 POSIX 语义的 FileRenameInfoEx（Windows 10 1709+ 的 NTFS），
- * FAT/exFAT、部分网络盘、旧系统和 Wine 不支持，此时替换会在其他句柄关闭前返回 PERMISSION_DENIED。
- * 结果缓存，只探测一次。
+ * Probe at runtime whether the native filesystem can replace (rename over) a file that is currently open.
+ * POSIX always can; Windows needs FileRenameInfoEx with POSIX semantics (NTFS on Windows 10 1709+).
+ * FAT/exFAT, some network drives, older systems, and Wine do not support it, and the replace returns PERMISSION_DENIED until other handles close.
+ * The result is cached; the probe runs once.
  */
 bool nativeReplaceOpenFile();
 
 /**
- * 当前线程最近一次本机操作的原始错误码，形如 " (os=2)"；没有时为空串。用于失败详情
+ * Raw error code of the current thread's latest native operation, shaped like " (os=2)"; empty when there is none. Used in failure details
  */
 std::string osErrorSuffix();
 
 /**
- * 线程安全的错误码直方图：并发测试记录每种返回码出现的次数，失败时整体打印，方便跨平台诊断。
+ * Thread-safe error-code histogram: concurrent tests record how often each return code appears, and print the whole histogram on failure for cross-platform diagnosis.
  */
 class ErrorHistogram
 {
@@ -154,7 +154,7 @@ public:
 		return it == m_counts.end() ? 0 : it->second;
 	}
 
-	// 形如 "OK=120 NOT_FOUND=3 PERMISSION_DENIED=1"
+	// Shaped like "OK=120 NOT_FOUND=3 PERMISSION_DENIED=1"
 	std::string str() const
 	{
 		std::lock_guard<std::mutex> lock(m_mutex);
@@ -176,8 +176,8 @@ private:
 };
 
 /**
- * 线程安全的失败记录：计数，并保留前几条带上下文（实际错误码、路径）的描述，断言失败时打印。
- * ++failures 仍可用（不带详情）。
+ * Thread-safe failure log: counts failures and keeps the first few descriptions with context (actual error code, path), printed when an assertion fails.
+ * ++failures is still usable (without details).
  */
 class FailureLog
 {
@@ -198,14 +198,14 @@ public:
 		return *this;
 	}
 
-	// err 不是 OK 时记录 "what -> 错误码名"
+	// When err is not OK, record "what -> error code name"
 	void expectOk(vfs::Error err, const std::string& what)
 	{
 		if (err != vfs::Error::OK)
 			add(what + " -> " + vfs::errorName(err) + osErrorSuffix());
 	}
 
-	// 内容不一致时记录长度与开头
+	// When contents differ, record the length and the beginning
 	void expectEq(const std::string& got, const std::string& want, const std::string& what)
 	{
 		if (got != want)
@@ -237,7 +237,7 @@ private:
 };
 
 /**
- * 测试规模系数：环境变量 VFS_TEST_SCALE（默认 1）。压力测试的轮数按它放大。
+ * Test scale factor: environment variable VFS_TEST_SCALE (default 1). Stress-test iteration counts are multiplied by it.
  */
 int scale();
 

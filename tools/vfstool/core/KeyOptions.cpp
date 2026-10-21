@@ -1,4 +1,4 @@
-// 密钥解析与各命令共用的工具函数
+// Key parsing and helpers shared by every command
 #include "Commands.h"
 #include "vfs/native/NativeFileStream.h"
 #include "vfs/native/NativeUtils.h"
@@ -69,7 +69,7 @@ std::string toHex(const uint8_t* data, size_t size)
 Error resolveKey(const KeySource& source, std::vector<uint8_t>& key, std::ostream& err)
 {
 	key.clear();
-	// 优先级：--key-file > --key-hex > VFS_KEY
+	// Precedence: --key-file > --key-hex > VFS_KEY
 	if (!source.keyFile.empty())
 	{
 		NativeFileStream fs;
@@ -78,7 +78,7 @@ Error resolveKey(const KeySource& source, std::vector<uint8_t>& key, std::ostrea
 			err << "error: cannot read key file " << source.keyFile << "\n";
 			return native::errorFromErrno(errno);
 		}
-		// 读到 EOF（最多 4 KiB）：read 可能分多次返回，只读一次会把合法的密钥文件误判为格式错误
+		// Read until EOF (at most 4 KiB): read may return in several chunks, and a single read would misclassify a valid key file as a format error
 		std::string content;
 		char buf[256];
 		while (content.size() < 4096)
@@ -93,7 +93,7 @@ Error resolveKey(const KeySource& source, std::vector<uint8_t>& key, std::ostrea
 				break;
 			content.append(buf, static_cast<size_t>(n));
 		}
-		// 32 字节原始数据，或 64 个 hex 字符
+		// 32 raw bytes, or 64 hex characters
 		if (content.size() == 32)
 		{
 			key.assign(content.begin(), content.end());

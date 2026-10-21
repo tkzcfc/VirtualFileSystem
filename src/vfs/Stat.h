@@ -1,15 +1,15 @@
-// 本文件：文件类型与元数据。
+// This file: file types and metadata.
 #pragma once
 
 #include "Common.h"
 
 NS_VFS_BEGIN
 
-// 挂载 ID。0 表示“不属于任何挂载”（例如合成的虚拟目录）
+// Mount id. 0 means "not part of any mount" (for example a synthesized virtual directory).
 using MountId = uint64_t;
 
 /**
- * 文件类型。VFS 不支持 symlink，所以只有文件和目录两种。
+ * File type. VFS does not support symlinks, so there are only files and directories.
  */
 enum class FileType : uint8_t
 {
@@ -19,15 +19,15 @@ enum class FileType : uint8_t
 };
 
 /**
- * 元数据。不提供权限位和 atime。
+ * Metadata. Permission bits and atime are not provided.
  */
 struct Stat
 {
 	FileType type = FileType::NONE;
-	int64_t size = 0;       // 文件字节数；目录为 0
-	int64_t mtime = 0;      // Unix 秒，0 表示未知
-	MountId mount = 0;      // 可见项所在的挂载；合成虚拟目录为 0
-	bool writable = false;  // 可见项所在的层是否可写
+	int64_t size = 0;       // File size in bytes; 0 for a directory
+	int64_t mtime = 0;      // Unix seconds; 0 means unknown
+	MountId mount = 0;      // Mount that owns the visible entry; 0 for a synthesized virtual directory
+	bool writable = false;  // Whether the layer that owns the visible entry is writable
 };
 
 NS_VFS_END
