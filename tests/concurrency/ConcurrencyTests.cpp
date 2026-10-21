@@ -2,6 +2,7 @@
 #include "TestUtils.h"
 #include "vfs/archive/ArchiveBackend.h"
 #include "vfs/memory/MemoryBackend.h"
+#include "vfs/native/NativeUtils.h"
 #include <atomic>
 #include <cstring>
 #include <thread>
@@ -194,5 +195,39 @@ TEST_SUITE("concurrency")
 			th.join();
 		CHECK(failures.load() == 0);
 		CHECK(test::listNames(fs, "/common/sub").size() == 8 * 30);
+	}
+
+	TEST_CASE("archive replaced on disk after mount: threads opening new per-thread handles still read the mounted version")
+	{
+		test::TempDir dir;
+		const auto v1 = test::randomBytes(200000, 21);
+		const auto v2 = test::randomBytes(200000, 22);
+		REQUIRE(test::buildArchive(dir.sub("a.vfs"), {{"data.bin", v1, {}}}) == Error::OK);
+		REQUIRE(test::buildArchive(dir.sub("b.vfs"), {{"data.bin", v2, {}}}) == Error::OK);
+		VirtualFileSystem fs;
+		REQUIRE(fs.mountArchive("/", dir.sub("a.vfs")) != 0);
+		// 先让一个线程读一次，然后把归档替换掉（改名覆盖）；之后新线程第一次读时会为自己的分片重新打开句柄，
+		// 必须发现文件已经不是同一个，继续使用挂载时的句柄
+		CHECK(test::readStream(*fs.openFileStream("/data.bin", IFileStream::Mode::READ)) == v1);
+		if (!test::nativeReplaceOpenFile())
+			return;   // 文件系统不能替换正被打开的文件（Wine、FAT 等），这种情况不会发生
+		REQUIRE(native::renamePath(dir.sub("b.vfs"), dir.sub("a.vfs")) == Error::OK);
+		std::atomic<int> failures{0};
+		std::vector<std::thread> threads;
+		for (int t = 0; t < THREADS; ++t)
+		{
+			threads.emplace_back([&]()
+			{
+				for (int i = 0; i < 4; ++i)
+				{
+					auto s = fs.openFileStream("/data.bin", IFileStream::Mode::READ);
+					if (!s || test::readStream(*s) != v1)
+						++failures;
+				}
+			});
+		}
+		for (auto& th : threads)
+			th.join();
+		CHECK(failures.load() == 0);
 	}
 }

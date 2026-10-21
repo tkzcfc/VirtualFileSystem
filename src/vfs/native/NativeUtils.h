@@ -6,6 +6,9 @@
 #include "../Error.h"
 #include "../Stat.h"
 #include <filesystem>
+#include <string>
+#include <mutex>
+#include <atomic>
 #include <functional>
 #include <system_error>
 
@@ -89,21 +92,30 @@ Error removeFilePath(std::string_view path);
 Error renamePath(std::string_view from, std::string_view to);
 
 /**
+ * 当前进程 ID（用于生成进程间唯一的临时文件名）。
+ */
+uint64_t processId();
+
+/**
  * 只读共享句柄，支持多个线程同时做位置读（不经过共享的文件指针）。
  * - POSIX：pread；
  * - Windows：以 FILE_FLAG_OVERLAPPED 打开，ReadFile 带 OVERLAPPED 偏移、每个线程一个等待事件。
  *   同步句柄上的并发 ReadFile 会在内核里按文件对象串行化，重叠句柄不会。
  * 归档来源用它代替“每次打开文件都新开一个 OS 句柄”：打开归档内的文件不再有系统调用。
+ *
+ * 多线程时所有线程共用一个句柄，内核里每次读都要修改同一个文件对象的引用计数（Linux 多线程进程的 fdget），
+ * 8 个线程随机读时这一个缓存行成为瓶颈。所以按线程分成最多 SLOTS 个句柄：第 0 个在 open 时打开，
+ * 其余在某个分片第一次使用时惰性地重新打开“同一个文件对象”：
+ * - POSIX：按路径重新打开后核对 st_dev/st_ino，与第 0 个句柄不同（文件在挂载后被替换）就放弃，继续用第 0 个；
+ * - Windows：ReOpenFile 第 0 个句柄，不经过路径。
+ * 打开失败（句柄耗尽等）同样退回第 0 个句柄，不影响正确性。
  */
-/**
- * 当前进程 ID（用于生成进程间唯一的临时文件名）。
- */
-uint64_t processId();
-
 class PositionalReader
 {
 public:
-	PositionalReader() = default;
+	static constexpr size_t SLOTS = 8;
+
+	PositionalReader();
 	~PositionalReader();
 	PositionalReader(const PositionalReader&) = delete;
 	PositionalReader& operator=(const PositionalReader&) = delete;
@@ -122,10 +134,21 @@ public:
 	int64_t readAt(void* buf, size_t size, uint64_t offset) const;
 
 private:
-#if defined(_WIN32)
-	void* m_handle = reinterpret_cast<void*>(static_cast<intptr_t>(-1));   // INVALID_HANDLE_VALUE
-#else
-	int m_fd = -1;
+	// 当前线程使用的句柄（必要时惰性打开该分片）
+	intptr_t handleForThread() const;
+
+	// 为分片打开一个指向同一文件对象的新句柄，失败返回 -1
+	intptr_t reopen() const;
+
+	static void closeHandle(intptr_t h);
+
+	std::string m_path;
+	mutable std::atomic<intptr_t> m_handles[SLOTS];   // fd 或 HANDLE；-1 表示尚未打开；第 0 个是主句柄
+	mutable std::atomic<bool> m_failed[SLOTS];         // 该分片重新打开失败过，直接用主句柄
+	mutable std::mutex m_openMutex;                    // 串行化分片的惰性打开
+#if !defined(_WIN32)
+	uint64_t m_dev = 0;
+	uint64_t m_ino = 0;
 #endif
 };
 

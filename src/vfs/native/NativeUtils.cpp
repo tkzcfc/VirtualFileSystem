@@ -980,12 +980,6 @@ thread_local ThreadEvent t_readEvent;
 
 } // namespace
 
-PositionalReader::~PositionalReader()
-{
-	if (m_handle != INVALID_HANDLE_VALUE)
-		::CloseHandle(m_handle);
-}
-
 bool PositionalReader::open(std::string_view utf8Path)
 {
 	std::wstring wpath = toWidePath(utf8Path);
@@ -1002,22 +996,35 @@ bool PositionalReader::open(std::string_view utf8Path)
 		errno = code == ERROR_PATH_NOT_FOUND ? ENOENT : toErrno(errorFromWin32(code));
 		return false;
 	}
-	m_handle = h;
+	m_path.assign(utf8Path);
+	m_handles[0].store(reinterpret_cast<intptr_t>(h), std::memory_order_release);
 	return true;
 }
 
-bool PositionalReader::isOpen() const
+intptr_t PositionalReader::reopen() const
 {
-	return m_handle != INVALID_HANDLE_VALUE;
+	// ReOpenFile 针对同一个文件对象，不经过路径：归档在挂载后被改名、替换也不会读到别的文件
+	HANDLE primary = reinterpret_cast<HANDLE>(m_handles[0].load(std::memory_order_acquire));
+	HANDLE h = ::ReOpenFile(primary, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+							FILE_FLAG_OVERLAPPED);
+	return h == INVALID_HANDLE_VALUE ? -1 : reinterpret_cast<intptr_t>(h);
+}
+
+void PositionalReader::closeHandle(intptr_t h)
+{
+	if (h != -1)
+		::CloseHandle(reinterpret_cast<HANDLE>(h));
 }
 
 int64_t PositionalReader::readAt(void* buf, size_t size, uint64_t offset) const
 {
-	if (m_handle == INVALID_HANDLE_VALUE)
+	const intptr_t raw = handleForThread();
+	if (raw == -1)
 	{
 		errno = EBADF;
 		return -1;
 	}
+	HANDLE handle = reinterpret_cast<HANDLE>(raw);
 	HANDLE ev = t_readEvent.get();
 	if (!ev)
 	{
@@ -1032,16 +1039,19 @@ int64_t PositionalReader::readAt(void* buf, size_t size, uint64_t offset) const
 	ov.hEvent = ev;
 	DWORD got = 0;
 	// 同步完成时 ReadFile 返回 TRUE；异步时返回 ERROR_IO_PENDING。两种情况都用 GetOverlappedResult 取结果
-	if (!::ReadFile(m_handle, buf, want, nullptr, &ov) && ::GetLastError() != ERROR_IO_PENDING)
+	if (!::ReadFile(handle, buf, want, nullptr, &ov))
 	{
-		DWORD c = ::GetLastError();
-		if (c == ERROR_HANDLE_EOF)
-			return 0;
-		t_lastOsError = static_cast<int>(c);
-		errno = toErrno(errorFromWin32(c));
-		return -1;
+		const DWORD c = ::GetLastError();
+		if (c != ERROR_IO_PENDING)
+		{
+			if (c == ERROR_HANDLE_EOF)
+				return 0;
+			t_lastOsError = static_cast<int>(c);
+			errno = toErrno(errorFromWin32(c));
+			return -1;
+		}
 	}
-	if (!::GetOverlappedResult(m_handle, &ov, &got, TRUE))
+	if (!::GetOverlappedResult(handle, &ov, &got, TRUE))
 	{
 		DWORD c = ::GetLastError();
 		if (c == ERROR_HANDLE_EOF)
@@ -1055,12 +1065,6 @@ int64_t PositionalReader::readAt(void* buf, size_t size, uint64_t offset) const
 
 #else
 
-PositionalReader::~PositionalReader()
-{
-	if (m_fd != -1)
-		::close(m_fd);
-}
-
 bool PositionalReader::open(std::string_view utf8Path)
 {
 	std::string p(utf8Path);
@@ -1072,24 +1076,49 @@ bool PositionalReader::open(std::string_view utf8Path)
 	if (fd == -1)
 		return false;
 	struct stat st;
-	if (::fstat(fd, &st) == 0 && S_ISDIR(st.st_mode))
+	if (::fstat(fd, &st) != 0 || S_ISDIR(st.st_mode))
 	{
+		const int e = S_ISDIR(st.st_mode) ? EISDIR : errno;
 		::close(fd);
-		errno = EISDIR;
+		errno = e;
 		return false;
 	}
-	m_fd = fd;
+	m_path = std::move(p);
+	m_dev = static_cast<uint64_t>(st.st_dev);
+	m_ino = static_cast<uint64_t>(st.st_ino);
+	m_handles[0].store(fd, std::memory_order_release);
 	return true;
 }
 
-bool PositionalReader::isOpen() const
+intptr_t PositionalReader::reopen() const
 {
-	return m_fd != -1;
+	int flags = O_RDONLY;
+#    if defined(O_CLOEXEC)
+	flags |= O_CLOEXEC;
+#    endif
+	int fd = ::open(m_path.c_str(), flags);
+	if (fd == -1)
+		return -1;
+	// 必须仍是同一个文件：挂载之后归档被替换（改名覆盖）时，新句柄会指向新文件，与已加载的索引不一致
+	struct stat st;
+	if (::fstat(fd, &st) != 0 || static_cast<uint64_t>(st.st_dev) != m_dev || static_cast<uint64_t>(st.st_ino) != m_ino)
+	{
+		::close(fd);
+		return -1;
+	}
+	return fd;
+}
+
+void PositionalReader::closeHandle(intptr_t h)
+{
+	if (h != -1)
+		::close(static_cast<int>(h));
 }
 
 int64_t PositionalReader::readAt(void* buf, size_t size, uint64_t offset) const
 {
-	if (m_fd == -1)
+	const intptr_t fd = handleForThread();
+	if (fd == -1)
 	{
 		errno = EBADF;
 		return -1;
@@ -1102,7 +1131,7 @@ int64_t PositionalReader::readAt(void* buf, size_t size, uint64_t offset) const
 	const size_t want = std::min<size_t>(size, VFS_MAX_IO_CHUNK);
 	while (true)
 	{
-		ssize_t n = ::pread(m_fd, buf, want, static_cast<off_t>(offset));
+		ssize_t n = ::pread(static_cast<int>(fd), buf, want, static_cast<off_t>(offset));
 		if (n >= 0)
 			return static_cast<int64_t>(n);
 		if (errno != EINTR)
@@ -1111,6 +1140,52 @@ int64_t PositionalReader::readAt(void* buf, size_t size, uint64_t offset) const
 }
 
 #endif
+
+PositionalReader::PositionalReader()
+{
+	for (size_t i = 0; i < SLOTS; ++i)
+	{
+		m_handles[i].store(-1, std::memory_order_relaxed);
+		m_failed[i].store(false, std::memory_order_relaxed);
+	}
+}
+
+PositionalReader::~PositionalReader()
+{
+	for (size_t i = 0; i < SLOTS; ++i)
+		closeHandle(m_handles[i].load(std::memory_order_relaxed));
+}
+
+bool PositionalReader::isOpen() const
+{
+	return m_handles[0].load(std::memory_order_acquire) != -1;
+}
+
+intptr_t PositionalReader::handleForThread() const
+{
+	// 线程第一次使用时轮流分配一个分片，之后固定；分片之间互不共享内核文件对象
+	static std::atomic<size_t> s_next{0};
+	thread_local const size_t t_slot = s_next.fetch_add(1, std::memory_order_relaxed);
+	const size_t slot = t_slot % SLOTS;
+	intptr_t h = m_handles[slot].load(std::memory_order_acquire);
+	if (h != -1)
+		return h;
+	const intptr_t primary = m_handles[0].load(std::memory_order_acquire);
+	if (slot == 0 || primary == -1 || m_failed[slot].load(std::memory_order_relaxed))
+		return primary;
+	std::lock_guard<std::mutex> lock(m_openMutex);
+	h = m_handles[slot].load(std::memory_order_acquire);
+	if (h != -1)
+		return h;
+	h = reopen();
+	if (h == -1)
+	{
+		m_failed[slot].store(true, std::memory_order_relaxed);
+		return primary;
+	}
+	m_handles[slot].store(h, std::memory_order_release);
+	return h;
+}
 
 } // namespace native
 
