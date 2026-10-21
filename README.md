@@ -23,6 +23,8 @@
 
 USING_NS_VFS;
 
+// 假设 game.vfs 由 `vfstool pack assets -o game.vfs` 打出，含 config.json 和 scripts/main.lua；
+// assets_dev/ 目录里只有 textures/hero.png
 int main()
 {
 	VirtualFileSystem fs;
@@ -36,15 +38,22 @@ int main()
 	userDir.createRoot = true;
 	fs.mountNative("/user", "save", MountOptions{0, MountFlags::WriteTarget}, userDir);
 
+	// 别名：res://scripts/main.lua 等价于 /res/scripts/main.lua
+	fs.addAlias("res://", "/res");
+
 	std::string config;
-	if (fs.readFile("/res/config.json", config) != Error::OK)
+	if (fs.readFile("res://config.json", config) != Error::OK)
 		return 1;
 
-	auto stream = fs.openFileStream("/res/scripts/main.lua", IFileStream::Mode::READ);
+	auto stream = fs.openFileStream("res://scripts/main.lua", IFileStream::Mode::READ);
 	fs.writeFileAtomic("/user/save.dat", "progress=3", 10);
 
-	for (const auto& entry : fs.list("/res"))
+	for (const auto& entry : fs.list("res://"))
 		std::printf("%s%s\n", entry.name.c_str(), entry.type == FileType::DIR ? "/" : "");
+	// 输出（两层合并，按名字排序）：
+	// config.json
+	// scripts/
+	// textures/
 	return 0;
 }
 ```
@@ -57,7 +66,18 @@ vfstool list game.vfs -l
 vfstool verify game.vfs
 ```
 
-更多示例见 [`examples/basic`](examples/basic/main.cpp) 与 [API 文档](docs/api.md)。
+更多示例见 [`examples/`](examples/)（`-DVFS_BUILD_EXAMPLES=ON` 构建）：
+
+| 示例 | 内容 |
+|---|---|
+| [`basic`](examples/basic/main.cpp) | 最小示例：内存中打包归档，与可写内存层叠加 |
+| [`layers`](examples/layers/main.cpp) | 分层挂载、遮蔽、只读层与别名 |
+| [`archive`](examples/archive/main.cpp) | 打包与读取归档：自定义索引密钥、XOR 加密、LZ4 压缩、去重 |
+| [`custom_backend`](examples/custom_backend/main.cpp) | 实现 `IBackend` 挂载程序生成的内容 |
+| [`multithread`](examples/multithread/main.cpp) | 8 线程并发读取，同时热更新（`remount`）归档 |
+| [`stream`](examples/stream/main.cpp) | 流式 API：分块写入、seek、追加、分块读取 |
+
+API 细节见 [API 文档](docs/api.md)。
 
 ## 构建与测试
 

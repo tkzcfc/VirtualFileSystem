@@ -1,0 +1,3 @@
+add_executable(vfs_example_custom_backend main.cpp)
+target_link_libraries(vfs_example_custom_backend PRIVATE vfs)
+vfs_set_warnings(vfs_example_custom_backend)

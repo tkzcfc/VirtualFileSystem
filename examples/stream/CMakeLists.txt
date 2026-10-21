@@ -1,0 +1,3 @@
+add_executable(vfs_example_stream main.cpp)
+target_link_libraries(vfs_example_stream PRIVATE vfs)
+vfs_set_warnings(vfs_example_stream)
