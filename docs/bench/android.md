@@ -573,6 +573,26 @@
 | meta.list | 1 | 161 | 0.7 (0.0044) | 0.3 (0.0019) | 311 (1.94) | 363 (2.26) | 171 (1.06) |
 | meta.list | 8 | 1.2k | 0.6 (0.00049) | 0.3 (0.00024) | 1.1k (0.89) | 1.1k (0.91) | 1.1k (0.87) |
 
+Same APK built with `COMPRESS_DATA=1`, so the loose dataset files are deflated as Gradle does for ordinary assets (`plain.vfs` stays stored). `read.small`, `read.medium` and `read.large.seq` come from one launch; `read.large.rand` and `meta.open` / `meta.stat` / `meta.miss` from a second launch. `read.large.rand` was not measured for `base:aasset` and the `vfs:asset` targets: random reads inside the deflated 64 MiB asset did not complete one 1-thread run of `base:aasset` in 9 minutes, so they were left out. `meta.list` does not depend on compression and was not rerun:
+
+
+| Scenario | Threads | base:stdio | base:aasset | asset | asset+lst | archive-apk | archive |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| read.small | 1 | 132.5k | 43.6k (0.33) | 42.5k (0.32) | 37.9k (0.29) | 434.3k (3.28) | 379.7k (2.87) |
+| read.small | 8 | 575.0k | 42.2k (0.073) | 43.3k (0.075) | 43.1k (0.075) | 1.98M (3.44) | 1.60M (2.78) |
+| read.medium | 1 | 19.1k | 1.9k (0.099) | 1.6k (0.084) | 1.5k (0.079) | 14.5k (0.76) | 20.5k (1.07) |
+| read.medium | 8 | 62.4k | 8.9k (0.14) | 8.6k (0.14) | 8.7k (0.14) | 77.1k (1.24) | 67.2k (1.08) |
+| read.large.seq | 1 | 4.5k | 484 (0.11) | 486 (0.11) | 483 (0.11) | 7.8k (1.73) | 5.4k (1.20) |
+| read.large.seq | 8 | 16.9k | 2.2k (0.13) | 2.2k (0.13) | 2.2k (0.13) | 18.5k (1.09) | 18.6k (1.10) |
+| read.large.rand | 1 | 308.3k | - | - | - | 342.3k (1.11) | 465.7k (1.51) |
+| read.large.rand | 8 | 1.18M | - | - | - | 1.87M (1.58) | 1.83M (1.55) |
+| meta.open | 1 | 144.8k | 139.1k (0.96) | 119.6k (0.83) | 114.7k (0.79) | 779.0k (5.38) | 725.2k (5.01) |
+| meta.open | 8 | 935.5k | 61.8k (0.066) | 44.0k (0.047) | 37.6k (0.04) | 3.52M (3.76) | 3.60M (3.85) |
+| meta.stat | 1 | 154.4k | 108.2k (0.70) | 3.3k (0.021) | 100.1k (0.65) | 823.5k (5.33) | 1.34M (8.68) |
+| meta.stat | 8 | 1.12M | 57.9k (0.052) | 2.0k (0.0018) | 34.6k (0.031) | 4.98M (4.45) | 5.98M (5.34) |
+| meta.miss | 1 | 270.5k | 739.0k (2.73) | 3.5k (0.013) | 982.8k (3.63) | 1.04M (3.84) | 946.0k (3.50) |
+| meta.miss | 8 | 1.92M | 253.1k (0.13) | 1.9k (0.00099) | 3.83M (1.99) | 4.13M (2.15) | 4.49M (2.34) |
+
 Full tables of the APK run (loose files stored):
 
 #### APK read.small
@@ -806,4 +826,198 @@ Full tables of the APK run (loose files stored):
 | vfs:asset | 8 | 0 | - | 23067164.8 | 70941598.6 | 0.00 |
 | vfs:asset+lst | 8 | 1.1k | - | 5282.5 | 13693.6 | 0.89 |
 | vfs:archive-apk | 8 | 1.1k | - | 5750.1 | 15485.7 | 0.91 |
+
+
+Full tables of the APK run (loose files deflated):
+
+#### APK (deflated) read.small
+
+| target | threads | ops/s | MiB/s | p50 (µs) | p99 (µs) | vs stdio |
+|---|---:|---:|---:|---:|---:|---:|
+| base:stdio | 1 | 132.5k | 518 | 7.03 | 13.1 | 1.00 |
+| vfs:archive | 1 | 379.7k | 1483 | 2.40 | 4.43 | 2.87 |
+| base:aasset | 1 | 43.6k | 170 | 22.4 | 27.1 | 0.33 |
+| vfs:asset | 1 | 42.5k | 166 | 23.1 | 27.8 | 0.32 |
+| vfs:asset+lst | 1 | 37.9k | 148 | 23.5 | 73.7 | 0.29 |
+| vfs:archive-apk | 1 | 434.3k | 1696 | 2.03 | 2.92 | 3.28 |
+| base:stdio | 2 | 210.9k | 824 | 8.18 | 17.4 | 1.00 |
+| vfs:archive | 2 | 731.3k | 2857 | 2.50 | 3.23 | 3.47 |
+| base:aasset | 2 | 53.9k | 210 | 33.7 | 121.2 | 0.26 |
+| vfs:asset | 2 | 51.3k | 201 | 31.3 | 156.9 | 0.24 |
+| vfs:asset+lst | 2 | 44.2k | 173 | 31.4 | 223.2 | 0.21 |
+| vfs:archive-apk | 2 | 728.5k | 2846 | 2.34 | 4.58 | 3.45 |
+| base:stdio | 4 | 335.1k | 1309 | 8.18 | 12.4 | 1.00 |
+| vfs:archive | 4 | 927.9k | 3625 | 2.24 | 3.02 | 2.77 |
+| base:aasset | 4 | 49.2k | 192 | 50.1 | 447.9 | 0.15 |
+| vfs:asset | 4 | 48.8k | 191 | 52.2 | 415.2 | 0.15 |
+| vfs:asset+lst | 4 | 49.2k | 192 | 52.4 | 403.2 | 0.15 |
+| vfs:archive-apk | 4 | 1.06M | 4141 | 2.34 | 3.44 | 3.16 |
+| base:stdio | 8 | 575.0k | 2246 | 8.70 | 12.9 | 1.00 |
+| vfs:archive | 8 | 1.60M | 6269 | 2.66 | 3.65 | 2.79 |
+| base:aasset | 8 | 42.2k | 165 | 86.5 | 876.1 | 0.07 |
+| vfs:asset | 8 | 43.3k | 169 | 81.9 | 853.0 | 0.08 |
+| vfs:asset+lst | 8 | 43.1k | 168 | 79.3 | 861.9 | 0.07 |
+| vfs:archive-apk | 8 | 1.98M | 7732 | 2.45 | 3.54 | 3.44 |
+
+#### APK (deflated) read.medium
+
+| target | threads | ops/s | MiB/s | p50 (µs) | p99 (µs) | vs stdio |
+|---|---:|---:|---:|---:|---:|---:|
+| base:stdio | 1 | 19.1k | 4780 | 49.6 | 94.7 | 1.00 |
+| vfs:archive | 1 | 20.5k | 5133 | 45.8 | 101.6 | 1.07 |
+| base:aasset | 1 | 1.9k | 471 | 524.7 | 571.0 | 0.10 |
+| vfs:asset | 1 | 1.6k | 389 | 533.9 | 1802.7 | 0.08 |
+| vfs:asset+lst | 1 | 1.5k | 384 | 537.3 | 1798.1 | 0.08 |
+| vfs:archive-apk | 1 | 14.5k | 3635 | 64.7 | 133.3 | 0.76 |
+| base:stdio | 2 | 37.6k | 9399 | 51.8 | 87.4 | 1.00 |
+| vfs:archive | 2 | 38.9k | 9721 | 49.1 | 85.7 | 1.03 |
+| base:aasset | 2 | 3.3k | 835 | 608.2 | 889.1 | 0.09 |
+| vfs:asset | 2 | 3.3k | 819 | 610.2 | 1006.9 | 0.09 |
+| vfs:asset+lst | 2 | 3.3k | 821 | 532.3 | 680.6 | 0.09 |
+| vfs:archive-apk | 2 | 33.1k | 8286 | 56.9 | 85.6 | 0.88 |
+| base:stdio | 4 | 38.2k | 9547 | 50.5 | 91.4 | 1.00 |
+| vfs:archive | 4 | 66.5k | 16634 | 56.0 | 82.6 | 1.74 |
+| base:aasset | 4 | 6.5k | 1628 | 610.3 | 807.0 | 0.17 |
+| vfs:asset | 4 | 6.5k | 1628 | 610.7 | 813.9 | 0.17 |
+| vfs:asset+lst | 4 | 6.1k | 1535 | 613.2 | 1715.5 | 0.16 |
+| vfs:archive-apk | 4 | 38.9k | 9731 | 55.8 | 101.6 | 1.02 |
+| base:stdio | 8 | 62.4k | 15597 | 66.4 | 116.6 | 1.00 |
+| vfs:archive | 8 | 67.2k | 16803 | 57.7 | 92.7 | 1.08 |
+| base:aasset | 8 | 8.9k | 2236 | 609.6 | 8190.8 | 0.14 |
+| vfs:asset | 8 | 8.6k | 2144 | 612.3 | 8728.3 | 0.14 |
+| vfs:asset+lst | 8 | 8.7k | 2165 | 613.6 | 7519.1 | 0.14 |
+| vfs:archive-apk | 8 | 77.1k | 19285 | 52.8 | 93.3 | 1.24 |
+
+#### APK (deflated) read.large.seq
+
+| target | threads | ops/s | MiB/s | p50 (µs) | p99 (µs) | vs stdio |
+|---|---:|---:|---:|---:|---:|---:|
+| base:stdio | 1 | 4.5k | 4465 | 215.9 | 306.3 | 1.00 |
+| vfs:archive | 1 | 5.4k | 5412 | 162.8 | 246.0 | 1.21 |
+| base:aasset | 1 | 484 | 484 | 2040.9 | 2103.1 | 0.11 |
+| vfs:asset | 1 | 486 | 486 | 2030.3 | 2081.9 | 0.11 |
+| vfs:asset+lst | 1 | 483 | 483 | 2045.0 | 2092.8 | 0.11 |
+| vfs:archive-apk | 1 | 7.8k | 7832 | 124.2 | 185.9 | 1.75 |
+| base:stdio | 2 | 8.2k | 8231 | 219.9 | 360.9 | 1.00 |
+| vfs:archive | 2 | 9.9k | 9939 | 181.9 | 329.1 | 1.21 |
+| base:aasset | 2 | 851 | 851 | 2324.3 | 2625.0 | 0.10 |
+| vfs:asset | 2 | 767 | 767 | 2340.7 | 6883.8 | 0.09 |
+| vfs:asset+lst | 2 | 852 | 852 | 2326.9 | 2563.9 | 0.10 |
+| vfs:archive-apk | 2 | 9.2k | 9156 | 220.4 | 263.1 | 1.11 |
+| base:stdio | 4 | 9.9k | 9885 | 204.8 | 330.5 | 1.00 |
+| vfs:archive | 4 | 8.4k | 8391 | 234.1 | 458.5 | 0.85 |
+| base:aasset | 4 | 1.6k | 1608 | 2352.4 | 6519.7 | 0.16 |
+| vfs:asset | 4 | 1.6k | 1613 | 2347.6 | 6724.8 | 0.16 |
+| vfs:asset+lst | 4 | 1.6k | 1586 | 2349.2 | 7438.9 | 0.16 |
+| vfs:archive-apk | 4 | 15.0k | 15048 | 263.1 | 328.6 | 1.52 |
+| base:stdio | 8 | 16.9k | 16904 | 257.8 | 512.4 | 1.00 |
+| vfs:archive | 8 | 18.6k | 18580 | 206.2 | 316.7 | 1.10 |
+| base:aasset | 8 | 2.2k | 2229 | 2352.1 | 18400.9 | 0.13 |
+| vfs:asset | 8 | 2.2k | 2226 | 2349.2 | 19358.0 | 0.13 |
+| vfs:asset+lst | 8 | 2.2k | 2220 | 2354.7 | 18373.6 | 0.13 |
+| vfs:archive-apk | 8 | 18.5k | 18525 | 222.7 | 315.0 | 1.10 |
+
+#### APK (deflated) read.large.rand
+
+| target | threads | ops/s | MiB/s | p50 (µs) | p99 (µs) | vs stdio |
+|---|---:|---:|---:|---:|---:|---:|
+| base:stdio | 1 | 308.3k | 1204 | 2.81 | 6.93 | 1.00 |
+| vfs:archive | 1 | 465.7k | 1819 | 1.77 | 2.81 | 1.51 |
+| vfs:archive-apk | 1 | 342.3k | 1337 | 2.60 | 3.85 | 1.11 |
+| base:stdio | 2 | 385.8k | 1507 | 2.50 | 3.59 | 1.00 |
+| vfs:archive | 2 | 521.1k | 2036 | 1.61 | 2.40 | 1.35 |
+| vfs:archive-apk | 2 | 482.8k | 1886 | 1.82 | 2.76 | 1.25 |
+| base:stdio | 4 | 693.6k | 2709 | 2.92 | 6.56 | 1.00 |
+| vfs:archive | 4 | 979.3k | 3825 | 1.88 | 2.76 | 1.41 |
+| vfs:archive-apk | 4 | 1.20M | 4696 | 2.29 | 8.28 | 1.73 |
+| base:stdio | 8 | 1.18M | 4592 | 2.92 | 6.41 | 1.00 |
+| vfs:archive | 8 | 1.83M | 7164 | 2.14 | 5.10 | 1.56 |
+| vfs:archive-apk | 8 | 1.87M | 7308 | 2.19 | 5.83 | 1.59 |
+
+#### APK (deflated) meta.open
+
+| target | threads | ops/s | MiB/s | p50 (µs) | p99 (µs) | vs stdio |
+|---|---:|---:|---:|---:|---:|---:|
+| base:stdio | 1 | 144.8k | - | 5.99 | 15.4 | 1.00 |
+| vfs:archive | 1 | 725.2k | - | 1.09 | 3.18 | 5.01 |
+| base:aasset | 1 | 139.1k | - | 6.56 | 11.3 | 0.96 |
+| vfs:asset | 1 | 119.6k | - | 7.76 | 13.0 | 0.83 |
+| vfs:asset+lst | 1 | 114.7k | - | 7.81 | 15.7 | 0.79 |
+| vfs:archive-apk | 1 | 779.0k | - | 1.04 | 2.34 | 5.38 |
+| base:stdio | 2 | 291.9k | - | 5.88 | 16.0 | 1.00 |
+| vfs:archive | 2 | 1.98M | - | 0.89 | 1.09 | 6.77 |
+| base:aasset | 2 | 70.3k | - | 13.3 | 300.2 | 0.24 |
+| vfs:asset | 2 | 36.2k | - | 27.4 | 380.9 | 0.12 |
+| vfs:asset+lst | 2 | 70.7k | - | 11.0 | 166.4 | 0.24 |
+| vfs:archive-apk | 2 | 1.81M | - | 0.99 | 1.41 | 6.21 |
+| base:stdio | 4 | 587.4k | - | 5.42 | 11.3 | 1.00 |
+| vfs:archive | 4 | 2.05M | - | 0.94 | 1.15 | 3.48 |
+| base:aasset | 4 | 73.4k | - | 9.43 | 584.9 | 0.12 |
+| vfs:asset | 4 | 76.3k | - | 8.70 | 518.5 | 0.13 |
+| vfs:asset+lst | 4 | 68.5k | - | 9.95 | 468.8 | 0.12 |
+| vfs:archive-apk | 4 | 1.67M | - | 0.94 | 5.88 | 2.84 |
+| base:stdio | 8 | 935.5k | - | 5.73 | 15.0 | 1.00 |
+| vfs:archive | 8 | 3.60M | - | 1.04 | 2.60 | 3.85 |
+| base:aasset | 8 | 61.8k | - | 14.7 | 1969.7 | 0.07 |
+| vfs:asset | 8 | 44.0k | - | 20.9 | 2001.6 | 0.05 |
+| vfs:asset+lst | 8 | 37.6k | - | 30.4 | 1379.8 | 0.04 |
+| vfs:archive-apk | 8 | 3.52M | - | 1.04 | 2.92 | 3.76 |
+
+#### APK (deflated) meta.stat
+
+| target | threads | ops/s | MiB/s | p50 (µs) | p99 (µs) | vs stdio |
+|---|---:|---:|---:|---:|---:|---:|
+| base:stdio | 1 | 154.4k | - | 5.78 | 11.5 | 1.00 |
+| vfs:archive | 1 | 1.34M | - | 0.62 | 0.78 | 8.68 |
+| base:aasset | 1 | 108.2k | - | 7.34 | 23.0 | 0.70 |
+| vfs:asset | 1 | 3.3k | - | 297.1 | 333.8 | 0.02 |
+| vfs:asset+lst | 1 | 100.1k | - | 7.81 | 25.2 | 0.65 |
+| vfs:archive-apk | 1 | 823.5k | - | 1.04 | 1.25 | 5.34 |
+| base:stdio | 2 | 249.6k | - | 6.09 | 15.0 | 1.00 |
+| vfs:archive | 2 | 2.38M | - | 0.62 | 0.83 | 9.55 |
+| base:aasset | 2 | 39.7k | - | 23.6 | 367.3 | 0.16 |
+| vfs:asset | 2 | 1.7k | - | 539.3 | 13277.4 | 0.01 |
+| vfs:asset+lst | 2 | 79.9k | - | 10.4 | 108.5 | 0.32 |
+| vfs:archive-apk | 2 | 1.39M | - | 0.57 | 0.68 | 5.58 |
+| base:stdio | 4 | 580.7k | - | 5.16 | 14.6 | 1.00 |
+| vfs:archive | 4 | 2.91M | - | 0.62 | 0.78 | 5.01 |
+| base:aasset | 4 | 53.0k | - | 12.9 | 850.8 | 0.09 |
+| vfs:asset | 4 | 2.0k | - | 414.9 | 35254.4 | 0.00 |
+| vfs:asset+lst | 4 | 53.4k | - | 10.9 | 539.0 | 0.09 |
+| vfs:archive-apk | 4 | 1.77M | - | 0.62 | 1.77 | 3.05 |
+| base:stdio | 8 | 1.12M | - | 5.31 | 12.8 | 1.00 |
+| vfs:archive | 8 | 5.98M | - | 0.57 | 1.67 | 5.35 |
+| base:aasset | 8 | 57.9k | - | 16.4 | 1934.3 | 0.05 |
+| vfs:asset | 8 | 2.0k | - | 406.8 | 82003.6 | 0.00 |
+| vfs:asset+lst | 8 | 34.6k | - | 30.6 | 1679.4 | 0.03 |
+| vfs:archive-apk | 8 | 4.98M | - | 0.57 | 2.60 | 4.46 |
+
+#### APK (deflated) meta.miss
+
+| target | threads | ops/s | MiB/s | p50 (µs) | p99 (µs) | vs stdio |
+|---|---:|---:|---:|---:|---:|---:|
+| base:stdio | 1 | 270.5k | - | 3.23 | 7.24 | 1.00 |
+| vfs:archive | 1 | 946.0k | - | 0.89 | 1.09 | 3.50 |
+| base:aasset | 1 | 739.0k | - | 1.15 | 1.30 | 2.73 |
+| vfs:asset | 1 | 3.5k | - | 286.1 | 309.5 | 0.01 |
+| vfs:asset+lst | 1 | 982.8k | - | 0.94 | 1.09 | 3.63 |
+| vfs:archive-apk | 1 | 1.04M | - | 0.89 | 1.04 | 3.83 |
+| base:stdio | 2 | 575.3k | - | 2.60 | 7.24 | 1.00 |
+| vfs:archive | 2 | 1.04M | - | 0.94 | 3.96 | 1.80 |
+| base:aasset | 2 | 467.5k | - | 1.15 | 27.2 | 0.81 |
+| vfs:asset | 2 | 3.4k | - | 290.5 | 339.8 | 0.01 |
+| vfs:asset+lst | 2 | 599.1k | - | 2.03 | 2.76 | 1.04 |
+| vfs:archive-apk | 2 | 1.81M | - | 0.83 | 1.04 | 3.15 |
+| base:stdio | 4 | 1.07M | - | 2.14 | 3.65 | 1.00 |
+| vfs:archive | 4 | 4.04M | - | 0.83 | 1.04 | 3.79 |
+| base:aasset | 4 | 237.6k | - | 3.28 | 133.0 | 0.22 |
+| vfs:asset | 4 | 3.0k | - | 294.0 | 6036.5 | 0.00 |
+| vfs:asset+lst | 4 | 3.69M | - | 0.89 | 1.51 | 3.46 |
+| vfs:archive-apk | 4 | 4.03M | - | 0.83 | 1.09 | 3.78 |
+| base:stdio | 8 | 1.92M | - | 2.19 | 5.88 | 1.00 |
+| vfs:archive | 8 | 4.49M | - | 0.89 | 2.40 | 2.34 |
+| base:aasset | 8 | 253.1k | - | 1.51 | 375.8 | 0.13 |
+| vfs:asset | 8 | 1.9k | - | 311.3 | 49259.8 | 0.00 |
+| vfs:asset+lst | 8 | 3.83M | - | 0.94 | 2.71 | 2.00 |
+| vfs:archive-apk | 8 | 4.13M | - | 0.83 | 1.04 | 2.15 |
 <!-- apk-assets:end -->

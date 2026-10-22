@@ -263,6 +263,25 @@ The asset backends need an `AAssetManager`, so they run in a separate NativeActi
 | meta.miss | 8 | 2.17M | 405.5k (0.19) | 2.6k (0.0012) | 4.41M (2.03) | 4.64M (2.14) | 4.68M (2.16) |
 | meta.list | 1 | 161 | 0.7 (0.0044) | 0.3 (0.0019) | 311 (1.94) | 363 (2.26) | 171 (1.06) |
 | meta.list | 8 | 1.2k | 0.6 (0.00049) | 0.3 (0.00024) | 1.1k (0.89) | 1.1k (0.91) | 1.1k (0.87) |
+
+With the loose files deflated in the APK (`COMPRESS_DATA=1`; `plain.vfs` stays stored):
+
+| Scenario | Threads | base:stdio | base:aasset | asset | asset+lst | archive-apk | archive |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| read.small | 1 | 132.5k | 43.6k (0.33) | 42.5k (0.32) | 37.9k (0.29) | 434.3k (3.28) | 379.7k (2.87) |
+| read.small | 8 | 575.0k | 42.2k (0.073) | 43.3k (0.075) | 43.1k (0.075) | 1.98M (3.44) | 1.60M (2.78) |
+| read.medium | 1 | 19.1k | 1.9k (0.099) | 1.6k (0.084) | 1.5k (0.079) | 14.5k (0.76) | 20.5k (1.07) |
+| read.medium | 8 | 62.4k | 8.9k (0.14) | 8.6k (0.14) | 8.7k (0.14) | 77.1k (1.24) | 67.2k (1.08) |
+| read.large.seq | 1 | 4.5k | 484 (0.11) | 486 (0.11) | 483 (0.11) | 7.8k (1.73) | 5.4k (1.20) |
+| read.large.seq | 8 | 16.9k | 2.2k (0.13) | 2.2k (0.13) | 2.2k (0.13) | 18.5k (1.09) | 18.6k (1.10) |
+| read.large.rand | 1 | 308.3k | - | - | - | 342.3k (1.11) | 465.7k (1.51) |
+| read.large.rand | 8 | 1.18M | - | - | - | 1.87M (1.58) | 1.83M (1.55) |
+| meta.open | 1 | 144.8k | 139.1k (0.96) | 119.6k (0.83) | 114.7k (0.79) | 779.0k (5.38) | 725.2k (5.01) |
+| meta.open | 8 | 935.5k | 61.8k (0.066) | 44.0k (0.047) | 37.6k (0.04) | 3.52M (3.76) | 3.60M (3.85) |
+| meta.stat | 1 | 154.4k | 108.2k (0.70) | 3.3k (0.021) | 100.1k (0.65) | 823.5k (5.33) | 1.34M (8.68) |
+| meta.stat | 8 | 1.12M | 57.9k (0.052) | 2.0k (0.0018) | 34.6k (0.031) | 4.98M (4.45) | 5.98M (5.34) |
+| meta.miss | 1 | 270.5k | 739.0k (2.73) | 3.5k (0.013) | 982.8k (3.63) | 1.04M (3.84) | 946.0k (3.50) |
+| meta.miss | 8 | 1.92M | 253.1k (0.13) | 1.9k (0.00099) | 3.83M (1.99) | 4.13M (2.15) | 4.49M (2.34) |
 <!-- apk-assets:end -->
 
 
@@ -303,6 +322,7 @@ The asset backends need an `AAssetManager`, so they run in a separate NativeActi
 | Compression needed | Compress small text such as scripts and config (`--compress "*.lua"`); keep large binary assets uncompressed | LZ4 entries are stored in blocks (64 KiB by default) and opening does no decompression, but each read decodes the whole block it touches: sequential reads of a 64 MiB LZ4 file are 0.22-0.58x of stdio on native platforms, and 1-thread 4 KiB random reads 0.06-0.21x. A smaller `--block-size` reduces the work per random read |
 | Native override of the archive during development | `archive + native`, mounted only in development builds | Every lookup checks the native directory first: miss queries (`meta.miss`) are 0.27-1.76x; files that hit the archive read at 0.81-8.9x. Do not mount an empty native directory in a shipping build |
 | Runtime-generated / temporary data | Memory backend (`vfs:memory`), optionally stacked on an archive as a writable layer | No system calls: `write.churn` is 1.7-449x; large sequential writes 0.34-9.2x; an 8-thread miss query on Linux is about 0.6x |
+| Android assets in the APK | A `.vfs` archive stored uncompressed in the APK (`noCompress += "vfs"`), mounted through `AssetBackend::archiveSource`; loose assets only with an `assets.lst` manifest | APK run, vs stdio on extracted files: `vfs:archive-apk` small reads 3.4x / 3.0x (1 / 8 threads), `stat` 7.7x / 6.5x. Through `AAssetManager` (raw or `vfs:asset`) small reads are 0.55-0.82x / 0.08-0.11x, deflated 0.3x / 0.07x. Without the manifest `stat` is 0.03x / 0.002x, misses 0.01x / 0.001x and a 10000-file listing takes about 3 s; with it `stat` is 0.98x, misses 2.3x / 2.0x and listing 1.9x / 0.9x |
 | Data that must hit disk, such as saves and logs | Native directory (`vfs:native`), its own mount point | A single layer is close to a direct call: small reads 0.76-1.29x, opens 0.64-1.15x, `stat` 0.85-2.0x, in-place overwrites 0.87-1.13x, appends 0.71-1.26x, create + delete 0.42-1.13x (lowest under WebAssembly) |
 | Stacking layers | As few layers as possible; do not stack needless empty layers on the same path | Lookup walks layers top-down. `nested8` (9 layers) opens are 0.26-1.25x and misses 0.18-1.53x |
 
@@ -317,6 +337,16 @@ Other:
 ```bash
 ./build-bench/bench/vfs_bench --csv linux.csv --md linux.md
 python3 bench/bench_charts.py --platform linux --input linux.csv --out docs/images/bench --label "CPU, OS, compiler"   # writes docs/images/bench/linux.svg
+```
+
+Android bench APK (asset targets; needs `ANDROID_NDK` and `ANDROID_SDK`, see the header of `bench/android/build.sh`):
+
+```bash
+bench/android/build.sh                       # build-bench-apk/vfs-bench.apk; COMPRESS_DATA=1 deflates the loose dataset files
+adb install -r build-bench-apk/vfs-bench.apk
+adb shell am start -n com.vfs.bench/android.app.NativeActivity   # screen on; logcat tag VFSBENCH prints "BENCH DONE rc=0"
+adb exec-out run-as com.vfs.bench cat files/bench.csv > android-asset.csv
+python3 bench/bench_charts.py --platform android --input android.csv --extra android-asset.csv --out docs/images/bench
 ```
 
 `--input` accepts `--csv` output or the Markdown table produced by `--md`; only the Python standard library is used.
