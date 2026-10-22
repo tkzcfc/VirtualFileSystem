@@ -1203,7 +1203,7 @@ std::vector<std::unique_ptr<Target>> makeWriteTargets(const Options& opt, const 
 
 struct ThreadStats
 {
-	std::vector<uint32_t> latNs;   // latency of each operation (nanoseconds, clamped past 4 seconds)
+	std::vector<uint64_t> latNs;   // latency of each operation (nanoseconds)
 	uint64_t ops = 0;
 	uint64_t bytes = 0;
 	bool failed = false;
@@ -1224,10 +1224,10 @@ struct Result
 	bool failed = false;
 };
 
-inline uint32_t elapsedNs(Clock::time_point t0)
+inline uint64_t elapsedNs(Clock::time_point t0)
 {
 	auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now() - t0).count();
-	return static_cast<uint32_t>(std::min<int64_t>(ns, 0xFFFFFFFFll));
+	return static_cast<uint64_t>(std::max<int64_t>(ns, 0));
 }
 
 using Work = std::function<void(int tid, int threads, ThreadStats& st)>;
@@ -1258,7 +1258,7 @@ Result runOnce(int threads, const Work& work)
 	Result r;
 	r.threads = threads;
 	r.seconds = std::chrono::duration<double>(Clock::now() - t0).count();
-	std::vector<uint32_t> all;
+	std::vector<uint64_t> all;
 	for (auto& s : stats)
 	{
 		r.ops += s.ops;
@@ -1272,7 +1272,7 @@ Result runOnce(int threads, const Work& work)
 		{
 			size_t k = std::min(all.size() - 1, static_cast<size_t>(p * static_cast<double>(all.size())));
 			std::nth_element(all.begin(), all.begin() + static_cast<std::ptrdiff_t>(k), all.end());
-			return all[k] / 1000.0;
+			return static_cast<double>(all[k]) / 1000.0;
 		};
 		r.p50us = pct(0.50);
 		r.p99us = pct(0.99);
