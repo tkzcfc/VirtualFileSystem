@@ -239,6 +239,33 @@ Write scenarios use the three baselines, `vfs:native`, `vfs:memory`, and `vfs:me
 
 ![Android: speed relative to stdio](images/bench/android.svg)
 
+<!-- apk-assets:begin -->
+#### Android: assets inside the APK
+
+The asset backends need an `AAssetManager`, so they run in a separate NativeActivity APK (`bench/android`, same benchmark core, same dataset; started with `am start`, screen on). `base:stdio` and `vfs:archive` read copies extracted to internal storage; `base:aasset` calls `AAssetManager` directly; `vfs:asset` is `AndroidAssetBackend` without a manifest, `vfs:asset+lst` with one; `vfs:archive-apk` reads `plain.vfs` in place from the APK (stored uncompressed). Ratios are against `base:stdio` of the same APK run; full tables in [bench/android.md](bench/android.md#assets-inside-the-apk-bench-apk). Loose files stored uncompressed:
+
+
+| Scenario | Threads | base:stdio | base:aasset | asset | asset+lst | archive-apk | archive |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| read.small | 1 | 135.4k | 110.6k (0.82) | 74.2k (0.55) | 78.8k (0.58) | 464.6k (3.43) | 558.8k (4.13) |
+| read.small | 8 | 646.8k | 72.5k (0.11) | 49.9k (0.077) | 49.8k (0.077) | 1.93M (2.99) | 1.90M (2.94) |
+| read.medium | 1 | 25.0k | 24.0k (0.96) | 14.9k (0.60) | 10.8k (0.43) | 15.4k (0.62) | 31.6k (1.26) |
+| read.medium | 8 | 83.0k | 33.2k (0.40) | 35.4k (0.43) | 36.5k (0.44) | 73.3k (0.88) | 97.6k (1.18) |
+| read.large.seq | 1 | 6.5k | 8.6k (1.34) | 4.2k (0.65) | 4.3k (0.66) | 4.0k (0.61) | 8.7k (1.35) |
+| read.large.seq | 8 | 24.2k | 17.9k (0.74) | 18.5k (0.76) | 18.5k (0.76) | 21.2k (0.88) | 25.0k (1.04) |
+| read.large.rand | 1 | 459.8k | 625.8k (1.36) | 565.4k (1.23) | 372.3k (0.81) | 553.4k (1.20) | 635.3k (1.38) |
+| read.large.rand | 8 | 1.56M | 1.71M (1.09) | 1.80M (1.15) | 1.76M (1.12) | 1.90M (1.22) | 2.08M (1.33) |
+| meta.open | 1 | 154.5k | 191.1k (1.24) | 108.3k (0.70) | 107.0k (0.69) | 1.46M (9.45) | 1.41M (9.13) |
+| meta.open | 8 | 989.6k | 54.6k (0.055) | 39.6k (0.04) | 42.2k (0.043) | 3.93M (3.97) | 3.83M (3.87) |
+| meta.stat | 1 | 141.2k | 140.2k (0.99) | 4.0k (0.029) | 137.9k (0.98) | 1.09M (7.70) | 1.51M (10.69) |
+| meta.stat | 8 | 1.03M | 61.6k (0.059) | 2.5k (0.0024) | 92.8k (0.09) | 6.73M (6.50) | 6.75M (6.52) |
+| meta.miss | 1 | 419.7k | 863.2k (2.06) | 4.2k (0.01) | 982.8k (2.34) | 706.7k (1.68) | 1.01M (2.41) |
+| meta.miss | 8 | 2.17M | 405.5k (0.19) | 2.6k (0.0012) | 4.41M (2.03) | 4.64M (2.14) | 4.68M (2.16) |
+| meta.list | 1 | 161 | 0.7 (0.0044) | 0.3 (0.0019) | 311 (1.94) | 363 (2.26) | 171 (1.06) |
+| meta.list | 8 | 1.2k | 0.6 (0.00049) | 0.3 (0.00024) | 1.1k (0.89) | 1.1k (0.91) | 1.1k (0.87) |
+<!-- apk-assets:end -->
+
+
 ### WebAssembly
 
 - Host: the Linux box above (Intel Xeon KVM, 8 vCPU), node v24.21.0
