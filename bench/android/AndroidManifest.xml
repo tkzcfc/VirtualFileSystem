@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- vfs_bench APK: a NativeActivity with no Java code that benchmarks AAssetManager access against the other targets.
+     debuggable only so that "adb shell run-as" can read the results; it does not change native code generation. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+          package="com.vfs.bench" android:versionCode="1" android:versionName="1.0">
+    <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="35"/>
+    <application android:label="VFS Bench" android:hasCode="false" android:debuggable="true"
+                 android:extractNativeLibs="false">
+        <activity android:name="android.app.NativeActivity" android:exported="true"
+                  android:configChanges="orientation|keyboardHidden|screenSize">
+            <meta-data android:name="android.app.lib_name" android:value="vfsbench"/>
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

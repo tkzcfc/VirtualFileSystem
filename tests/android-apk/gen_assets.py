@@ -1,16 +1,61 @@
 #!/usr/bin/env python3
-# Generate the test assets for the AndroidAssetBackend test APK.
+# Generate the test assets for the AndroidAssetBackend test APK, or (with --bench) the vfs_bench dataset for the bench APK.
 # Usage: gen_assets.py <assets_dir> <archive_src_dir>
-# Content patterns must match AssetApkTest.cpp (binByte / textLine).
+#        gen_assets.py --bench <data_dir> [scale]
+# Content patterns must match AssetApkTest.cpp (binByte / textLine) and, for --bench, BenchCore.cpp (makeContent / buildDataset).
 import os, sys
 
-assets, arc = sys.argv[1], sys.argv[2]
+MASK = (1 << 64) - 1
+WORDS = [w.encode() for w in ["vfs ", "archive ", "mount ", "layer ", "stream ", "read ", "write ", "native ",
+                              "memory ", "copy-up ", "index ", "entry ", "\n", "0123 ", "data ", "path "]]
+
+
+def make_content(size, seed):
+    """Byte-for-byte port of makeContent() in bench/BenchCore.cpp."""
+    out = bytearray()
+    x = (seed * 0x9E3779B97F4A7C15 + 1) & MASK
+    while len(out) < size:
+        x ^= (x << 13) & MASK
+        x ^= x >> 7
+        x ^= (x << 17) & MASK
+        if (x & 7) == 0:
+            out.append((x >> 24) & 0xFF)
+        out += WORDS[(x >> 8) & 15]
+    # A word that crosses the end is cut off, as in the C++ version
+    return bytes(out[:size])
+
+
+def gen_bench(data, scale):
+    """Same files as buildDataset() in bench/BenchCore.cpp, plus a manifest (assets.lst) for the asset backend."""
+    small_count = max(100, int(10000 * scale))
+    medium_count = max(10, int(200 * scale))
+    small_size, medium_size = 4 * 1024, 256 * 1024
+    large_size = max(4, int(64.0 * scale)) * 1024 * 1024
+    rels = []
+    pool = make_content(small_size * 64 + 4096, 1)
+    for i in range(small_count):
+        off = (i * 4099) % (len(pool) - small_size)
+        d = bytearray(pool[off:off + small_size])
+        d[0], d[1], d[2] = i & 0xFF, (i >> 8) & 0xFF, (i >> 16) & 0xFF
+        rels.append(("small/f%06d.bin" % i, bytes(d)))
+    for i in range(medium_count):
+        rels.append(("medium/m%06d.bin" % i, make_content(medium_size, 100 + i)))
+    rels.append(("large.bin", make_content(large_size, 7)))
+    for rel, d in rels:
+        put(data, rel, d)
+    put(data, "assets.lst", "\n".join(r for r, _ in rels) + "\n")
 
 def put(root, rel, data):
     p = os.path.join(root, rel)
     os.makedirs(os.path.dirname(p), exist_ok=True)
     with open(p, "wb") as f:
         f.write(data if isinstance(data, bytes) else data.encode("utf-8"))
+
+if sys.argv[1] == "--bench":
+    gen_bench(sys.argv[2], float(sys.argv[3]) if len(sys.argv) > 3 else 1.0)
+    sys.exit(0)
+
+assets, arc = sys.argv[1], sys.argv[2]
 
 BIN_SIZE = 300000
 binary = bytes(((i * 31 + (i >> 8)) & 0xFF) for i in range(BIN_SIZE))
