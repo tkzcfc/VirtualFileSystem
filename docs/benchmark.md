@@ -1,6 +1,6 @@
 # Performance benchmarks (vfs_bench)
 
-`bench/vfs_bench.cpp` is a benchmark with no third-party dependencies. It compares baselines that call the C / C++ / OS file APIs directly with VFS backends and layered combinations, measuring throughput and latency of reads, writes, and metadata operations.
+`bench/BenchCore.cpp` (entry point `bench/main.cpp`) is a benchmark with no third-party dependencies. It compares baselines that call the C / C++ / OS file APIs directly with VFS backends and layered combinations, measuring throughput and latency of reads, writes, and metadata operations.
 
 ## Build and run
 

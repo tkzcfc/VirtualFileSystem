@@ -1,5 +1,5 @@
 # vfs_bench: performance benchmarks (off by default; enable with -DVFS_BUILD_BENCH=ON)
-add_executable(vfs_bench ${CMAKE_CURRENT_LIST_DIR}/vfs_bench.cpp)
+add_executable(vfs_bench ${CMAKE_CURRENT_LIST_DIR}/main.cpp ${CMAKE_CURRENT_LIST_DIR}/BenchCore.cpp)
 target_link_libraries(vfs_bench PRIVATE vfs)
 find_package(Threads REQUIRED)
 target_link_libraries(vfs_bench PRIVATE Threads::Threads)

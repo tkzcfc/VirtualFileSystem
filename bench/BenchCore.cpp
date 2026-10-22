@@ -1,6 +1,9 @@
-// This file: the vfs_bench performance benchmark. It compares std::fstream, C FILE*, POSIX pread / Win32 ReadFile with the various VFS backends and layered combinations,
-// covering small / medium / large reads, random reads, metadata (open / stat / missing / list directory), and writes (parallel writes, create-delete churn).
-// It depends on no third-party libraries; usage is in docs/benchmark.md or vfs_bench --help.
+// This file: the shared core of the vfs_bench performance benchmark. It compares std::fstream, C FILE*, POSIX pread / Win32 ReadFile with the various
+// VFS backends and layered combinations, covering small / medium / large reads, random reads, metadata (open / stat / missing / list directory),
+// and writes (parallel writes, create-delete churn). The command-line tool (main.cpp) and the Android bench APK (android/BenchApk.cpp) both call
+// vfsbench::run. It depends on no third-party libraries; usage is in docs/benchmark.md or vfs_bench --help.
+#include "BenchCore.h"
+
 #include "vfs/VirtualFileSystem.h"
 #include "vfs/archive/ArchiveWriter.h"
 
@@ -38,6 +41,7 @@
 #endif
 
 USING_NS_VFS;
+using namespace vfsbench;
 namespace stdfs = std::filesystem;
 
 namespace
@@ -45,8 +49,6 @@ namespace
 
 using Clock = std::chrono::steady_clock;
 
-constexpr size_t KiB = 1024;
-constexpr size_t MiB = 1024 * 1024;
 
 // ================================================================ Command-line options
 
@@ -56,6 +58,7 @@ struct Options
 	std::vector<int> threads;               // thread counts
 	int iterations = 3;                     // repetitions per scenario; the one with the median time is kept
 	std::vector<std::string> filters;       // scenario filters (substring match on "scenario/target"; any hit runs it)
+	std::vector<std::string> targets;       // exact target names to run (empty: all); combined with filters
 	std::string csvPath;                    // optional CSV output
 	std::string mdPath;                     // optional Markdown output
 	std::string workDir;                    // working directory (under the system temp directory by default)
@@ -72,6 +75,7 @@ void printHelp()
 		"  --threads <list>   comma-separated thread counts, N = hardware threads, default 1,2,4,8,N\n"
 		"  --iterations <n>   repetitions per scenario (median is reported), default 3\n"
 		"  --filter <list>    only run cases whose \"scenario/target\" contains any of the substrings (e.g. read.small or archive-lz4)\n"
+		"  --targets <list>   only run the targets with exactly these names (comma-separated, e.g. base:stdio,vfs:archive)\n"
 		"  --csv <file>       also write CSV\n"
 		"  --md <file>        also write Markdown tables\n"
 		"  --dir <path>       working directory for the generated dataset, default: system temp dir\n"
@@ -174,6 +178,13 @@ bool parseArgs(int argc, char** argv, Options& opt)
 			for (auto& f : splitList(v))
 				opt.filters.push_back(f);
 		}
+		else if (a == "--targets")
+		{
+			if (!next(v))
+				return false;
+			for (auto& f : splitList(v))
+				opt.targets.push_back(f);
+		}
 		else if (a == "--csv")
 		{
 			if (!next(opt.csvPath))
@@ -206,19 +217,6 @@ bool parseArgs(int argc, char** argv, Options& opt)
 }
 
 // ================================================================ Data set
-
-struct Dataset
-{
-	std::string root;                  // native data directory
-	std::vector<std::string> small;    // relative paths (under small/, one large directory)
-	std::vector<std::string> medium;   // under medium/
-	std::string large;                 // relative path of the large file
-	size_t smallSize = 4 * KiB;
-	size_t mediumSize = 256 * KiB;
-	size_t largeSize = 64 * MiB;
-	std::string archivePlain, archiveXor, archiveLz4;   // native paths of the three archives
-	std::vector<std::string> allNativeFiles;            // used by --cold to drop caches
-};
 
 // Generate compressible pseudo-text (LZ4 compresses it to roughly 1/2 to 1/3); the contents are determined by the seed
 std::vector<uint8_t> makeContent(size_t size, uint64_t seed)
@@ -278,6 +276,31 @@ bool buildArchive(const Dataset& ds, const std::string& out, bool encrypt, bool 
 	return e == Error::OK;
 }
 
+// Pack the three archives next to the data directory (an archive that already exists, e.g. one supplied by a host, is kept) and
+// record every native file of the dataset
+bool buildArchives(const Options& opt, Dataset& ds)
+{
+	ds.archivePlain = opt.workDir + "/plain.vfs";
+	ds.archiveXor = opt.workDir + "/xor.vfs";
+	ds.archiveLz4 = opt.workDir + "/lz4.vfs";
+	std::error_code ec;
+	auto pack = [&](const std::string& out, bool encrypt, bool compress)
+	{ return stdfs::is_regular_file(stdfs::path(out), ec) || buildArchive(ds, out, encrypt, compress); };
+	if (!pack(ds.archivePlain, false, false) || !pack(ds.archiveXor, true, false) || !pack(ds.archiveLz4, false, true))
+		return false;
+
+	ds.allNativeFiles.clear();
+	for (auto& r : ds.small)
+		ds.allNativeFiles.push_back(ds.root + "/" + r);
+	for (auto& r : ds.medium)
+		ds.allNativeFiles.push_back(ds.root + "/" + r);
+	ds.allNativeFiles.push_back(ds.root + "/" + ds.large);
+	ds.allNativeFiles.push_back(ds.archivePlain);
+	ds.allNativeFiles.push_back(ds.archiveXor);
+	ds.allNativeFiles.push_back(ds.archiveLz4);
+	return true;
+}
+
 bool buildDataset(const Options& opt, Dataset& ds)
 {
 	const size_t smallCount = std::max<size_t>(100, static_cast<size_t>(10000 * opt.scale));
@@ -320,21 +343,7 @@ bool buildDataset(const Options& opt, Dataset& ds)
 	if (!writeNative(ds.root + "/" + ds.large, makeContent(ds.largeSize, 7)))
 		return false;
 
-	ds.archivePlain = opt.workDir + "/plain.vfs";
-	ds.archiveXor = opt.workDir + "/xor.vfs";
-	ds.archiveLz4 = opt.workDir + "/lz4.vfs";
-	if (!buildArchive(ds, ds.archivePlain, false, false) || !buildArchive(ds, ds.archiveXor, true, false) ||
-		!buildArchive(ds, ds.archiveLz4, false, true))
-		return false;
-
-	for (auto& r : ds.small)
-		ds.allNativeFiles.push_back(ds.root + "/" + r);
-	for (auto& r : ds.medium)
-		ds.allNativeFiles.push_back(ds.root + "/" + r);
-	ds.allNativeFiles.push_back(ds.root + "/" + ds.large);
-	ds.allNativeFiles.push_back(ds.archivePlain);
-	ds.allNativeFiles.push_back(ds.archiveXor);
-	ds.allNativeFiles.push_back(ds.archiveLz4);
+	return buildArchives(opt, ds);
 	return true;
 }
 
@@ -399,91 +408,6 @@ void settleWrites(const std::string& dir)
 }
 
 // ================================================================ Targets under test
-
-/**
- * Random-read handle: opened once, then read by offset many times.
- */
-class Handle
-{
-public:
-	virtual ~Handle() = default;
-
-	// Read size bytes from offset; returns the number of bytes read, or -1 on failure
-	virtual int64_t readAt(int64_t offset, void* buf, size_t size) = 0;
-};
-
-/**
- * Write handle for the write.large.seq / write.overwrite / write.append scenarios.
- */
-class WriteHandle
-{
-public:
-	virtual ~WriteHandle() = default;
-
-	// Write at the current position (append mode: at the end); false on failure
-	virtual bool write(const void* data, size_t size) = 0;
-
-	// Write at an absolute offset; false on failure
-	virtual bool writeAt(int64_t offset, const void* data, size_t size) = 0;
-
-	// Close and report errors from the close itself
-	virtual bool close() = 0;
-};
-
-// How a write handle is opened
-enum class WriteMode
-{
-	Create,   // create or truncate
-	Update,   // existing file, read/write, no truncation
-	Append,   // create if missing, every write goes to the end
-};
-
-/**
- * A target under test: a baseline (calling the OS / C / C++ file API directly) or some VFS combination.
- * Every method may be called concurrently from several threads. Paths are relative to the data-set root.
- */
-class Target
-{
-public:
-	virtual ~Target() = default;
-
-	virtual std::string name() const = 0;
-
-	virtual bool baseline() const { return false; }
-
-	// Whether it takes part in metadata scenarios (stat / miss / list). Of the three read baselines only stdio participates, to avoid duplication
-	virtual bool supportsMeta() const { return true; }
-
-	// Open + read the whole file + close; returns the byte count, or -1 on failure
-	virtual int64_t readWhole(const std::string& rel, std::vector<uint8_t>& buf) = 0;
-
-	// Read the whole file sequentially in chunks, calling onChunk once per chunk (used to record per-chunk latency)
-	virtual int64_t readChunks(const std::string& rel, std::vector<uint8_t>& buf, const std::function<void()>& onChunk) = 0;
-
-	// Open and close immediately
-	virtual bool openClose(const std::string& rel) = 0;
-
-	virtual std::unique_ptr<Handle> openHandle(const std::string& rel) = 0;
-
-	virtual bool stat(const std::string& rel, int64_t& size) = 0;
-
-	virtual bool exists(const std::string& rel) = 0;
-
-	// List a directory; returns the entry count, or -1 on failure
-	virtual int64_t list(const std::string& rel) = 0;
-
-	// Write-related: implemented only by write targets
-	virtual bool resetWriteArea(int /*threads*/) { return false; }
-
-	virtual bool writeWhole(const std::string& /*rel*/, const uint8_t* /*data*/, size_t /*size*/) { return false; }
-
-	virtual bool remove(const std::string& /*rel*/) { return false; }
-
-	// Handle-based write scenarios (write.large.seq / write.overwrite / write.append)
-	virtual bool supportsWriter() const { return false; }
-
-	virtual std::unique_ptr<WriteHandle> openWriter(const std::string& /*rel*/, WriteMode /*mode*/) { return nullptr; }
-};
 
 // ---------------------------------------------------------------- Baseline: C FILE*
 
@@ -1697,6 +1621,8 @@ std::vector<Scenario> makeScenarios(const Options& opt, const Dataset& ds)
 
 bool matchFilter(const Options& opt, const std::string& scenario, const std::string& target)
 {
+	if (!opt.targets.empty() && std::find(opt.targets.begin(), opt.targets.end(), target) == opt.targets.end())
+		return false;
 	if (opt.filters.empty())
 		return true;
 	const std::string key = scenario + "/" + target;
@@ -1862,12 +1788,19 @@ std::string nowString()
 
 } // namespace
 
-#ifdef VFS_BENCH_IOS_HOST
-// On iOS, ios/IosMain.mm provides main and calls this after UIKit has finished launching
-int vfs_bench_main(int argc, char** argv)
-#else
-int main(int argc, char** argv)
-#endif
+std::unique_ptr<Target> vfsbench::makeVfsTarget(const std::string& name, const std::string& prefix,
+												const std::function<bool(VirtualFileSystem&)>& mount)
+{
+	auto t = std::make_unique<VfsTarget>(name, prefix);
+	if (!mount(t->fs()))
+	{
+		std::cerr << "mount failed: " << name << "\n";
+		return nullptr;
+	}
+	return t;
+}
+
+int vfsbench::run(int argc, char** argv, const BenchHost& host)
 {
 	Options opt;
 	if (!parseArgs(argc, argv, opt))
@@ -1892,7 +1825,8 @@ int main(int argc, char** argv)
 		for (auto& s : scenarios)
 			std::cout << "  " << std::left << std::setw(18) << s.name << s.desc << "\n";
 		std::cout << "Read / metadata targets: base:stdio base:fstream base:posix|base:win32 vfs:native vfs:memory vfs:archive "
-					 "vfs:archive-xor vfs:archive-lz4 vfs:archive+native vfs:memory+archive vfs:3layer vfs:nested8\n"
+					 "vfs:archive-xor vfs:archive-lz4 vfs:archive+native vfs:memory+archive vfs:3layer vfs:nested8"
+				  << (host.extraTargetNames.empty() ? "" : " ") << host.extraTargetNames << "\n"
 					 "Write targets: base:stdio base:fstream base:posix|base:win32 vfs:native vfs:memory vfs:memory+archive\n";
 		return 0;
 	}
@@ -1912,7 +1846,14 @@ int main(int argc, char** argv)
 			  << "Scale: " << opt.scale << ", iterations: " << opt.iterations << " (median), working dir: " << opt.workDir << "\n\n";
 
 	auto t0 = Clock::now();
-	if (!buildDataset(opt, ds))
+	if (host.prepareDataset)
+	{
+		std::error_code ec;
+		stdfs::create_directories(stdfs::path(opt.workDir), ec);
+		if (!host.prepareDataset(opt.workDir, ds) || !buildArchives(opt, ds))
+			return 1;
+	}
+	else if (!buildDataset(opt, ds))
 		return 1;
 	scenarios = makeScenarios(opt, ds);
 	std::cout << "Dataset: small files " << ds.small.size() << " x " << ds.smallSize / KiB << "KiB, medium files " << ds.medium.size() << " x "
@@ -1926,6 +1867,8 @@ int main(int argc, char** argv)
 
 	auto readTargets = makeReadTargets(opt, ds);
 	auto writeTargets = makeWriteTargets(opt, ds);
+	if (!readTargets.empty() && host.addReadTargets && !host.addReadTargets(ds, readTargets))
+		readTargets.clear();
 	if (readTargets.empty() || writeTargets.empty())
 		return 1;
 
