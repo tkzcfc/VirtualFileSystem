@@ -4,6 +4,9 @@
 #
 # Usage:
 #   python3 bench/bench_charts.py --platform linux --input linux.csv --out docs/images/bench
+#   python3 bench/bench_charts.py --platform android --input android.csv --extra android-asset.csv --out docs/images/bench
+#     (--extra: results of the Android bench APK; its AAssetManager targets become extra rows, compared with
+#      base:stdio of that same APK run)
 #
 # Output:
 #   <platform>.svg   one heatmap per platform: two tables side by side (1 thread | N threads, default 8);
@@ -72,6 +75,18 @@ SCENARIOS = [("read.small", "small read"), ("read.medium", "medium read"), ("rea
 # Rows (targets) in display order; missing ones are skipped.
 ROWS = ["base:stdio", "base:posix", "base:win32", "vfs:native", "vfs:memory", "vfs:archive", "vfs:archive-lz4",
         "vfs:archive+native", "vfs:memory+archive", "vfs:3layer"]
+# Rows taken from the --extra input (the Android bench APK run); "apk:" marks them in the data and is dropped from the label.
+EXTRA_TARGETS = ["base:aasset", "vfs:asset", "vfs:asset+lst", "vfs:archive-apk"]
+EXTRA_ROWS = ["apk:" + t for t in EXTRA_TARGETS]
+
+
+def ref_target(t):
+    """base:stdio of the run a row comes from."""
+    return "apk:base:stdio" if t.startswith("apk:") else "base:stdio"
+
+
+def row_label(t):
+    return t[4:] + " (APK)" if t.startswith("apk:") else t
 SLOW = (196, 64, 52)    # < 1x (slower than stdio)
 FAST = (27, 120, 80)    # > 1x (faster than stdio)
 CAP = 2.0               # color saturates at 100x / 0.01x (log10 = 2)
@@ -86,7 +101,7 @@ def cell_color(r):
 
 
 def heatmap(out, x0, y0, caption, data, threads, rows, cols, show_rows):
-    label_w = 150 if show_rows else 0
+    label_w = 190 if show_rows else 0
     cw, ch, hh = 74, 40, 26
     out.append('<text x="%.1f" y="%d" font-size="15" font-weight="bold" text-anchor="middle">%s</text>' % (x0 + label_w + cw * len(cols) / 2, y0, html.escape(caption)))
     y = y0 + 10
@@ -96,10 +111,10 @@ def heatmap(out, x0, y0, caption, data, threads, rows, cols, show_rows):
     for i, t in enumerate(rows):
         yy = y + i * ch
         if show_rows:
-            out.append('<text x="%d" y="%.1f" text-anchor="end"%s>%s</text>' % (x0 + label_w - 8, yy + ch / 2 + 5, ' fill="#555"' if t.startswith("base:") else "", html.escape(t)))
+            out.append('<text x="%d" y="%.1f" text-anchor="end"%s>%s</text>' % (x0 + label_w - 8, yy + ch / 2 + 5, ' fill="#555"' if row_label(t).startswith("base:") else "", html.escape(row_label(t))))
         for j, (sc, _) in enumerate(cols):
             x = x0 + label_w + j * cw
-            v, ref = data.get((sc, t, threads)), data.get((sc, "base:stdio", threads))
+            v, ref = data.get((sc, t, threads)), data.get((sc, ref_target(t), threads))
             if not v or not ref:
                 out.append('<rect x="%d" y="%d" width="%d" height="%d" fill="#f4f4f4" stroke="#fff"/>' % (x, yy, cw, ch))
                 out.append('<text x="%.1f" y="%.1f" text-anchor="middle" fill="#bbb">–</text>' % (x + cw / 2, yy + ch / 2 + 5))
@@ -115,7 +130,7 @@ def heatmap(out, x0, y0, caption, data, threads, rows, cols, show_rows):
 
 def render(title, subtitle, data, threads, out_path):
     present = {(sc, t) for (sc, t, _) in data}
-    rows = [t for t in ROWS if any((sc, t) in present for sc, _ in SCENARIOS)]
+    rows = [t for t in ROWS + EXTRA_ROWS if any((sc, t) in present for sc, _ in SCENARIOS)]
     cols = [(sc, lab) for sc, lab in SCENARIOS if (sc, "base:stdio") in present]
     out = []
     top = 92
@@ -132,7 +147,7 @@ def render(title, subtitle, data, threads, out_path):
         x = 260 + k * bw
         out.append('<rect x="%d" y="%d" width="%d" height="20" fill="%s" stroke="#ddd"/>' % (x, ly, bw, c))
         out.append('<text x="%.1f" y="%d" text-anchor="middle" font-size="11" fill="%s">%gx</text>' % (x + bw / 2, ly + 14, "#fff" if dark else "#111", v))
-    out.append('<text x="10" y="%d" font-size="11" fill="#666">Small grey number = absolute throughput in ops/s. "–" = target not run for that scenario (archive backends are read-only).</text>' % (ly + 42))
+    out.append('<text x="10" y="%d" font-size="11" fill="#666">Small grey number = absolute throughput in ops/s. "–" = target not run for that scenario (archive backends are read-only).%s</text>' % (ly + 42, " Rows marked (APK) come from the bench APK and are compared with base:stdio of that run." if any(r.startswith("apk:") for r in rows) else ""))
     height = ly + 56
     head = ['<svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d" font-family="Segoe UI,Helvetica,Arial,sans-serif" font-size="13">' % (width, height),
             '<rect width="100%" height="100%" fill="white"/>',
@@ -150,11 +165,16 @@ def main():
     ap.add_argument("--out", required=True, help="output directory")
     ap.add_argument("--threads", type=int, default=8, help="multi-thread table shown next to 1 thread (default 8)")
     ap.add_argument("--label", default="", help="subtitle text, e.g. CPU, OS, compiler")
+    ap.add_argument("--extra", default="", help="Android: results of the bench APK (bench/android); its AAssetManager targets become extra rows")
     args = ap.parse_args()
 
     data = load(args.input)
     if not data:
         sys.exit("no results found in " + args.input)
+    if args.extra:
+        for (sc, t, th), v in load(args.extra).items():
+            if t in EXTRA_TARGETS or t == "base:stdio":
+                data[(sc, "apk:" + t, th)] = v
     os.makedirs(args.out, exist_ok=True)
     render("%s — speed relative to stdio (higher is better)" % args.platform, args.label, data, args.threads,
            os.path.join(args.out, "%s.svg" % args.platform))
