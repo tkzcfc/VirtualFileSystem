@@ -5,6 +5,7 @@
 //   vfs:archive-apk  assets/bench/plain.vfs read in place from the APK through AssetBackend::archiveSource (stored uncompressed)
 // next to the built-in targets, which run on copies extracted to internal storage (base:stdio, vfs:archive on the extracted plain.vfs, ...).
 //
+// --cold is not meaningful here: it can only evict the extracted copies, not the APK the asset targets read from.
 // Arguments: the default command line below, or the whitespace-separated contents of <internalDataPath>/args.txt when that file exists.
 // Output: <internalDataPath>/bench.txt (console table), bench.csv, bench.md; progress and the final "BENCH DONE rc=<n>" go to logcat (tag VFSBENCH).
 #include "../BenchCore.h"
@@ -95,6 +96,9 @@ bool prepareDataset(const std::string& workDir, Dataset& ds)
 	}
 	ds.root = workDir + "/data";
 	std::error_code ec;
+	// Start from an empty working directory: leftovers of an interrupted run (stale files, half-written archives) would skew the run
+	for (const char* stale : {"data", "plain.vfs", "xor.vfs", "lz4.vfs", "write", "overlay"})
+		std::filesystem::remove_all(std::filesystem::path(workDir) / stale, ec);
 	std::filesystem::create_directories(ds.root + "/small", ec);
 	std::filesystem::create_directories(ds.root + "/medium", ec);
 	std::istringstream in(lst);
@@ -252,7 +256,11 @@ bool addAssetTargets(const Dataset&, std::vector<std::unique_ptr<Target>>& out)
 
 std::vector<std::string> commandLine(const std::string& dataDir)
 {
-	std::vector<std::string> args = {"vfs_bench", "--dir", dataDir + "/work", "--threads", "1,2,4,8", "--filter", "read.,meta.",
+	// The dataset scale the APK was built with (BENCH_SCALE in build.sh) drives the per-scenario operation counts as well
+	std::string scale = "1";
+	readAsset("bench/scale.txt", scale);
+	scale.erase(std::remove_if(scale.begin(), scale.end(), [](char c) { return c == '\n' || c == '\r' || c == ' '; }), scale.end());
+	std::vector<std::string> args = {"vfs_bench", "--dir", dataDir + "/work", "--scale", scale, "--threads", "1,2,4,8", "--filter", "read.,meta.",
 		"--targets", "base:stdio,base:aasset,vfs:asset,vfs:asset+lst,vfs:archive,vfs:archive-apk",
 		"--csv", dataDir + "/bench.csv", "--md", dataDir + "/bench.md"};
 	std::ifstream f(dataDir + "/args.txt");

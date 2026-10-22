@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Build the vfs_bench APK without Gradle: NDK (CMake) + aapt2 + zipalign + apksigner.
 # Env: ANDROID_NDK, ANDROID_SDK (with build-tools;35.0.0 and platforms;android-35), optional ABI (default arm64-v8a),
-#      optional BENCH_SCALE (dataset scale, default 1) and STORE_DATA=1 (store the loose dataset files uncompressed;
-#      by default aapt2 compresses them, as Gradle does for ordinary assets). plain.vfs is always stored uncompressed.
+#      optional BENCH_SCALE (dataset scale, default 1) and COMPRESS_DATA=1 (let aapt2 deflate the loose dataset files, as Gradle
+#      does for ordinary assets; by default they are stored, so every target reads the same bytes without inflating them).
+#      plain.vfs is always stored uncompressed.
 # Output: build-bench-apk/vfs-bench.apk
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -24,6 +25,7 @@ mv "$OUT/data/assets.lst" "$OUT/assets.lst"
 "$OUT/host/tools/vfstool/vfstool" pack "$OUT/data" -o "$OUT/stage/assets/bench/plain.vfs" > /dev/null
 mv "$OUT/data" "$OUT/stage/assets/bench/data"
 mv "$OUT/assets.lst" "$OUT/stage/assets/bench/data/assets.lst"
+echo "$SCALE" > "$OUT/stage/assets/bench/scale.txt"
 
 # 3. Native library.
 cmake -S "$HERE" -B "$OUT/ndk" -G Ninja -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK/build/cmake/android.toolchain.cmake" \
@@ -33,7 +35,7 @@ cp "$OUT/ndk/libvfsbench.so" "$OUT/stage/lib/$ABI/"
 
 # 4. Package. Native libs are stored uncompressed (extractNativeLibs=false).
 NOCOMP=(-0 vfs)
-[ "${STORE_DATA:-0}" = 1 ] && NOCOMP+=(-0 bin)
+[ "${COMPRESS_DATA:-0}" = 1 ] || NOCOMP+=(-0 bin)
 "$BT/aapt2" link -o "$OUT/unsigned.apk" -I "$JAR" --manifest "$HERE/AndroidManifest.xml" -A "$OUT/stage/assets" "${NOCOMP[@]}"
 python3 "$REPO/tests/android-apk/add_lib.py" "$OUT/unsigned.apk" "$OUT/withlib.apk" "$OUT/stage/lib/$ABI/libvfsbench.so" "lib/$ABI/libvfsbench.so"
 "$BT/zipalign" -f -P 16 4 "$OUT/withlib.apk" "$OUT/aligned.apk"

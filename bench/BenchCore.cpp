@@ -276,6 +276,12 @@ bool buildArchive(const Dataset& ds, const std::string& out, bool encrypt, bool 
 	return e == Error::OK;
 }
 
+// Whether --targets selects the target (no --targets: every target)
+bool wanted(const Options& opt, const std::string& target)
+{
+	return opt.targets.empty() || std::find(opt.targets.begin(), opt.targets.end(), target) != opt.targets.end();
+}
+
 // Pack the three archives next to the data directory (an archive that already exists, e.g. one supplied by a host, is kept) and
 // record every native file of the dataset
 bool buildArchives(const Options& opt, Dataset& ds)
@@ -286,7 +292,13 @@ bool buildArchives(const Options& opt, Dataset& ds)
 	std::error_code ec;
 	auto pack = [&](const std::string& out, bool encrypt, bool compress)
 	{ return stdfs::is_regular_file(stdfs::path(out), ec) || buildArchive(ds, out, encrypt, compress); };
-	if (!pack(ds.archivePlain, false, false) || !pack(ds.archiveXor, true, false) || !pack(ds.archiveLz4, false, true))
+	// The XOR and LZ4 archives each serve a single target: skip them when --targets leaves that target out
+	if (!wanted(opt, "vfs:archive-xor"))
+		ds.archiveXor.clear();
+	if (!wanted(opt, "vfs:archive-lz4"))
+		ds.archiveLz4.clear();
+	if (!pack(ds.archivePlain, false, false) || (!ds.archiveXor.empty() && !pack(ds.archiveXor, true, false)) ||
+		(!ds.archiveLz4.empty() && !pack(ds.archiveLz4, false, true)))
 		return false;
 
 	ds.allNativeFiles.clear();
@@ -295,9 +307,11 @@ bool buildArchives(const Options& opt, Dataset& ds)
 	for (auto& r : ds.medium)
 		ds.allNativeFiles.push_back(ds.root + "/" + r);
 	ds.allNativeFiles.push_back(ds.root + "/" + ds.large);
-	ds.allNativeFiles.push_back(ds.archivePlain);
-	ds.allNativeFiles.push_back(ds.archiveXor);
-	ds.allNativeFiles.push_back(ds.archiveLz4);
+	for (auto* a : {&ds.archivePlain, &ds.archiveXor, &ds.archiveLz4})
+	{
+		if (!a->empty())
+			ds.allNativeFiles.push_back(*a);
+	}
 	return true;
 }
 
@@ -1096,6 +1110,7 @@ std::vector<std::unique_ptr<Target>> makeReadTargets(const Options& opt, const D
 		ok &= checkMount(t->fs().mountNative("/d", ds.root), "native");
 		out.push_back(std::move(t));
 	}
+	if (wanted(opt, "vfs:memory"))   // skip the in-memory copy of the whole dataset when the target is not run
 	{
 		auto t = std::make_unique<VfsTarget>("vfs:memory", "/d");
 		ok &= checkMount(t->fs().mount("/d", memoryCopyOf(ds)), "memory");
@@ -1105,6 +1120,8 @@ std::vector<std::unique_ptr<Target>> makeReadTargets(const Options& opt, const D
 		{"vfs:archive", ds.archivePlain}, {"vfs:archive-xor", ds.archiveXor}, {"vfs:archive-lz4", ds.archiveLz4}};
 	for (auto& [name, path] : archives)
 	{
+		if (path.empty())
+			continue;
 		auto t = std::make_unique<VfsTarget>(name, "/d");
 		ok &= checkMount(t->fs().mountArchive("/d", path), name);
 		out.push_back(std::move(t));
@@ -1621,7 +1638,7 @@ std::vector<Scenario> makeScenarios(const Options& opt, const Dataset& ds)
 
 bool matchFilter(const Options& opt, const std::string& scenario, const std::string& target)
 {
-	if (!opt.targets.empty() && std::find(opt.targets.begin(), opt.targets.end(), target) == opt.targets.end())
+	if (!wanted(opt, target))
 		return false;
 	if (opt.filters.empty())
 		return true;
@@ -1778,6 +1795,12 @@ std::string cpuInfo()
 	return "unknown";
 }
 
+// Archive size for the dataset line ("-" when the archive was skipped)
+std::string archiveMiB(const std::string& path)
+{
+	return path.empty() ? std::string("-") : std::to_string(stdfs::file_size(stdfs::path(path)) / MiB) + "MiB";
+}
+
 std::string nowString()
 {
 	std::time_t t = std::time(nullptr);
@@ -1858,8 +1881,8 @@ int vfsbench::run(int argc, char** argv, const BenchHost& host)
 	scenarios = makeScenarios(opt, ds);
 	std::cout << "Dataset: small files " << ds.small.size() << " x " << ds.smallSize / KiB << "KiB, medium files " << ds.medium.size() << " x "
 			  << ds.mediumSize / KiB << "KiB, large file " << ds.largeSize / MiB << "MiB; archives plain "
-			  << stdfs::file_size(ds.archivePlain) / MiB << "MiB / xor " << stdfs::file_size(ds.archiveXor) / MiB << "MiB / lz4 "
-			  << stdfs::file_size(ds.archiveLz4) / MiB << "MiB; generated in "
+			  << archiveMiB(ds.archivePlain) << " / xor " << archiveMiB(ds.archiveXor) << " / lz4 "
+			  << archiveMiB(ds.archiveLz4) << "; generated in "
 			  << fmt(std::chrono::duration<double>(Clock::now() - t0).count(), 1) << "s\n\n";
 	// The dataset itself is several hundred MiB of fresh writes: get it out of the write cache before measuring
 	for (auto& f : ds.allNativeFiles)
@@ -1871,6 +1894,10 @@ int vfsbench::run(int argc, char** argv, const BenchHost& host)
 		readTargets.clear();
 	if (readTargets.empty() || writeTargets.empty())
 		return 1;
+	// --targets: drop the targets that will not run, so they hold no memory or handles during the run
+	for (auto* list : {&readTargets, &writeTargets})
+		list->erase(std::remove_if(list->begin(), list->end(), [&](const std::unique_ptr<Target>& tg) { return !wanted(opt, tg->name()); }),
+					list->end());
 
 	std::vector<Result> results;
 	std::vector<bool> resultBytes;
@@ -1982,7 +2009,10 @@ int vfsbench::run(int argc, char** argv, const BenchHost& host)
 			stdfs::remove_all(stdfs::path(opt.workDir) / "write", ec);
 			stdfs::remove_all(stdfs::path(opt.workDir) / "overlay", ec);
 			for (auto* p : {&ds.archivePlain, &ds.archiveXor, &ds.archiveLz4})
-				stdfs::remove(*p, ec);
+			{
+				if (!p->empty())
+					stdfs::remove(*p, ec);
+			}
 		}
 	}
 	return anyFailed ? 1 : 0;
