@@ -197,14 +197,14 @@ Write scenarios use the three baselines, `vfs:native`, `vfs:memory`, and `vfs:me
 | meta.stat | 8 | 38.8k | 65.5k (1.69) | 768.8k (19.81) | 5.81M (149.74) | 8.36M (215.46) | 155.7k (4.01) | 149.0k (3.84) |
 | meta.miss | 1 | 38.9k | 56.9k (1.46) | 2.34M (60.15) | 2.67M (68.64) | 2.68M (68.89) | 68.3k (1.76) | 68.2k (1.75) |
 | meta.miss | 8 | 117.2k | 109.7k (0.94) | 716.8k (6.12) | 5.28M (45.05) | 5.18M (44.20) | 145.7k (1.24) | 133.3k (1.14) |
-| write.churn | 1 | 1.5k | 1.7k (1.13) | 695.5k (463.67) | - | - | - | - |
-| write.churn | 8 | 2.7k | 2.8k (1.04) | 179.2k (66.37) | - | - | - | - |
-| write.large.seq | 1 | 2.2k | 1.6k (0.73) | 8.9k (4.05) | - | - | - | - |
-| write.large.seq | 8 | 1.5k | 1.5k (1.00) | 8.4k (5.60) | - | - | - | - |
-| write.overwrite | 1 | 193.9k | 212.0k (1.09) | 4.55M (23.47) | - | - | - | - |
-| write.overwrite | 8 | 170.1k | 136.6k (0.80) | 4.76M (27.98) | - | - | - | - |
-| write.append | 1 | 75.4k | 114.9k (1.52) | 2.93M (38.86) | - | - | - | - |
-| write.append | 8 | 102.8k | 98.2k (0.96) | 3.17M (30.84) | - | - | - | - |
+| write.churn | 1 | 1.5k | 1.7k (1.13) | 673.3k (448.87) | - | - | - | - |
+| write.churn | 8 | 2.7k | 2.8k (1.04) | 178.7k (66.19) | - | - | - | - |
+| write.large.seq | 1 | 2.0k | 1.6k (0.80) | 12.6k (6.30) | - | - | - | - |
+| write.large.seq | 8 | 1.5k | 1.6k (1.07) | 9.3k (6.20) | - | - | - | - |
+| write.overwrite | 1 | 282.9k | 295.2k (1.04) | 4.18M (14.78) | - | - | - | - |
+| write.overwrite | 8 | 136.0k | 135.9k (1.00) | 4.55M (33.46) | - | - | - | - |
+| write.append | 1 | 149.1k | 123.3k (0.83) | 3.07M (20.59) | - | - | - | - |
+| write.append | 8 | 101.9k | 102.0k (1.00) | 3.17M (31.11) | - | - | - | - |
 
 ![iOS: speed relative to stdio](images/bench/ios.svg)
 
@@ -228,14 +228,14 @@ Write scenarios use the three baselines, `vfs:native`, `vfs:memory`, and `vfs:me
 | meta.stat | 8 | 1.03M | 872.2k (0.85) | 1.19M (1.15) | 1.26M (1.22) | 1.23M (1.19) | 730.6k (0.71) | 643.1k (0.62) |
 | meta.miss | 1 | 533.6k | 160.9k (0.30) | 261.3k (0.49) | 280.0k (0.52) | 272.0k (0.51) | 144.5k (0.27) | 129.0k (0.24) |
 | meta.miss | 8 | 1.78M | 565.3k (0.32) | 711.1k (0.40) | 734.1k (0.41) | 725.2k (0.41) | 512.7k (0.29) | 444.8k (0.25) |
-| write.churn | 1 | 11.3k | 10.0k (0.89) | 39.0k (3.46) | - | - | - | - |
-| write.churn | 8 | 89.1k | 81.0k (0.91) | 288.5k (3.24) | - | - | - | - |
-| write.large.seq | 1 | 1.1k | 996 (0.93) | 576 (0.54) | - | - | - | - |
-| write.large.seq | 8 | 8.2k | 9.6k (1.17) | 3.4k (0.41) | - | - | - | - |
-| write.overwrite | 1 | 98.3k | 99.3k (1.01) | 360.8k (3.67) | - | - | - | - |
-| write.overwrite | 8 | 740.4k | 791.6k (1.07) | 1.79M (2.41) | - | - | - | - |
-| write.append | 1 | 65.9k | 87.3k (1.32) | 84.7k (1.29) | - | - | - | - |
-| write.append | 8 | 636.2k | 688.5k (1.08) | 565.2k (0.89) | - | - | - | - |
+| write.churn | 1 | 18.4k | 11.3k (0.61) | 86.4k (4.70) | - | - | - | - |
+| write.churn | 8 | 99.1k | 82.3k (0.83) | 302.5k (3.05) | - | - | - | - |
+| write.large.seq | 1 | 930 | 1.3k (1.40) | 922 (0.99) | - | - | - | - |
+| write.large.seq | 8 | 9.4k | 7.7k (0.82) | 4.6k (0.49) | - | - | - | - |
+| write.overwrite | 1 | 99.8k | 104.4k (1.05) | 724.5k (7.26) | - | - | - | - |
+| write.overwrite | 8 | 776.3k | 847.6k (1.09) | 2.04M (2.63) | - | - | - | - |
+| write.append | 1 | 72.8k | 71.8k (0.99) | 80.3k (1.10) | - | - | - | - |
+| write.append | 8 | 570.8k | 570.9k (1.00) | 738.8k (1.29) | - | - | - | - |
 
 ![Android: speed relative to stdio](images/bench/android.svg)
 
@@ -275,14 +275,14 @@ Write scenarios use the three baselines, `vfs:native`, `vfs:memory`, and `vfs:me
 | Shipping read-only assets | Plaintext or XOR archive (`vfs:archive`) | Open, `stat`, and miss queries are served from the in-memory index. Versus stdio: small-file reads are 2.2-2.5x on Linux, 10-18x on macOS, 4.4-7.3x on Windows; `meta.open` is 3.1-4.3x, 29-46x, and 21-26x respectively |
 | Compression needed | Compress small text such as scripts and config (`--compress "*.lua"`); keep large binary assets uncompressed | LZ4 entries are stored in blocks (64 KiB by default) and opening does no decompression, but each read decodes the whole block it touches: sequential reads of a 64 MiB LZ4 file are 0.22-0.58x of stdio on native platforms, and 1-thread 4 KiB random reads 0.06-0.21x. A smaller `--block-size` reduces the work per random read |
 | Native override of the archive during development | `archive + native`, mounted only in development builds | Every lookup checks the native directory first: miss queries (`meta.miss`) are 0.27-1.76x; files that hit the archive read at 0.81-8.9x. Do not mount an empty native directory in a shipping build |
-| Runtime-generated / temporary data | Memory backend (`vfs:memory`), optionally stacked on an archive as a writable layer | No system calls: `write.churn` is 1.7-464x; large sequential writes 0.34-9.2x; an 8-thread miss query on Linux is about 0.6x |
-| Data that must hit disk, such as saves and logs | Native directory (`vfs:native`), its own mount point | A single layer is close to a direct call: small reads 0.76-1.29x, opens 0.64-1.15x, `stat` 0.85-2.0x, in-place overwrites 0.80-1.13x, appends 0.71-1.52x, create + delete 0.42-1.13x (lowest under WebAssembly) |
+| Runtime-generated / temporary data | Memory backend (`vfs:memory`), optionally stacked on an archive as a writable layer | No system calls: `write.churn` is 1.7-449x; large sequential writes 0.34-9.2x; an 8-thread miss query on Linux is about 0.6x |
+| Data that must hit disk, such as saves and logs | Native directory (`vfs:native`), its own mount point | A single layer is close to a direct call: small reads 0.76-1.29x, opens 0.64-1.15x, `stat` 0.85-2.0x, in-place overwrites 0.87-1.13x, appends 0.71-1.26x, create + delete 0.42-1.13x (lowest under WebAssembly) |
 | Stacking layers | As few layers as possible; do not stack needless empty layers on the same path | Lookup walks layers top-down. `nested8` (9 layers) opens are 0.26-1.25x and misses 0.18-1.53x |
 
 Other:
 - Directory listing (`meta.list`): archive and memory backends are about 1.0-21x; the native backend must merge, deduplicate, sort, and convert names, about 0.55-1.04x.
 - Threads: reads and metadata queries are concurrent on every backend, and mount-table lookup takes no global lock; each archive thread reads by offset on its own handle.
-- Write scenarios settle the disk first: before each timed write iteration (outside the timing) every file in the write area and the generated dataset is flushed (`FlushFileBuffers` / `fsync`) and the previous iteration's files are removed, so no target starts behind another target's dirty-page backlog. Under WebAssembly the flush is a no-op. The Linux, macOS, Windows, and WebAssembly write rows come from a `--filter write` run with this step; the iOS and Android write rows were measured before it.
+- Write scenarios settle the disk first: before each timed write iteration (outside the timing) every file in the write area and the generated dataset is flushed (`FlushFileBuffers` / `fsync`) and the previous iteration's files are removed, so no target starts behind another target's dirty-page backlog. Under WebAssembly the flush is a no-op. The write rows on every platform come from a `--filter write` run with this step.
 - `vfs:memory` large sequential writes (0.34-0.56x on Linux and Windows; 3.3-5.3x on macOS) are bound by page faults on freshly allocated memory and by copying when the buffer doubles; file data is kept contiguous.
 
 ## Regenerating charts

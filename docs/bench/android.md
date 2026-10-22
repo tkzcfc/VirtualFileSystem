@@ -4,7 +4,7 @@
 - OS: Android 16 (API 36), HyperOS OS3.0, Linux 6.1.138
 - Compiler: NDK r27c clang 18.0.3, arm64-v8a, Release
 - Disk: built-in UFS flash, f2fs (working directory /data/local/tmp)
-- How it was run: `vfs_bench` pushed with `adb push`, run as `adb shell "cd /data/local/tmp/vfs && ./vfs_bench --dir /data/local/tmp/vfs --csv android.csv --md android.md"`, results pulled with `adb pull`
+- How it was run: `vfs_bench` pushed with `adb push`, run as `adb shell "cd /data/local/tmp/vfs && ./vfs_bench --dir /data/local/tmp/vfs --csv android.csv --md android.md"`, results pulled with `adb pull` The write scenarios come from a separate run with `--threads 1,2,4,8 --filter write`.
 - Date: 2026-10-21 (UTC+8), default parameters (--scale 1, --iterations 3, threads 1,2,4,8,N), warm cache, Release
 
 ### read.small
@@ -411,131 +411,131 @@
 
 | target | threads | ops/s | MiB/s | p50 (µs) | p99 (µs) | vs stdio |
 |---|---:|---:|---:|---:|---:|---:|
-| base:stdio | 1 | 5.6k | 348 | 164.5 | 399.3 | 1.00 |
-| base:fstream | 1 | 3.5k | 220 | 259.0 | 555.4 | 0.63 |
-| base:posix | 1 | 4.2k | 263 | 144.4 | 716.0 | 0.76 |
-| vfs:native | 1 | 4.0k | 248 | 159.5 | 723.5 | 0.71 |
-| vfs:memory | 1 | 29.3k | 1830 | 23.5 | 211.7 | 5.27 |
-| vfs:memory+archive | 1 | 26.5k | 1658 | 32.6 | 72.1 | 4.77 |
-| base:stdio | 2 | 10.1k | 634 | 177.2 | 537.8 | 1.00 |
-| base:fstream | 2 | 6.6k | 411 | 277.4 | 641.9 | 0.65 |
-| base:posix | 2 | 8.9k | 557 | 190.7 | 546.0 | 0.88 |
-| vfs:native | 2 | 7.9k | 496 | 138.3 | 995.3 | 0.78 |
-| vfs:memory | 2 | 52.5k | 3284 | 31.1 | 175.2 | 5.18 |
-| vfs:memory+archive | 2 | 62.4k | 3898 | 26.9 | 61.4 | 6.15 |
-| base:stdio | 4 | 18.6k | 1163 | 119.2 | 1033.0 | 1.00 |
-| base:fstream | 4 | 12.8k | 800 | 262.1 | 1198.3 | 0.69 |
-| base:posix | 4 | 15.6k | 975 | 185.5 | 893.3 | 0.84 |
-| vfs:native | 4 | 18.1k | 1131 | 98.0 | 898.8 | 0.97 |
-| vfs:memory | 4 | 127.9k | 7995 | 22.2 | 136.3 | 6.88 |
-| vfs:memory+archive | 4 | 69.0k | 4313 | 28.6 | 154.5 | 3.71 |
-| base:stdio | 8 | 36.7k | 2291 | 77.4 | 650.3 | 1.00 |
-| base:fstream | 8 | 32.1k | 2009 | 101.3 | 479.7 | 0.88 |
-| base:posix | 8 | 40.3k | 2519 | 71.2 | 789.5 | 1.10 |
-| vfs:native | 8 | 42.5k | 2654 | 64.8 | 1046.6 | 1.16 |
-| vfs:memory | 8 | 218.1k | 13632 | 11.6 | 137.6 | 5.95 |
-| vfs:memory+archive | 8 | 216.8k | 13551 | 13.1 | 208.9 | 5.92 |
+| base:stdio | 1 | 4.7k | 293 | 178.9 | 879.5 | 1.00 |
+| base:fstream | 1 | 4.3k | 270 | 104.1 | 1084.1 | 0.92 |
+| base:posix | 1 | 4.5k | 281 | 182.9 | 587.8 | 0.96 |
+| vfs:native | 1 | 4.7k | 293 | 182.0 | 1359.9 | 1.00 |
+| vfs:memory | 1 | 27.3k | 1705 | 32.5 | 109.1 | 5.82 |
+| vfs:memory+archive | 1 | 25.2k | 1578 | 34.3 | 182.9 | 5.39 |
+| base:stdio | 2 | 10.1k | 634 | 169.2 | 625.0 | 1.00 |
+| base:fstream | 2 | 7.1k | 446 | 256.4 | 906.0 | 0.70 |
+| base:posix | 2 | 9.9k | 618 | 169.1 | 603.1 | 0.97 |
+| vfs:native | 2 | 8.1k | 506 | 187.7 | 635.7 | 0.80 |
+| vfs:memory | 2 | 27.9k | 1746 | 57.0 | 166.7 | 2.75 |
+| vfs:memory+archive | 2 | 28.1k | 1754 | 58.4 | 159.1 | 2.77 |
+| base:stdio | 4 | 19.9k | 1241 | 161.5 | 766.5 | 1.00 |
+| base:fstream | 4 | 13.5k | 845 | 154.7 | 921.6 | 0.68 |
+| base:posix | 4 | 16.2k | 1015 | 132.7 | 684.6 | 0.82 |
+| vfs:native | 4 | 15.7k | 981 | 139.4 | 1952.3 | 0.79 |
+| vfs:memory | 4 | 113.0k | 7065 | 10.6 | 415.7 | 5.69 |
+| vfs:memory+archive | 4 | 122.8k | 7673 | 8.65 | 94.9 | 6.18 |
+| base:stdio | 8 | 70.9k | 4430 | 51.0 | 194.7 | 1.00 |
+| base:fstream | 8 | 50.3k | 3146 | 90.7 | 338.6 | 0.71 |
+| base:posix | 8 | 53.4k | 3340 | 56.5 | 295.3 | 0.75 |
+| vfs:native | 8 | 59.0k | 3689 | 66.4 | 1233.6 | 0.83 |
+| vfs:memory | 8 | 156.6k | 9786 | 21.8 | 636.4 | 2.21 |
+| vfs:memory+archive | 8 | 172.0k | 10750 | 10.8 | 74.8 | 2.43 |
 
 ### write.churn
 
 | target | threads | ops/s | MiB/s | p50 (µs) | p99 (µs) | vs stdio |
 |---|---:|---:|---:|---:|---:|---:|
-| base:stdio | 1 | 11.3k | - | 43.6 | 416.2 | 1.00 |
-| base:fstream | 1 | 11.1k | - | 46.6 | 363.9 | 0.98 |
-| base:posix | 1 | 13.0k | - | 36.2 | 394.1 | 1.16 |
-| vfs:native | 1 | 10.0k | - | 56.6 | 577.2 | 0.89 |
-| vfs:memory | 1 | 39.0k | - | 16.1 | 109.2 | 3.46 |
-| vfs:memory+archive | 1 | 50.6k | - | 18.0 | 20.3 | 4.49 |
-| base:stdio | 2 | 22.1k | - | 73.1 | 389.2 | 1.00 |
-| base:fstream | 2 | 20.2k | - | 71.6 | 433.2 | 0.91 |
-| base:posix | 2 | 23.6k | - | 41.1 | 365.7 | 1.07 |
-| vfs:native | 2 | 17.8k | - | 56.0 | 530.3 | 0.80 |
-| vfs:memory | 2 | 84.7k | - | 20.8 | 59.0 | 3.83 |
-| vfs:memory+archive | 2 | 93.3k | - | 18.2 | 62.8 | 4.22 |
-| base:stdio | 4 | 41.4k | - | 42.6 | 356.7 | 1.00 |
-| base:fstream | 4 | 48.0k | - | 48.0 | 329.0 | 1.16 |
-| base:posix | 4 | 46.2k | - | 42.6 | 403.5 | 1.11 |
-| vfs:native | 4 | 42.4k | - | 56.2 | 328.1 | 1.02 |
-| vfs:memory | 4 | 205.4k | - | 11.6 | 83.0 | 4.96 |
-| vfs:memory+archive | 4 | 105.2k | - | 26.3 | 158.4 | 2.54 |
-| base:stdio | 8 | 89.1k | - | 44.4 | 447.0 | 1.00 |
-| base:fstream | 8 | 91.5k | - | 50.8 | 323.8 | 1.03 |
-| base:posix | 8 | 91.1k | - | 46.3 | 353.4 | 1.02 |
-| vfs:native | 8 | 81.0k | - | 61.3 | 410.6 | 0.91 |
-| vfs:memory | 8 | 288.5k | - | 13.5 | 208.4 | 3.24 |
-| vfs:memory+archive | 8 | 241.5k | - | 17.0 | 117.4 | 2.71 |
+| base:stdio | 1 | 18.4k | - | 40.0 | 175.8 | 1.00 |
+| base:fstream | 1 | 20.0k | - | 38.7 | 168.0 | 1.09 |
+| base:posix | 1 | 13.8k | - | 70.5 | 199.3 | 0.75 |
+| vfs:native | 1 | 11.3k | - | 52.6 | 414.2 | 0.61 |
+| vfs:memory | 1 | 86.4k | - | 11.0 | 11.7 | 4.68 |
+| vfs:memory+archive | 1 | 115.3k | - | 7.60 | 11.0 | 6.25 |
+| base:stdio | 2 | 22.2k | - | 49.0 | 270.1 | 1.00 |
+| base:fstream | 2 | 23.5k | - | 62.4 | 242.0 | 1.06 |
+| base:posix | 2 | 25.4k | - | 66.5 | 316.0 | 1.14 |
+| vfs:native | 2 | 22.5k | - | 57.8 | 406.6 | 1.02 |
+| vfs:memory | 2 | 128.3k | - | 12.6 | 61.3 | 5.79 |
+| vfs:memory+archive | 2 | 172.9k | - | 10.5 | 14.1 | 7.80 |
+| base:stdio | 4 | 64.7k | - | 41.1 | 310.7 | 1.00 |
+| base:fstream | 4 | 65.9k | - | 44.3 | 245.2 | 1.02 |
+| base:posix | 4 | 61.7k | - | 39.7 | 160.0 | 0.95 |
+| vfs:native | 4 | 57.4k | - | 55.8 | 204.8 | 0.89 |
+| vfs:memory | 4 | 242.8k | - | 10.3 | 41.1 | 3.75 |
+| vfs:memory+archive | 4 | 239.3k | - | 10.2 | 42.0 | 3.70 |
+| base:stdio | 8 | 99.1k | - | 46.8 | 465.9 | 1.00 |
+| base:fstream | 8 | 93.2k | - | 46.6 | 491.9 | 0.94 |
+| base:posix | 8 | 105.9k | - | 45.4 | 437.8 | 1.07 |
+| vfs:native | 8 | 82.3k | - | 61.1 | 533.3 | 0.83 |
+| vfs:memory | 8 | 302.5k | - | 12.8 | 188.8 | 3.05 |
+| vfs:memory+archive | 8 | 272.9k | - | 17.2 | 182.6 | 2.75 |
 
 ### write.large.seq
 
 | target | threads | ops/s | MiB/s | p50 (µs) | p99 (µs) | vs stdio |
 |---|---:|---:|---:|---:|---:|---:|
-| base:stdio | 1 | 1.1k | 1075 | 697.4 | 3578.6 | 1.00 |
-| base:posix | 1 | 1.2k | 1243 | 706.5 | 1434.0 | 1.16 |
-| vfs:native | 1 | 996 | 996 | 936.8 | 1549.9 | 0.93 |
-| vfs:memory | 1 | 576 | 576 | 613.3 | 24641.4 | 0.54 |
-| vfs:memory+archive | 1 | 684 | 684 | 509.0 | 19593.1 | 0.64 |
-| base:stdio | 2 | 1.7k | 1728 | 732.9 | 3104.1 | 1.00 |
-| base:posix | 2 | 1.7k | 1720 | 842.7 | 7697.9 | 1.00 |
-| vfs:native | 2 | 2.4k | 2399 | 528.8 | 1306.6 | 1.39 |
-| vfs:memory | 2 | 1.4k | 1441 | 398.0 | 17106.7 | 0.83 |
-| vfs:memory+archive | 2 | 1.3k | 1341 | 402.8 | 17772.6 | 0.78 |
-| base:stdio | 4 | 3.6k | 3624 | 398.2 | 3678.0 | 1.00 |
-| base:posix | 4 | 3.5k | 3504 | 551.8 | 3690.5 | 0.97 |
-| vfs:native | 4 | 4.6k | 4570 | 445.3 | 3402.8 | 1.26 |
-| vfs:memory | 4 | 2.8k | 2820 | 437.1 | 22585.2 | 0.78 |
-| vfs:memory+archive | 4 | 2.4k | 2438 | 389.6 | 21896.4 | 0.67 |
-| base:stdio | 8 | 8.2k | 8234 | 480.2 | 4098.5 | 1.00 |
-| base:posix | 8 | 8.3k | 8306 | 466.2 | 5318.9 | 1.01 |
-| vfs:native | 8 | 9.6k | 9616 | 487.4 | 3262.2 | 1.17 |
-| vfs:memory | 8 | 3.4k | 3386 | 532.9 | 25674.2 | 0.41 |
-| vfs:memory+archive | 8 | 3.7k | 3706 | 495.9 | 32801.9 | 0.45 |
+| base:stdio | 1 | 930 | 930 | 906.4 | 1731.2 | 1.00 |
+| base:posix | 1 | 1.1k | 1140 | 824.3 | 1375.1 | 1.23 |
+| vfs:native | 1 | 1.3k | 1251 | 775.8 | 1414.6 | 1.34 |
+| vfs:memory | 1 | 922 | 922 | 379.5 | 12867.9 | 0.99 |
+| vfs:memory+archive | 1 | 861 | 861 | 370.6 | 16521.7 | 0.93 |
+| base:stdio | 2 | 2.4k | 2357 | 850.9 | 1530.4 | 1.00 |
+| base:posix | 2 | 2.6k | 2618 | 689.7 | 1375.7 | 1.11 |
+| vfs:native | 2 | 2.6k | 2600 | 728.9 | 1377.0 | 1.10 |
+| vfs:memory | 2 | 1.6k | 1567 | 500.8 | 16823.8 | 0.66 |
+| vfs:memory+archive | 2 | 1.4k | 1426 | 437.3 | 17857.2 | 0.61 |
+| base:stdio | 4 | 7.4k | 7371 | 371.2 | 1314.4 | 1.00 |
+| base:posix | 4 | 7.3k | 7319 | 387.0 | 925.9 | 0.99 |
+| vfs:native | 4 | 7.4k | 7361 | 408.0 | 805.1 | 1.00 |
+| vfs:memory | 4 | 3.4k | 3428 | 339.2 | 17559.5 | 0.47 |
+| vfs:memory+archive | 4 | 3.6k | 3628 | 335.5 | 19515.5 | 0.49 |
+| base:stdio | 8 | 9.4k | 9382 | 431.0 | 1716.8 | 1.00 |
+| base:posix | 8 | 8.7k | 8749 | 424.1 | 3068.4 | 0.93 |
+| vfs:native | 8 | 7.7k | 7740 | 443.9 | 1603.9 | 0.82 |
+| vfs:memory | 8 | 4.6k | 4552 | 416.1 | 30834.9 | 0.49 |
+| vfs:memory+archive | 8 | 3.6k | 3627 | 474.1 | 31577.1 | 0.39 |
 
 ### write.overwrite
 
 | target | threads | ops/s | MiB/s | p50 (µs) | p99 (µs) | vs stdio |
 |---|---:|---:|---:|---:|---:|---:|
-| base:stdio | 1 | 98.3k | 384 | 6.20 | 21.8 | 1.00 |
-| base:posix | 1 | 103.6k | 405 | 5.68 | 17.7 | 1.05 |
-| vfs:native | 1 | 99.3k | 388 | 9.63 | 12.8 | 1.01 |
-| vfs:memory | 1 | 360.8k | 1409 | 2.13 | 2.76 | 3.67 |
-| vfs:memory+archive | 1 | 341.5k | 1334 | 2.14 | 2.97 | 3.47 |
-| base:stdio | 2 | 179.1k | 700 | 5.88 | 21.0 | 1.00 |
-| base:posix | 2 | 227.4k | 888 | 4.79 | 15.4 | 1.27 |
-| vfs:native | 2 | 176.7k | 690 | 5.99 | 19.1 | 0.99 |
-| vfs:memory | 2 | 713.7k | 2788 | 1.93 | 2.76 | 3.98 |
-| vfs:memory+archive | 2 | 640.6k | 2502 | 1.93 | 2.92 | 3.58 |
-| base:stdio | 4 | 346.7k | 1354 | 7.08 | 20.6 | 1.00 |
-| base:posix | 4 | 399.4k | 1560 | 7.71 | 16.1 | 1.15 |
-| vfs:native | 4 | 417.4k | 1630 | 5.47 | 19.8 | 1.20 |
-| vfs:memory | 4 | 1.13M | 4411 | 0.52 | 3.02 | 3.26 |
-| vfs:memory+archive | 4 | 1.23M | 4803 | 1.93 | 2.81 | 3.55 |
-| base:stdio | 8 | 740.4k | 2892 | 6.72 | 20.0 | 1.00 |
-| base:posix | 8 | 723.0k | 2824 | 5.21 | 16.1 | 0.98 |
-| vfs:native | 8 | 791.6k | 3092 | 3.38 | 16.4 | 1.07 |
-| vfs:memory | 8 | 1.79M | 6981 | 0.89 | 1.98 | 2.41 |
-| vfs:memory+archive | 8 | 2.69M | 10509 | 0.89 | 2.55 | 3.63 |
+| base:stdio | 1 | 99.8k | 390 | 6.88 | 25.2 | 1.00 |
+| base:posix | 1 | 95.2k | 372 | 6.51 | 20.3 | 0.95 |
+| vfs:native | 1 | 104.4k | 408 | 8.12 | 13.9 | 1.05 |
+| vfs:memory | 1 | 724.5k | 2830 | 1.09 | 1.35 | 7.26 |
+| vfs:memory+archive | 1 | 723.7k | 2827 | 1.09 | 1.35 | 7.25 |
+| base:stdio | 2 | 148.2k | 579 | 8.65 | 26.2 | 1.00 |
+| base:posix | 2 | 190.1k | 743 | 7.60 | 20.8 | 1.28 |
+| vfs:native | 2 | 176.2k | 688 | 7.66 | 23.6 | 1.19 |
+| vfs:memory | 2 | 643.2k | 2513 | 2.03 | 3.02 | 4.34 |
+| vfs:memory+archive | 2 | 608.8k | 2378 | 2.08 | 3.33 | 4.11 |
+| base:stdio | 4 | 425.9k | 1664 | 7.19 | 21.9 | 1.00 |
+| base:posix | 4 | 415.6k | 1623 | 4.48 | 18.8 | 0.98 |
+| vfs:native | 4 | 402.8k | 1573 | 5.73 | 21.1 | 0.95 |
+| vfs:memory | 4 | 1.29M | 5024 | 1.09 | 2.87 | 3.02 |
+| vfs:memory+archive | 4 | 1.25M | 4889 | 1.09 | 2.92 | 2.94 |
+| base:stdio | 8 | 776.3k | 3032 | 4.58 | 15.8 | 1.00 |
+| base:posix | 8 | 867.2k | 3388 | 2.55 | 9.01 | 1.12 |
+| vfs:native | 8 | 847.6k | 3311 | 3.85 | 11.7 | 1.09 |
+| vfs:memory | 8 | 2.04M | 7986 | 0.94 | 2.92 | 2.63 |
+| vfs:memory+archive | 8 | 1.84M | 7173 | 0.94 | 3.02 | 2.37 |
 
 ### write.append
 
 | target | threads | ops/s | MiB/s | p50 (µs) | p99 (µs) | vs stdio |
 |---|---:|---:|---:|---:|---:|---:|
-| base:stdio | 1 | 65.9k | 258 | 9.44 | 39.1 | 1.00 |
-| base:posix | 1 | 80.2k | 313 | 11.9 | 27.0 | 1.22 |
-| vfs:native | 1 | 87.3k | 341 | 8.72 | 45.4 | 1.32 |
-| vfs:memory | 1 | 84.7k | 331 | 4.44 | 265.6 | 1.29 |
-| vfs:memory+archive | 1 | 80.2k | 313 | 3.02 | 369.7 | 1.22 |
-| base:stdio | 2 | 182.5k | 713 | 8.30 | 52.5 | 1.00 |
-| base:posix | 2 | 158.1k | 617 | 8.07 | 46.4 | 0.87 |
-| vfs:native | 2 | 140.0k | 547 | 13.0 | 31.1 | 0.77 |
-| vfs:memory | 2 | 166.2k | 649 | 5.30 | 265.6 | 0.91 |
-| vfs:memory+archive | 2 | 147.5k | 576 | 5.42 | 301.6 | 0.81 |
-| base:stdio | 4 | 274.2k | 1071 | 12.3 | 54.1 | 1.00 |
-| base:posix | 4 | 409.3k | 1599 | 6.27 | 50.9 | 1.49 |
-| vfs:native | 4 | 314.8k | 1230 | 5.43 | 50.5 | 1.15 |
-| vfs:memory | 4 | 322.3k | 1259 | 4.70 | 234.2 | 1.18 |
-| vfs:memory+archive | 4 | 354.3k | 1384 | 3.19 | 248.6 | 1.29 |
-| base:stdio | 8 | 636.2k | 2485 | 4.73 | 37.4 | 1.00 |
-| base:posix | 8 | 623.3k | 2435 | 4.09 | 38.9 | 0.98 |
-| vfs:native | 8 | 688.5k | 2689 | 4.62 | 30.1 | 1.08 |
-| vfs:memory | 8 | 565.2k | 2208 | 2.11 | 261.0 | 0.89 |
-| vfs:memory+archive | 8 | 854.9k | 3339 | 2.13 | 168.9 | 1.34 |
+| base:stdio | 1 | 72.8k | 284 | 11.6 | 49.7 | 1.00 |
+| base:posix | 1 | 78.5k | 307 | 11.4 | 26.5 | 1.08 |
+| vfs:native | 1 | 71.8k | 280 | 12.6 | 38.4 | 0.99 |
+| vfs:memory | 1 | 80.3k | 314 | 3.04 | 403.6 | 1.10 |
+| vfs:memory+archive | 1 | 87.1k | 340 | 2.97 | 388.7 | 1.20 |
+| base:stdio | 2 | 124.0k | 484 | 9.42 | 51.5 | 1.00 |
+| base:posix | 2 | 132.2k | 516 | 9.64 | 38.2 | 1.07 |
+| vfs:native | 2 | 145.7k | 569 | 12.8 | 58.6 | 1.17 |
+| vfs:memory | 2 | 190.0k | 742 | 4.22 | 215.7 | 1.53 |
+| vfs:memory+archive | 2 | 179.6k | 702 | 4.11 | 268.0 | 1.45 |
+| base:stdio | 4 | 259.9k | 1015 | 13.3 | 70.1 | 1.00 |
+| base:posix | 4 | 334.7k | 1307 | 8.77 | 38.7 | 1.29 |
+| vfs:native | 4 | 259.3k | 1013 | 12.9 | 58.5 | 1.00 |
+| vfs:memory | 4 | 304.7k | 1190 | 3.13 | 222.2 | 1.17 |
+| vfs:memory+archive | 4 | 413.7k | 1616 | 3.02 | 219.7 | 1.59 |
+| base:stdio | 8 | 570.8k | 2230 | 5.23 | 33.3 | 1.00 |
+| base:posix | 8 | 601.6k | 2350 | 4.30 | 27.1 | 1.05 |
+| vfs:native | 8 | 570.9k | 2230 | 4.69 | 30.7 | 1.00 |
+| vfs:memory | 8 | 738.8k | 2886 | 1.64 | 157.1 | 1.29 |
+| vfs:memory+archive | 8 | 678.8k | 2652 | 1.64 | 195.7 | 1.19 |
